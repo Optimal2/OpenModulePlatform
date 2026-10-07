@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Maintenance cleanup quarantines instead of deleting.** A directory the
+  maintenance cleanup removes (an orphan service-app directory, a leftover
+  HostAgent install directory) is moved to a maintenance quarantine below the
+  services root (`HostAgent:MaintenanceQuarantine`, default
+  `.maintenance-quarantine`) with a sidecar naming where it came from, which
+  finding asked for it and when, instead of being deleted. The quarantine is
+  swept after each host maintenance job with the import archives' retention
+  rule (30 days, 4 GB, newest kept), now shared as `RetentionSweepPlanner`.
+  The orphan scan never flags the quarantine, the cleanup refuses to remove it,
+  and a move to a quarantine on another volume is refused rather than copied.
+
 - **Maintenance page: the lists page.** The findings list shows 25 rows a
   page and the HostAgent jobs list 10, with a pager (previous, "Page x of
   y", next) under each table instead of one long list; a search or filter

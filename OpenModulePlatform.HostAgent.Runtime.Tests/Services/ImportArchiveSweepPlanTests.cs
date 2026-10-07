@@ -12,7 +12,7 @@ public sealed class ImportArchiveSweepPlanTests
     private static readonly DateTime Now = new(2026, 8, 16, 12, 0, 0, DateTimeKind.Utc);
     private const long OneGigabyte = 1024L * 1024 * 1024;
 
-    private static ArtifactZipImportService.ImportArchiveEntry Entry(
+    private static RetentionSweepEntry Entry(
         string name,
         long lengthBytes,
         int ageInDays,
@@ -35,7 +35,7 @@ public sealed class ImportArchiveSweepPlanTests
     [Fact]
     public void AgeCutoff_RemovesOnlyEntriesOlderThanTheCutoff()
     {
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("old-a.zip", 100, ageInDays: 40),
             Entry("old-b.zip", 100, ageInDays: 31),
@@ -53,7 +53,7 @@ public sealed class ImportArchiveSweepPlanTests
     [Fact]
     public void SizeCapZero_LeavesTheSizeUnbounded()
     {
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("a.zip", 5 * OneGigabyte, ageInDays: 3),
             Entry("b.zip", 5 * OneGigabyte, ageInDays: 1)
@@ -71,7 +71,7 @@ public sealed class ImportArchiveSweepPlanTests
     {
         // All four are inside the age window, so only the cap can remove anything -- which is
         // the whole point of R12-F13: time alone never touched these.
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("d1.zip", OneGigabyte, ageInDays: 4),
             Entry("d2.zip", OneGigabyte, ageInDays: 3),
@@ -92,7 +92,7 @@ public sealed class ImportArchiveSweepPlanTests
         // The intended pass-through, tested explicitly (metod 4.5): a cap smaller than one
         // universal package must not empty the archive of the very file an operator opens
         // after a failed refresh.
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("older.zip", OneGigabyte, ageInDays: 2),
             Entry("newest.zip", 5 * OneGigabyte, ageInDays: 0)
@@ -107,7 +107,7 @@ public sealed class ImportArchiveSweepPlanTests
     [Fact]
     public void AgeCutoff_KeepsTheNewestArchiveEvenWhenEverythingIsPastTheCutoff()
     {
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("a.zip", 100, ageInDays: 90),
             Entry("b.zip", 100, ageInDays: 60),
@@ -126,7 +126,7 @@ public sealed class ImportArchiveSweepPlanTests
         // MoveImportFile writes the reason sidecar after moving the package, so the sidecar is
         // always the newer of the two. Protecting "the newest entry" naively would have kept
         // a 200-byte .error.txt and deleted the failed package it explains.
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("old.zip", OneGigabyte, ageInDays: 5),
             Entry("newest.zip", OneGigabyte, ageInDays: 0, ageInSeconds: 10),
@@ -142,7 +142,7 @@ public sealed class ImportArchiveSweepPlanTests
     [Fact]
     public void AgeAndSizeAreReportedSeparatelyWhenBothBite()
     {
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("expired.zip", OneGigabyte, ageInDays: 40),
             Entry("kept-by-age.zip", OneGigabyte, ageInDays: 10),
@@ -161,7 +161,7 @@ public sealed class ImportArchiveSweepPlanTests
     [Fact]
     public void EntriesSharingATimestampProduceADeterministicPlan()
     {
-        ArtifactZipImportService.ImportArchiveEntry[] entries =
+        RetentionSweepEntry[] entries =
         [
             Entry("b.zip", OneGigabyte, ageInDays: 3),
             Entry("a.zip", OneGigabyte, ageInDays: 3),

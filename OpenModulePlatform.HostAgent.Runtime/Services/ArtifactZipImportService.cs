@@ -258,12 +258,12 @@ public sealed class ArtifactZipImportService
             return;
         }
 
-        List<ImportArchiveEntry> entries;
+        List<RetentionSweepEntry> entries;
         try
         {
             entries = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
                 .Select(static path => new FileInfo(path))
-                .Select(static info => new ImportArchiveEntry(info.FullName, info.Length, info.LastWriteTimeUtc))
+                .Select(static info => new RetentionSweepEntry(info.FullName, info.Length, info.LastWriteTimeUtc))
                 .ToList();
         }
         catch (IOException ex)
@@ -360,116 +360,15 @@ public sealed class ArtifactZipImportService
         }
     }
 
-    /// <summary>One archived import file, as the sweep planner sees it.</summary>
-    internal readonly record struct ImportArchiveEntry(string Path, long LengthBytes, DateTime LastWriteTimeUtc);
-
-    /// <summary>What a sweep of one archive root would delete, and the size either side of it.</summary>
-    internal sealed record ImportArchiveSweepPlan(
-        IReadOnlyList<ImportArchiveEntry> AgedOut,
-        IReadOnlyList<ImportArchiveEntry> OverSizeCap,
-        long TotalBytesBefore,
-        long TotalBytesAfter);
-
     /// <summary>
-    /// Decides which archived import files a sweep removes: everything past the age cutoff,
-    /// then oldest-first until the root fits under <paramref name="maxTotalBytes" />.
+    /// Decides which archived import files a sweep removes: the shared retention rule
+    /// (<see cref="RetentionSweepPlanner"/>) with the import archive's error sidecars.
     /// </summary>
-    /// <remarks>
-    /// Pure by design so the policy can be tested without a filesystem (R12-F13).
-    ///
-    /// What the sweep must LET THROUGH is as much a part of the rule as what it removes
-    /// (metod 4.5): the newest package in the root is never deleted, by age or by size. A
-    /// cap smaller than one universal package would otherwise empty the archive on the first
-    /// cycle, and the newest archive is precisely the file an operator opens after a failed
-    /// refresh. Its error sidecar is kept with it, because a retained package whose reason
-    /// was deleted is worse than either alone.
-    /// </remarks>
-    internal static ImportArchiveSweepPlan PlanImportArchiveSweep(
-        IReadOnlyList<ImportArchiveEntry> entries,
+    internal static RetentionSweepPlan PlanImportArchiveSweep(
+        IReadOnlyList<RetentionSweepEntry> entries,
         DateTime? ageCutoffUtc,
         long maxTotalBytes)
-    {
-        var totalBytesBefore = entries.Sum(static entry => entry.LengthBytes);
-        if (entries.Count == 0)
-        {
-            return new ImportArchiveSweepPlan([], [], 0, 0);
-        }
-
-        // Oldest first, with a path tiebreak so two archives sharing a timestamp still
-        // produce a deterministic plan (metod 4.11: never order on a timestamp alone).
-        var ordered = entries
-            .OrderBy(static entry => entry.LastWriteTimeUtc)
-            .ThenBy(static entry => entry.Path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var protectedPaths = BuildProtectedArchivePaths(ordered);
-        var agedOut = new List<ImportArchiveEntry>();
-        var overSizeCap = new List<ImportArchiveEntry>();
-        var doomedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var remainingBytes = totalBytesBefore;
-
-        if (ageCutoffUtc is { } cutoff)
-        {
-            foreach (var entry in ordered)
-            {
-                if (entry.LastWriteTimeUtc >= cutoff || protectedPaths.Contains(entry.Path))
-                {
-                    continue;
-                }
-
-                agedOut.Add(entry);
-                doomedPaths.Add(entry.Path);
-                remainingBytes -= entry.LengthBytes;
-            }
-        }
-
-        if (maxTotalBytes > 0)
-        {
-            foreach (var entry in ordered)
-            {
-                if (remainingBytes <= maxTotalBytes)
-                {
-                    break;
-                }
-
-                if (doomedPaths.Contains(entry.Path) || protectedPaths.Contains(entry.Path))
-                {
-                    continue;
-                }
-
-                overSizeCap.Add(entry);
-                doomedPaths.Add(entry.Path);
-                remainingBytes -= entry.LengthBytes;
-            }
-        }
-
-        return new ImportArchiveSweepPlan(agedOut, overSizeCap, totalBytesBefore, remainingBytes);
-    }
-
-    private static HashSet<string> BuildProtectedArchivePaths(IReadOnlyList<ImportArchiveEntry> orderedOldestFirst)
-    {
-        var protectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // MoveImportFile writes the reason sidecar AFTER moving the package, so the sidecar
-        // is always the newer of the pair. Picking the newest entry blindly would therefore
-        // protect a 200-byte .error.txt and delete the package it explains.
-        var newest = orderedOldestFirst
-            .LastOrDefault(static entry => !IsArchiveErrorSidecar(entry.Path));
-        if (newest.Path is null)
-        {
-            newest = orderedOldestFirst[^1];
-        }
-
-        protectedPaths.Add(newest.Path);
-        foreach (var entry in orderedOldestFirst.Where(entry =>
-                     IsArchiveErrorSidecar(entry.Path)
-                     && entry.Path.StartsWith(newest.Path, StringComparison.OrdinalIgnoreCase)))
-        {
-            protectedPaths.Add(entry.Path);
-        }
-
-        return protectedPaths;
-    }
+        => RetentionSweepPlanner.Plan(entries, ageCutoffUtc, maxTotalBytes, IsArchiveErrorSidecar);
 
     private static bool IsArchiveErrorSidecar(string path)
         => path.EndsWith(".error.txt", StringComparison.OrdinalIgnoreCase);

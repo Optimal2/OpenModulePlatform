@@ -114,11 +114,26 @@ The cleanup job types are:
   not delete anything.
 - `MaintenanceCleanup` - global or host-specific cleanup request for selected
   `omp.MaintenanceFindings` rows. HostAgent revalidates every target immediately
-  before cleanup. It refuses to delete the active HostAgent service, running
+  before cleanup. It refuses to remove the active HostAgent service, running
   services, directories outside the configured install root, the install root
   itself, the active process directory, credential-store directories (and any
   parent of them), the local artifact cache root (and anything inside or
-  containing it), and directories still referenced by HostAgent services.
+  containing it), the maintenance quarantine (and anything inside or containing
+  it), and directories still referenced by HostAgent services. A directory that
+  passes every check is not deleted but moved to the maintenance quarantine
+  (`HostAgent:MaintenanceQuarantine`, default `.maintenance-quarantine` below
+  the services root and, when it differs, below the HostAgent install root;
+  the one on the directory's own volume is used) with a `.quarantine.txt` sidecar
+  naming its origin, finding and time; the quarantine is swept after each host
+  maintenance job by age (`RetentionDays`, default 30) and size
+  (`RetentionMaxBytes`, default 4 GB, oldest first, the newest entry always
+  kept). `IsEnabled: false` restores direct deletion, while the guards keep
+  protecting a quarantine folder that is still on disk. The quarantine root
+  must not be named like a HostAgent install directory (`HostAgent*`), which
+  the self-upgrade sweep deletes outside these guards. The orphan scan never
+  flags the quarantine root. A target on another volume than the quarantine
+  is refused (the entry reports Skipped) until `Path` is configured on that
+  volume.
 - `WebAppHealthProbe` - host-specific Portal health probe requested from the
   operations page. It calls the configured Portal readiness endpoint and writes
   `omp.WebAppHealthStates`. The request can optionally ask HostAgent to recycle

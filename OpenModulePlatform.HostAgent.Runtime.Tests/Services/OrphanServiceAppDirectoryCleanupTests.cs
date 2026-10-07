@@ -252,6 +252,26 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
         Assert.Contains("artifact cache", refusal, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ValidateCleanup_RefusesTheMaintenanceQuarantine()
+    {
+        using var root = new TempDirectory();
+        var quarantine = CreateSubDirectory(root.Path, MaintenanceQuarantine.DefaultFolderName);
+        var quarantined = CreateSubDirectory(quarantine, "OMP.Old__20261007-120000__finding-1");
+
+        foreach (var candidate in new[] { quarantine, quarantined })
+        {
+            var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
+                CreateSettings(root.Path),
+                Array.Empty<ServiceAppDeploymentDescriptor>(),
+                Array.Empty<ServiceAppServiceCandidate>(),
+                candidate);
+
+            Assert.NotNull(refusal);
+            Assert.Contains("quarantine", refusal, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private static string CreateSubDirectory(string root, string name)
     {
         var path = Path.Join(root, name);

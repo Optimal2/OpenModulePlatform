@@ -441,6 +441,7 @@ public sealed class HostAgentJobProcessor
                 cancellationToken);
 
             findingKeys = findings.Select(static finding => finding.FindingKey).ToList();
+            SweepMaintenanceQuarantine();
         }
 
         var result = new MaintenanceScanJobResult
@@ -490,6 +491,8 @@ public sealed class HostAgentJobProcessor
             var entryResult = await ProcessMaintenanceCleanupEntryAsync(entry, job.HostAgentJobId, hostKey, ResolveServiceAppServiceCandidates, cancellationToken);
             AddMaintenanceCleanupResult(result, entryResult);
         }
+
+        SweepMaintenanceQuarantine();
 
         var status = result.ErrorCount > 0
             ? HostAgentJobStatuses.Warning
@@ -1232,7 +1235,7 @@ public sealed class HostAgentJobProcessor
                 TargetIdentifier = fullDirectory,
                 Title = "Old HostAgent directory",
                 Detail = detail,
-                RecommendedAction = "Delete the old HostAgent directory after any stopped service that references it has been removed.",
+                RecommendedAction = "Remove the old HostAgent directory after any stopped service that references it has been removed (the cleanup moves it to the maintenance quarantine).",
                 SafetyNotes = "The directory is below the configured HostAgent install root and is not the active HostAgent process directory. Cleanup rechecks service references before deleting.",
                 ActionJson = action,
                 Severity = isReferencedByService ? (byte)1 : (byte)2,
@@ -1330,8 +1333,11 @@ public sealed class HostAgentJobProcessor
         // The local artifact cache is not a service-app deployment and must never be
         // flagged. When it is nested below the services root (for example
         // D:\Services\ArtifactCache) the sweep would otherwise mark the entire cache as
-        // an orphan and aim the cleanup at it (2026-08-19 incident).
+        // an orphan and aim the cleanup at it (2026-08-19 incident). The maintenance
+        // quarantine sits below the services root by default and is the same case: a
+        // scanner that flagged it would have the next cleanup quarantine the quarantine.
         var artifactCacheRoot = ResolveArtifactCacheRoot(settings);
+        var quarantineRoots = MaintenanceQuarantine.ResolveRoots(settings);
 
         var expectedTargetPaths = new HashSet<string>(GetPathComparer());
         var expectedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1373,7 +1379,8 @@ public sealed class HostAgentJobProcessor
                 continue;
             }
 
-            if (IsArtifactCachePath(artifactCacheRoot, fullDirectory))
+            if (IsArtifactCachePath(artifactCacheRoot, fullDirectory)
+                || MaintenanceQuarantine.IsQuarantinePath(quarantineRoots, fullDirectory))
             {
                 continue;
             }
@@ -1442,7 +1449,7 @@ public sealed class HostAgentJobProcessor
                 TargetIdentifier = fullDirectory,
                 Title = "Orphan service-app directory",
                 Detail = directoryDetail,
-                RecommendedAction = "Remove the orphan service-app directory after confirming it is no longer needed.",
+                RecommendedAction = "Remove the orphan service-app directory after confirming it is no longer needed (the cleanup moves it to the maintenance quarantine).",
                 SafetyNotes = "The directory is not owned by any active enabled AppInstance on this host, is not the HostAgent install directory, and is not a WorkerManager directory.",
                 ActionJson = directoryAction,
                 Severity = 2,
@@ -1880,6 +1887,22 @@ public sealed class HostAgentJobProcessor
         return null;
     }
 
+    /// <summary>
+    /// Housekeeping of the maintenance quarantine, run after each host maintenance job so
+    /// the quarantine is bounded on every host that has one. Never fails the job.
+    /// </summary>
+    private void SweepMaintenanceQuarantine()
+    {
+        try
+        {
+            MaintenanceQuarantine.Sweep(_settings.CurrentValue, _logger, DateTime.UtcNow);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            _logger.LogWarning(ex, "HostAgent could not sweep the maintenance quarantine.");
+        }
+    }
+
     private MaintenanceCleanupEntryResult CleanupDirectoryFinding(
         MaintenanceFindingCleanupEntry entry,
         MaintenanceFindingAction? action,
@@ -1968,6 +1991,12 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", $"Refusing to delete '{directory}': it is, is inside, or contains the configured local artifact cache root.");
         }
 
+        var quarantineRoots = MaintenanceQuarantine.ResolveRoots(settings);
+        if (MaintenanceQuarantine.IsQuarantinePath(quarantineRoots, directory))
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Skipped", $"Refusing to remove '{directory}': it is, is inside, or contains the maintenance quarantine.");
+        }
+
         var serviceNamePrefix = ResolveServiceNamePrefixForMaintenance(settings, settings.ServiceName);
         var referencingService = EnumerateHostAgentServices(serviceNamePrefix)
             .FirstOrDefault(service =>
@@ -1988,6 +2017,48 @@ public sealed class HostAgentJobProcessor
                 entry,
                 "Skipped",
                 $"Refusing to delete the directory while Windows service '{referencingService.Name}' still references it.");
+        }
+
+        // Quarantine rather than delete: the scan's ownership model is narrow, so a
+        // directory it calls an orphan may still be wanted. The quarantine keeps it for
+        // the configured retention; the sweep after each maintenance job removes it.
+        if (quarantineRoots.Count > 0 && settings.MaintenanceQuarantine.IsEnabled)
+        {
+            // The root on the directory's own volume; with none there the move itself
+            // refuses, naming the roots, rather than copying across volumes.
+            var quarantineRoot = MaintenanceQuarantine.ResolveRootFor(settings, directory) ?? quarantineRoots[0];
+            try
+            {
+                if (!MaintenanceQuarantine.TryMoveToQuarantine(
+                        quarantineRoot,
+                        directory,
+                        entry.MaintenanceFindingId,
+                        $"Maintenance finding category '{entry.Category}'",
+                        DateTime.UtcNow,
+                        cancellationToken,
+                        out var destination,
+                        out var refusal,
+                        out var sidecarWarning))
+                {
+                    return CreateMaintenanceCleanupEntryResult(entry, "Skipped", refusal);
+                }
+
+                var quarantine = settings.MaintenanceQuarantine;
+                var kept = quarantine.RetentionDays > 0
+                    ? $"it is removed after {quarantine.RetentionDays} day(s)"
+                    : "it is removed when the quarantine exceeds its size cap";
+                var message = $"Moved directory '{directory}' to the maintenance quarantine '{destination}'; {kept}.";
+                if (sidecarWarning is not null)
+                {
+                    message = $"{message} {sidecarWarning}";
+                }
+
+                return CreateMaintenanceCleanupEntryResult(entry, "Cleaned", message);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return CreateMaintenanceCleanupEntryResult(entry, "Error", ex.Message);
+            }
         }
 
         try
@@ -2250,6 +2321,13 @@ public sealed class HostAgentJobProcessor
         if (string.Equals(hostAgentInstallRoot, candidate, GetPathComparison()))
         {
             return $"Refusing to delete '{candidate}': it is the HostAgent install directory.";
+        }
+
+        // After the root checks, so a root that merely CONTAINS a quarantine folder is
+        // still reported for what it is; a quarantine, or anything in it, is refused here.
+        if (MaintenanceQuarantine.IsQuarantinePath(MaintenanceQuarantine.ResolveRoots(settings), candidate))
+        {
+            return $"Refusing to remove '{candidate}': it is, is inside, or contains the maintenance quarantine.";
         }
 
         var folderName = Path.GetFileName(candidate);

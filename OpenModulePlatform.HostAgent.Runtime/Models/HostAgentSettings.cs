@@ -184,6 +184,12 @@ public sealed class HostAgentSettings
 
     public HostAgentArtifactZipImportSettings ArtifactZipImport { get; set; } = new();
 
+    /// <summary>
+    /// Where a maintenance cleanup moves a directory instead of deleting it, and for how
+    /// long it is kept there. See <c>MaintenanceQuarantine</c>.
+    /// </summary>
+    public HostAgentMaintenanceQuarantineSettings MaintenanceQuarantine { get; set; } = new();
+
     public HostAgentUpgradeSettings SelfUpgrade { get; set; } = new();
 
     public HostAgentCredentialStoreSettings CredentialStore { get; set; } = new();
@@ -335,6 +341,7 @@ public sealed class HostAgentSettings
         }
 
         ArtifactZipImport.Validate();
+        MaintenanceQuarantine.Validate();
         SelfUpgrade.Validate();
         CredentialStore.Validate();
         ResourceTelemetry.Validate();
@@ -607,6 +614,73 @@ public sealed record HostAgentPlainTextCredential(
     string Key,
     string UserName,
     string Password);
+
+/// <summary>
+/// The maintenance quarantine: a directory that a maintenance cleanup would have deleted
+/// is moved below <see cref="Path"/> (default <c>.maintenance-quarantine</c> under the
+/// services root, else the HostAgent install root) and removed from there by the same
+/// age-plus-size retention the import archives use. The newest quarantined directory is
+/// never removed.
+/// </summary>
+public sealed class HostAgentMaintenanceQuarantineSettings
+{
+    /// <summary>False deletes directly, as before the quarantine existed.</summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// The quarantine root. Empty means the default folder below the services root. It
+    /// must be on the same volume as the directories it receives: a move across volumes
+    /// is refused.
+    /// </summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Quarantined directories older than this are removed; 0 keeps them by age forever.</summary>
+    public int RetentionDays { get; set; } = 30;
+
+    /// <summary>Upper bound on the quarantine's size, oldest removed first; 0 disables the cap.</summary>
+    public long RetentionMaxBytes { get; set; } = 4L * 1024 * 1024 * 1024;
+
+    /// <summary>Ten years: well past any retention anyone wants, and inside what DateTime arithmetic accepts.</summary>
+    public const int MaxRetentionDays = 3650;
+
+    public void Validate()
+    {
+        if (RetentionDays < 0 || RetentionDays > MaxRetentionDays)
+        {
+            throw new InvalidOperationException($"HostAgent:MaintenanceQuarantine:RetentionDays must be between 0 and {MaxRetentionDays}.");
+        }
+
+        const long OneMegabyte = 1024L * 1024;
+        if (RetentionMaxBytes < 0 || (RetentionMaxBytes > 0 && RetentionMaxBytes < OneMegabyte))
+        {
+            throw new InvalidOperationException("HostAgent:MaintenanceQuarantine:RetentionMaxBytes must be 0 (no size cap) or at least 1 MB.");
+        }
+
+        if (IsEnabled && RetentionDays == 0 && RetentionMaxBytes == 0)
+        {
+            throw new InvalidOperationException("HostAgent:MaintenanceQuarantine must keep a retention: RetentionDays or RetentionMaxBytes must be greater than zero while the quarantine is enabled.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Path))
+        {
+            var configuredPath = Path.Trim();
+            if (!System.IO.Path.IsPathRooted(configuredPath))
+            {
+                throw new InvalidOperationException("HostAgent:MaintenanceQuarantine:Path must be an absolute path when it is configured.");
+            }
+
+            // The HostAgent-leftover finder and the self-upgrade sweep treat every
+            // "HostAgent*" directory below the install root as an old install and delete
+            // it outside the maintenance guards; a quarantine named like one would be
+            // swept away with everything in it.
+            var leaf = System.IO.Path.GetFileName(configuredPath.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+            if (leaf.StartsWith("HostAgent", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("HostAgent:MaintenanceQuarantine:Path must not be a folder named like a HostAgent install directory (\"HostAgent*\").");
+            }
+        }
+    }
+}
 
 public sealed class HostAgentArtifactZipImportSettings
 {

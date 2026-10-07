@@ -761,4 +761,25 @@ public sealed class OrphanServiceAppFinderTests
             }
         }
     }
+    [Fact]
+    public void Finder_SkipsTheMaintenanceQuarantine()
+    {
+        using var root = new TempServicesRoot();
+        var settings = CreateSettings(root.Path);
+        var quarantine = Directory.CreateDirectory(Path.Join(root.Path, MaintenanceQuarantine.DefaultFolderName)).FullName;
+        Directory.CreateDirectory(Path.Join(quarantine, "OMP.Old__20261007-120000__finding-1"));
+        Directory.CreateDirectory(Path.Join(root.Path, "OrphanApp"));
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Contains("OrphanApp", finding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
