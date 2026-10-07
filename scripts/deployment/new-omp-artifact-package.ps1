@@ -234,10 +234,25 @@ function Get-EmbeddedWorkerHostMinVersion {
     }
 }
 
-function Compress-PayloadDirectory {
+function Compress-DirectoryToZip {
+    <#
+    .SYNOPSIS
+    Writes every file under SourceDirectory into DestinationZip with
+    FORWARD-SLASH entry names, on every host.
+
+    .DESCRIPTION
+    Compress-Archive under Windows PowerShell 5.1's inbox Archive module
+    1.0.1.0 writes BACKSLASH entry names (configuration\001-...,
+    payload\artifact.zip), and the consumers of these packages read entries
+    by their forward-slash names -- a package built on a clean 5.1 host was
+    unreadable (measured 2026-10-07). Building each entry name explicitly
+    through System.IO.Compression makes the bytes independent of the host's
+    Archive module version. Empty directories are not represented; the
+    package formats carry no empty-directory semantics.
+    #>
     param(
-        [string]$SourceDirectory,
-        [string]$DestinationZip
+        [Parameter(Mandatory = $true)][string]$SourceDirectory,
+        [Parameter(Mandatory = $true)][string]$DestinationZip
     )
 
     $parent = Split-Path -Parent $DestinationZip
@@ -245,6 +260,25 @@ function Compress-PayloadDirectory {
     if (Test-Path -LiteralPath $DestinationZip -PathType Leaf) {
         Remove-Item -LiteralPath $DestinationZip -Force
     }
+
+    $sourceRootFull = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\')
+    $archive = [System.IO.Compression.ZipFile]::Open($DestinationZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in [System.IO.Directory]::EnumerateFiles($sourceRootFull, '*', [System.IO.SearchOption]::AllDirectories)) {
+            $entryName = $file.Substring($sourceRootFull.Length).TrimStart('\', '/') -replace '\\', '/'
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
+function Compress-PayloadDirectory {
+    param(
+        [string]$SourceDirectory,
+        [string]$DestinationZip
+    )
 
     $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-artifact-payload-' + [Guid]::NewGuid().ToString('N'))
     try {
@@ -257,7 +291,7 @@ function Compress-PayloadDirectory {
             throw "Payload directory is empty after runtime configuration files were removed: $SourceDirectory"
         }
 
-        Compress-Archive -Path @($items | ForEach-Object { $_.FullName }) -DestinationPath $DestinationZip -Force
+        Compress-DirectoryToZip -SourceDirectory $stagingRoot -DestinationZip $DestinationZip
     }
     finally {
         Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -375,7 +409,7 @@ try {
         Remove-Item -LiteralPath $resolvedOutputPath -Force
     }
 
-    Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $resolvedOutputPath -Force
+    Compress-DirectoryToZip -SourceDirectory $packageRoot -DestinationZip $resolvedOutputPath
     Write-Host "Created artifact package: $resolvedOutputPath"
 }
 finally {

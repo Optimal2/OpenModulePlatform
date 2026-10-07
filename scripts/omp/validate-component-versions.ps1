@@ -1152,6 +1152,7 @@ else {
 # ---------------------------------------------------------------------------
 $embeddedSqlChecked = 0
 $embeddedSqlFresh = 0
+$embeddedSqlErrorCount = 0
 
 foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
     if ($null -eq $manifestDefinition) {
@@ -1197,6 +1198,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         $sqlPath = [string](Get-OptionalPropertyValue -Object $script -Name 'path')
         if ([string]::IsNullOrWhiteSpace($sqlPath)) {
             Add-ValidationError -Errors $errors -Message "Embedded SQL script '$scriptKey' (module '$moduleKey') has contentEncoding 'base64-utf8' but no path."
+            $embeddedSqlErrorCount++
             continue
         }
 
@@ -1205,6 +1207,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         $fullSqlPath = Resolve-RepositoryPath -Path $sqlPath -BasePath $repositoryRoot
         if (-not (Test-Path -LiteralPath $fullSqlPath -PathType Leaf)) {
             Add-ValidationError -Errors $errors -Message "Embedded SQL script '$scriptKey' (module '$moduleKey') references a missing file: $sqlPath"
+            $embeddedSqlErrorCount++
             continue
         }
 
@@ -1222,6 +1225,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         $declaredEol = Get-GitDeclaredLineEnding -RepositoryRoot $repositoryRoot -RelativePath $sqlPath
         if ($null -eq $declaredEol) {
             Add-ValidationError -Errors $errors -Message "Check 16 could not determine the line-ending form .gitattributes declares for '$sqlPath' (script '$scriptKey', module '$moduleKey'): 'git check-attr text eol' did not answer (is '$repositoryRoot' a git work tree?). An unreadable declaration is an error, not 'bytes untouched'."
+            $embeddedSqlErrorCount++
             continue
         }
         $comparisonEol = $declaredEol
@@ -1261,6 +1265,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 
         if (-not $contentMatches -or -not $sha256Matches) {
             Add-ValidationError -Errors $errors -Message "Embedded SQL for script '$scriptKey' ($sqlPath, module '$moduleKey') is stale: sqlScripts content/sha256 do not match the current file bytes. Refresh it with the embed tool in the OpenModulePlatform repository: scripts/dev/embed-module-definition-sql.ps1 -RepositoryRoot '<path to this repository>'."
+            $embeddedSqlErrorCount++
             continue
         }
 
@@ -1385,6 +1390,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 # (consumer repositories, test fixtures) the check is vacuous.
 # ---------------------------------------------------------------------------
 $embedHelperCopyCount = 0
+$embedHelperCopyErrorCount = 0
 $embedToolPath = Join-Path $repositoryRoot 'scripts\dev\embed-module-definition-sql.ps1'
 $helpersCorePath = Join-Path $repositoryRoot 'scripts\omp\validate-component-versions.helpers.ps1'
 
@@ -1419,12 +1425,23 @@ if ((Test-Path -LiteralPath $embedToolPath -PathType Leaf) -and (Test-Path -Lite
         $coreFunctionText = Get-FunctionExtentText -Path $helpersCorePath -FunctionName $copiedFunctionName
         $embedFunctionText = Get-FunctionExtentText -Path $embedToolPath -FunctionName $copiedFunctionName
         if ($null -eq $coreFunctionText -or $null -eq $embedFunctionText) {
-            Add-ValidationError -Errors $errors -Message "Check 22: could not extract function '$copiedFunctionName' from both scripts/omp/validate-component-versions.helpers.ps1 and scripts/dev/embed-module-definition-sql.ps1 (parse error or missing function). The embed tool must carry a byte-identical copy of the shared core."
+            # Name the side(s) the function could not be extracted from:
+            # "from both" leaves the reader guessing which file is broken.
+            $missingSides = @()
+            if ($null -eq $coreFunctionText) {
+                $missingSides += 'scripts/omp/validate-component-versions.helpers.ps1 (the shared core)'
+            }
+            if ($null -eq $embedFunctionText) {
+                $missingSides += 'scripts/dev/embed-module-definition-sql.ps1 (the embed tool)'
+            }
+            Add-ValidationError -Errors $errors -Message "Check 22: could not extract function '$copiedFunctionName' from $($missingSides -join ' and ') (parse error or missing function). The embed tool must carry a byte-identical copy of the shared core."
+            $embedHelperCopyErrorCount++
             continue
         }
 
         if (-not [string]::Equals($coreFunctionText, $embedFunctionText, [StringComparison]::Ordinal)) {
             Add-ValidationError -Errors $errors -Message "Check 22: function '$copiedFunctionName' in scripts/dev/embed-module-definition-sql.ps1 differs from the shared-core copy in scripts/omp/validate-component-versions.helpers.ps1. The two must stay byte-identical: edit the shared core and copy the function into the embed tool in the same change."
+            $embedHelperCopyErrorCount++
         }
     }
 }
@@ -1968,14 +1985,22 @@ if ($definitionDiffChecked -gt 0) {
 }
 
 if ($embeddedSqlChecked -gt 0) {
-    Write-Host "$checkMark $embeddedSqlFresh of $embeddedSqlChecked embedded SQL script(s) passed freshness validation"
+    # The check mark belongs to a clean run only: printing it next to a failed
+    # freshness check reads as green on a red run (a duplicate Check 16 block
+    # in the consumer fleet did exactly that by resetting the counters).
+    if ($embeddedSqlErrorCount -eq 0) {
+        Write-Host "$checkMark $embeddedSqlFresh of $embeddedSqlChecked embedded SQL script(s) passed freshness validation"
+    }
+    else {
+        Write-Host "$crossMark $embeddedSqlFresh of $embeddedSqlChecked embedded SQL script(s) passed freshness validation ($embeddedSqlErrorCount error(s))"
+    }
 }
 
 if ($embeddedEolChecked -gt 0) {
     Write-Host "$checkMark $embeddedEolDeclared of $embeddedEolChecked embedded SQL script(s) carry the line endings .gitattributes declares"
 }
 
-if ($embedHelperCopyCount -gt 0) {
+if ($embedHelperCopyCount -gt 0 -and $embedHelperCopyErrorCount -eq 0) {
     Write-Host "$checkMark $embedHelperCopyCount embed-tool helper function(s) are byte-identical to the shared core"
 }
 

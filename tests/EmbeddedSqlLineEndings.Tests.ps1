@@ -208,6 +208,15 @@ Describe 'Check 20: embedded SQL line endings vs .gitattributes' {
         }
     }
 
+    It 'ConvertTo-DeclaredLineEndings rejects a $null declaration instead of silently reading it as empty' {
+        # $null is the unreadable-git-answer sentinel; letting it bind and
+        # silently become '' ("git leaves the bytes alone") would turn NO
+        # answer into a declaration. The function must refuse it.
+        { ConvertTo-DeclaredLineEndings -Text 'a' -Declared $null } | Should -Throw
+        # '' stays legal: it IS the declaration "git leaves the bytes alone".
+        ConvertTo-DeclaredLineEndings -Text "a`r`nb" -Declared '' | Should -Be "a`r`nb"
+    }
+
     It 'Get-GitDeclaredLineEnding returns $null (not "") when git cannot answer, and the validator fails loudly' {
         $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
         try {
@@ -273,6 +282,153 @@ Describe 'Check 22: embed tool helper copies are byte-identical to the shared co
             $result.ExitCode | Should -Not -Be 0
             $result.Output | Should -Match 'Check 22'
             $result.Output | Should -Match 'byte-identical'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Does not print the byte-identical summary line when a copy has drifted' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+            $embedCopyPath = Join-Path $repoRoot 'scripts\dev\embed-module-definition-sql.ps1'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $embedCopyPath) -Force
+            Copy-Item -LiteralPath $script:embedToolSourcePath -Destination $embedCopyPath -Force
+
+            $drifted = [System.IO.File]::ReadAllText($embedCopyPath).Replace('GIT COULD NOT ANSWER', 'GIT COULD NOT ANSWERX')
+            [System.IO.File]::WriteAllText($embedCopyPath, $drifted, [System.Text.UTF8Encoding]::new($false))
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            # The old summary wrote '... are byte-identical to the shared core'
+            # on the same run that listed the drift as an error -- a green-
+            # looking line next to a red verdict.
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Not -Match 'are byte-identical to the shared core'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Names the side that is missing the function instead of saying from-both' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+            $embedCopyPath = Join-Path $repoRoot 'scripts\dev\embed-module-definition-sql.ps1'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $embedCopyPath) -Force
+            Copy-Item -LiteralPath $script:embedToolSourcePath -Destination $embedCopyPath -Force
+
+            # Remove exactly one copied function from the EMBED TOOL: the error
+            # must name the embed tool as the side the function could not be
+            # extracted from, not blame "both" files.
+            $embedText = [System.IO.File]::ReadAllText($embedCopyPath)
+            $functionStart = $embedText.IndexOf('function ConvertTo-DeclaredLineEndings')
+            $functionEnd = $embedText.IndexOf('function ConvertFrom-JsonDocument')
+            if ($functionStart -lt 0 -or $functionEnd -le $functionStart) { throw 'fixture setup failed: function block not found.' }
+            [System.IO.File]::WriteAllText($embedCopyPath, $embedText.Remove($functionStart, $functionEnd - $functionStart), [System.Text.UTF8Encoding]::new($false))
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match ([regex]::Escape("could not extract function 'ConvertTo-DeclaredLineEndings' from scripts/dev/embed-module-definition-sql.ps1"))
+            $result.Output | Should -Not -Match 'from both'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+}
+
+Describe 'Check 16: embedded sqlScripts freshness summary' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-ComponentVersions.TestHelpers.ps1')
+
+        function Set-EmbeddedSqlContent {
+            <#
+            .SYNOPSIS
+            Gives the fixture's sqlScripts entry base64-utf8 embedded bytes.
+            #>
+            param(
+                [Parameter(Mandatory = $true)][string]$RepoRoot,
+                [Parameter(Mandatory = $true)][string]$EmbeddedText,
+                [Parameter(Mandatory = $true)][string]$Sha256
+            )
+
+            $definitionPath = Join-Path $RepoRoot 'TestModule/test.module-definition.json'
+            $definition = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $definition.sqlScripts[0] | Add-Member -NotePropertyName contentEncoding -NotePropertyValue 'base64-utf8' -Force
+            $definition.sqlScripts[0] | Add-Member -NotePropertyName content -NotePropertyValue ([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($EmbeddedText))) -Force
+            $definition.sqlScripts[0] | Add-Member -NotePropertyName sha256 -NotePropertyValue $Sha256 -Force
+            [System.IO.File]::WriteAllText($definitionPath, ($definition | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+
+    # 2026-10-07: the consumer port of the declared-form Check 16 left the OLD
+    # Check 16 block in place after the new one. The old block reset the
+    # counters, so the summary printed the check-mark line on a run whose
+    # Check 16 had failed, and it read $definition.sqlScripts directly, which
+    # throws under Set-StrictMode for a definition without sqlScripts. The
+    # platform validator never carried the duplicate, but it shared the
+    # unconditional check-mark line; these pins hold the fixed contract.
+
+    It 'Carries exactly one Check 16 freshness block (the counter is initialized once)' {
+        $validatorSource = Get-Content -LiteralPath $scriptPath -Raw -Encoding UTF8
+        @([regex]::Matches($validatorSource, '(?m)^\$embeddedSqlChecked = 0\r?$')).Count | Should -Be 1
+    }
+
+    It 'Prints no check-mark freshness line when the embedded SQL is stale' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+            Set-EmbeddedSqlContent -RepoRoot $repoRoot -EmbeddedText 'SELECT 2;' -Sha256 '0'
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match '0 of 1 embedded SQL script\(s\) passed freshness validation \(1 error\(s\)\)'
+            $result.Output | Should -Not -Match '1 of 1 embedded SQL script\(s\) passed freshness validation'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Prints the check-mark freshness line when the embedded SQL is fresh' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+            # Nothing is declared for the fixture's SQL path, so the historical
+            # LF normalization applies on both sides; embedding the on-disk
+            # text as-is is fresh under that rule.
+            $diskText = Get-Content -LiteralPath (Join-Path $repoRoot 'TestModule\sql\init.sql') -Raw -Encoding UTF8
+            Set-EmbeddedSqlContent -RepoRoot $repoRoot -EmbeddedText $diskText -Sha256 (Get-Sha256Hex -Text $diskText)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Match '1 of 1 embedded SQL script\(s\) passed freshness validation'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Does not crash under StrictMode when a module definition has no sqlScripts' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+            $definition = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $definition.PSObject.Properties.Remove('sqlScripts')
+            [System.IO.File]::WriteAllText($definitionPath, ($definition | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Not -Match 'cannot be found on this object'
         }
         finally {
             Remove-TemporaryTestRepository -RootPath $repoRoot

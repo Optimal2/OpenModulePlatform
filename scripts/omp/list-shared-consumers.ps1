@@ -19,7 +19,21 @@
     legally live there, and a reference hidden in one is invisible to a
     .csproj-only scan), and matches ProjectReference entries against the
     shared projects declared in omp-components.json -- including references
-    written with the $(OpenModulePlatformRoot) MSBuild variable. For every
+    written with the $(OpenModulePlatformRoot) or $(MSBuildThisFileDirectory)
+    MSBuild variables. Two MSBuild resolution rules the scan must honour,
+    because honouring only the .csproj rule is how a reference goes unseen
+    (measured 2026-10-07: a $(MSBuildThisFileDirectory)-relative reference in
+    a consumer's Directory.Build.props produced a false exit 0):
+
+    - $(MSBuildThisFileDirectory) stands for the directory of the file the
+      reference is written in, whichever file that is, so the scan expands
+      the variable to that directory before resolving the path.
+    - A RELATIVE Include path written in Directory.Build.props/.targets
+      resolves against the IMPORTING project, not against the props file
+      (that is exactly why MSBuild offers $(MSBuildThisFileDirectory)). The
+      importing projects are not known to a file scan, so a relative Include
+      in a props/targets file is tested against the props file's directory
+      AND against every .csproj directory in the same repository. For every
     referencing repository it reports whether the repository's own
     omp-components.json declares a sharedDependencies entry (with a treeId)
     for that project, which is what Check 14
@@ -30,6 +44,9 @@
     Exit code 1 also when a sibling repository cannot be read (git ls-files
     fails): a skipped repository is exactly how a referencing consumer goes
     unseen, so an unreadable one must never read as "nothing to declare".
+    Exit code 1 with a clear message when git is not on PATH at all, instead
+    of a raw CommandNotFoundException: a missing prerequisite must read as a
+    missing prerequisite, never as a crash mid-scan.
 
     sharedProjects entries whose projectPath is a bare directory (source-linked
     content, not a .csproj) cannot be matched through ProjectReference and are
@@ -168,18 +185,44 @@ function Test-PathMatch {
     .SYNOPSIS
     Decides whether a ProjectReference Include value points at a given shared
     project in a platform checkout. Handles relative paths, absolute paths,
-    and the $(OpenModulePlatformRoot) MSBuild variable, with either slash.
+    and the $(OpenModulePlatformRoot) and $(MSBuildThisFileDirectory) MSBuild
+    variables, with either slash.
+
+    .PARAMETER ReferenceFileDirectory
+    Directory of the file the reference was read from. $(MSBuildThisFileDirectory)
+    expands to exactly this directory, and a relative Include in a .csproj
+    resolves against it.
+
+    .PARAMETER ImportingProjectDirectories
+    Every .csproj directory in the same repository. A relative Include in a
+    Directory.Build.props/.targets resolves against the IMPORTING project
+    under MSBuild, so the reference is tested against each of these too;
+    ignored for .csproj-sourced references, whose only base is their own
+    directory.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$Include,
-        [Parameter(Mandatory = $true)][string]$ProjectDirectory,
+        [Parameter(Mandatory = $true)][string]$ReferenceFileDirectory,
+        [Parameter(Mandatory = $false)][string[]]$ImportingProjectDirectories = @(),
         [Parameter(Mandatory = $true)][string]$RelativeProjectPath
     )
 
     $normalizedInclude = $Include -replace '\\', '/'
 
+    # Expand $(MSBuildThisFileDirectory) BEFORE the generic variable handling:
+    # the variable stands for the scanned file's own directory (with a trailing
+    # slash), so a reference written with it is an ordinary relative path once
+    # expanded. The MatchEvaluator keeps a '$' in the directory out of the
+    # replacement string's group-reference syntax.
+    $referenceDirectoryNormalized = ($ReferenceFileDirectory -replace '\\', '/').TrimEnd('/') + '/'
+    $normalizedInclude = [regex]::Replace(
+        $normalizedInclude,
+        '\$\(\s*MSBuildThisFileDirectory\s*\)',
+        [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $referenceDirectoryNormalized },
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
     if ($normalizedInclude -match '\$\([^)]*\)') {
-        # MSBuild variable form, e.g. $(OpenModulePlatformRoot)/OpenModulePlatform.Web.Shared/...
+        # Other MSBuild variable form, e.g. $(OpenModulePlatformRoot)/OpenModulePlatform.Web.Shared/...
         # The variable stands for the platform checkout; what identifies the
         # reference is the repository-relative suffix after it.
         $suffix = ($normalizedInclude -replace '^.*?\$\([^)]*\)', '').TrimStart('/')
@@ -188,14 +231,43 @@ function Test-PathMatch {
 
     if ([System.IO.Path]::IsPathRooted($normalizedInclude)) {
         $resolved = ([System.IO.Path]::GetFullPath($normalizedInclude) -replace '\\', '/')
-    }
-    else {
-        $resolved = ([System.IO.Path]::GetFullPath((Join-Path $ProjectDirectory $normalizedInclude)) -replace '\\', '/')
+        foreach ($candidateRoot in $platformCandidateRoots) {
+            if ([string]::Equals($resolved, ($candidateRoot + '/' + $RelativeProjectPath), [StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+
+        return $false
     }
 
-    foreach ($candidateRoot in $platformCandidateRoots) {
-        if ([string]::Equals($resolved, ($candidateRoot + '/' + $RelativeProjectPath), [StringComparison]::OrdinalIgnoreCase)) {
-            return $true
+    # Relative Include. A .csproj resolves it against its own directory; a
+    # Directory.Build.props/.targets resolves it against the IMPORTING
+    # project, which a file scan cannot know -- so test the file's directory
+    # and every .csproj directory in the repository.
+    $baseDirectories = [System.Collections.Generic.List[string]]::new()
+    [void]$baseDirectories.Add($ReferenceFileDirectory)
+    foreach ($importingDirectory in @($ImportingProjectDirectories)) {
+        if ([string]::IsNullOrWhiteSpace($importingDirectory)) {
+            continue
+        }
+        $alreadyPresent = $false
+        foreach ($existing in $baseDirectories) {
+            if ([string]::Equals($existing, $importingDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+                $alreadyPresent = $true
+                break
+            }
+        }
+        if (-not $alreadyPresent) {
+            [void]$baseDirectories.Add($importingDirectory)
+        }
+    }
+
+    foreach ($baseDirectory in $baseDirectories) {
+        $resolved = ([System.IO.Path]::GetFullPath((Join-Path $baseDirectory $normalizedInclude)) -replace '\\', '/')
+        foreach ($candidateRoot in $platformCandidateRoots) {
+            if ([string]::Equals($resolved, ($candidateRoot + '/' + $RelativeProjectPath), [StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
         }
     }
 
@@ -204,6 +276,7 @@ function Test-PathMatch {
 
 $references = @()
 $scanFailures = 0
+$gitAvailabilityChecked = $false
 foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) {
     # The platform checkout itself is not its own consumer -- neither the copy
     # this script reads the manifest from, nor the conventional sibling one.
@@ -226,6 +299,17 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
 
     # A ProjectReference can live in a .csproj or in a git-tracked
     # Directory.Build.props/.targets; scan all three shapes in one git call.
+    # The git availability check is lazy (first sibling repository): without
+    # git the scan cannot run at all, and the failure must read as a missing
+    # prerequisite with exit 1, not as a raw CommandNotFoundException.
+    if (-not $gitAvailabilityChecked) {
+        $gitAvailabilityChecked = $true
+        if (-not (Get-Command -Name git -CommandType Application -ErrorAction SilentlyContinue)) {
+            Write-Host "ERROR: git was not found on PATH. Sibling repositories cannot be scanned without git; install git or add it to PATH and rerun." -ForegroundColor Red
+            exit 1
+        }
+    }
+
     $projectFiles = $null
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -246,6 +330,18 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
         continue
     }
 
+    # The directories a relative Include in Directory.Build.props/.targets can
+    # resolve against under MSBuild: the importing projects' directories.
+    $importingProjectDirectories = [System.Collections.Generic.List[string]]::new()
+    foreach ($projectFileRelative in @($projectFiles)) {
+        if ($projectFileRelative -like '*.csproj') {
+            $projectFileDirectory = Split-Path -Parent (Join-Path $sibling.FullName $projectFileRelative)
+            if (-not [string]::IsNullOrWhiteSpace($projectFileDirectory) -and -not $importingProjectDirectories.Contains($projectFileDirectory)) {
+                [void]$importingProjectDirectories.Add($projectFileDirectory)
+            }
+        }
+    }
+
     foreach ($projectFileRelative in @($projectFiles)) {
         $projectFileFullPath = Join-Path $sibling.FullName $projectFileRelative
         if (-not (Test-Path -LiteralPath $projectFileFullPath -PathType Leaf)) {
@@ -254,10 +350,16 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
 
         $projectFileText = Get-Content -LiteralPath $projectFileFullPath -Raw -Encoding UTF8
         $projectDirectory = Split-Path -Parent $projectFileFullPath
+        $isImportedBuildFile = (Split-Path -Leaf $projectFileFullPath) -in @('Directory.Build.props', 'Directory.Build.targets')
+        $matchBaseDirectories = @()
+        if ($isImportedBuildFile) {
+            $matchBaseDirectories = $importingProjectDirectories.ToArray()
+        }
+
         foreach ($referenceMatch in [regex]::Matches($projectFileText, '(?i)<ProjectReference\s+[^>]*Include\s*=\s*"([^"]+)"')) {
             $include = $referenceMatch.Groups[1].Value
             foreach ($sharedProject in $sharedProjects) {
-                if (Test-PathMatch -Include $include -ProjectDirectory $projectDirectory -RelativeProjectPath $sharedProject.RelativeProjectPath) {
+                if (Test-PathMatch -Include $include -ReferenceFileDirectory $projectDirectory -ImportingProjectDirectories $matchBaseDirectories -RelativeProjectPath $sharedProject.RelativeProjectPath) {
                     $references += [pscustomobject]@{
                         Repository        = $sibling.Name
                         RepositoryFullPath = $sibling.FullName

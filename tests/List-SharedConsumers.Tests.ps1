@@ -94,7 +94,8 @@ Describe 'list-shared-consumers.ps1' {
                 [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
                 [Parameter(Mandatory = $true)][string]$Name,
                 [Parameter(Mandatory = $false)][switch]$Declared,
-                [Parameter(Mandatory = $false)][switch]$ReferenceViaBuildProps
+                [Parameter(Mandatory = $false)][switch]$ReferenceViaBuildProps,
+                [Parameter(Mandatory = $false)][switch]$ReferenceViaBuildPropsThisFileDirectory
             )
 
             $consumerRoot = Join-Path $WorkspaceRoot $Name
@@ -102,9 +103,12 @@ Describe 'list-shared-consumers.ps1' {
             # Directory.Build.props sits at the repository root, two levels
             # closer to the workspace than src\App\App.csproj.
             $buildPropsReference = '<ProjectReference Include="..\OpenModulePlatform\SharedLib\SharedLib.csproj" />'
+            # Single quotes: $(MSBuildThisFileDirectory) must reach the file
+            # literally, not be interpolated by PowerShell.
+            $buildPropsThisFileDirectoryReference = '<ProjectReference Include="$(MSBuildThisFileDirectory)..\OpenModulePlatform\SharedLib\SharedLib.csproj" />'
 
             $csprojContent = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <ItemGroup>`r`n"
-            if (-not $ReferenceViaBuildProps) {
+            if (-not $ReferenceViaBuildProps -and -not $ReferenceViaBuildPropsThisFileDirectory) {
                 $csprojContent += "    $reference`r`n"
             }
             $csprojContent += "  </ItemGroup>`r`n</Project>`r`n"
@@ -112,6 +116,9 @@ Describe 'list-shared-consumers.ps1' {
 
             if ($ReferenceViaBuildProps) {
                 Save-TextFile -Path (Join-Path $consumerRoot 'Directory.Build.props') -Content "<Project>`r`n  <ItemGroup>`r`n    $buildPropsReference`r`n  </ItemGroup>`r`n</Project>`r`n"
+            }
+            if ($ReferenceViaBuildPropsThisFileDirectory) {
+                Save-TextFile -Path (Join-Path $consumerRoot 'Directory.Build.props') -Content ("<Project>`r`n  <ItemGroup>`r`n    " + $buildPropsThisFileDirectoryReference + "`r`n  </ItemGroup>`r`n</Project>`r`n")
             }
 
             $manifest = @{
@@ -255,6 +262,61 @@ Describe 'list-shared-consumers.ps1' {
             $result.ExitCode | Should -Be 1
             $result.Output | Should -Match 'ConsumerProps'
             $result.Output | Should -Match 'NOT declared'
+        }
+        finally {
+            Remove-FixtureWorkspace -RootPath $workspace
+        }
+    }
+
+    It 'Finds a ProjectReference written with $(MSBuildThisFileDirectory) in Directory.Build.props' {
+        $workspace = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $platformRoot = New-ConsumerFixtureWorkspace -RootPath $workspace
+            $null = Add-FixtureConsumer -WorkspaceRoot $workspace -Name 'ConsumerMsbtd' -ReferenceViaBuildPropsThisFileDirectory
+
+            $result = Invoke-ListSharedConsumers -ScriptPath (Join-Path $platformRoot 'scripts\omp\list-shared-consumers.ps1')
+
+            # Undeclared, so the run is red -- and the consumer must appear in
+            # the table. Before the fix the variable form was stripped by the
+            # generic $(...) handling and the suffix '..\OpenModulePlatform\...'
+            # never matched, so the consumer went unseen and the run exited 0.
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'ConsumerMsbtd'
+            $result.Output | Should -Match 'NOT declared'
+        }
+        finally {
+            Remove-FixtureWorkspace -RootPath $workspace
+        }
+    }
+
+    It 'Exits 1 with a clear error (not a raw CommandNotFoundException) when git is not on PATH' {
+        $workspace = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $platformRoot = New-ConsumerFixtureWorkspace -RootPath $workspace
+            $null = Add-FixtureConsumer -WorkspaceRoot $workspace -Name 'ConsumerNoGit' -Declared
+
+            # Run the script in a child process whose PATH cannot resolve git.
+            # powershell.exe itself is launched by full path so the stripped
+            # PATH does not hide the interpreter.
+            $powershellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $output = ''
+            $exitCode = $null
+            $originalPath = $env:PATH
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $env:PATH = "$env:SystemRoot\System32"
+                $output = & $powershellExe -NoProfile -File (Join-Path $platformRoot 'scripts\omp\list-shared-consumers.ps1') 2>&1 | Out-String -Width 4096
+            }
+            finally {
+                $exitCode = $LASTEXITCODE
+                $env:PATH = $originalPath
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+
+            $exitCode | Should -Be 1
+            $output | Should -Match 'git was not found on PATH'
+            $output | Should -Not -Match 'not recognized'
         }
         finally {
             Remove-FixtureWorkspace -RootPath $workspace

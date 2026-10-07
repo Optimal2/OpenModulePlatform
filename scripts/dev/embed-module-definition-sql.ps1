@@ -116,11 +116,15 @@ function ConvertTo-DeclaredLineEndings {
     .SYNOPSIS
     Normalizes every line ending in $Text to the declared form ('CRLF' or
     'LF'). Any other declaration -- including '' for "git leaves the bytes
-    alone" -- returns the text unchanged.
+    alone" -- returns the text unchanged. $null is NOT a declaration (it is
+    the unreadable-git-answer sentinel) and is rejected by [ValidateNotNull()].
+    The parameter is deliberately UNTYPED: a [string]-typed parameter coerces
+    $null to '' BEFORE the validation attributes run (measured on Windows
+    PowerShell 5.1), which silently turned NO answer into "bytes untouched".
     #>
     param(
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text,
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Declared
+        [Parameter(Mandatory = $true)][AllowEmptyString()][ValidateNotNull()]$Declared
     )
 
     if ($Declared -eq 'CRLF') {
