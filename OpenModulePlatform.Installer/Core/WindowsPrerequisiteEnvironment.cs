@@ -177,14 +177,14 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
             var root = Path.GetPathRoot(Path.GetFullPath(pathOnTargetDrive));
             if (string.IsNullOrWhiteSpace(root))
             {
-                return long.MaxValue;
+                return -1;
             }
 
             return new DriveInfo(root).AvailableFreeSpace;
         }
         catch (Exception ex) when (ex is IOException or SystemException)
         {
-            return long.MaxValue;
+            return -1;
         }
     }
 

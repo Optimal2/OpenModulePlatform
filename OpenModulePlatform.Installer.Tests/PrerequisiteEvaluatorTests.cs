@@ -221,6 +221,21 @@ public class PrerequisiteEvaluatorTests
     }
 
     [Fact]
+    public async Task Undeterminable_disk_blocks_install()
+    {
+        var env = FakePrerequisiteEnvironment.AllGreen();
+        env.FreeDisk = -1;
+
+        var evaluation = await PrerequisiteEvaluator.EvaluateAsync(
+            MinimalConfig(), @"C:\pkg", env, serviceAccountPasswordValidated: false);
+
+        var check = evaluation.Checks.Single(c => c.Id == PrerequisiteCheckId.FreeDiskSpace);
+        Assert.False(check.IsSatisfied);
+        Assert.Contains("could not be determined", check.Detail);
+        Assert.False(evaluation.CanInstall);
+    }
+
+    [Fact]
     public async Task Domain_account_requires_a_validated_password_before_install()
     {
         var config = MinimalConfig();

@@ -160,7 +160,9 @@ public static class PrerequisiteEvaluator
             PrerequisiteCheckId.FreeDiskSpace,
             freeBytes >= RequiredFreeDiskBytes,
             "Free disk space",
-            $"{freeBytes / (1024 * 1024):n0} MB free on the install drive (at least {RequiredFreeDiskBytes / (1024 * 1024):n0} MB required)."));
+            freeBytes < 0
+                ? $"Free space on the install drive ({installRoot}) could not be determined."
+                : $"{freeBytes / (1024 * 1024):n0} MB free on the install drive (at least {RequiredFreeDiskBytes / (1024 * 1024):n0} MB required)."));
 
         var serviceAccount = ServiceAccountClassifier.Classify(
             config.HostAgent.ServiceAccountName,
