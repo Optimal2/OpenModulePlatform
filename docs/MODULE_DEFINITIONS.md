@@ -417,10 +417,15 @@ The embed helper normalizes each SQL file's line endings to the form
 `.gitattributes` declares for the file (`git check-attr text eol`: `eol=crlf`
 embeds CRLF, `eol=lf` embeds LF, and an unset `text` attribute or missing `eol`
 declaration embeds the bytes exactly as they are) before base64-encoding, so the
-embedded bytes no longer depend on which machine or checkout ran the embed. The
+embedded bytes no longer depend on which machine or checkout ran the embed. When
+git cannot answer the declaration question at all (not a work tree, git missing,
+non-zero exit) the embed tool stops with an explicit error instead of falling
+back to the on-disk bytes. The
 component-version validator enforces the same contract twice: Check 16 (embedded
 SQL freshness) compares against the declared form, and Check 20 fails when
-embedded content carries line endings that contradict the declaration.
+embedded content carries line endings that contradict the declaration; both
+treat an unreadable declaration as an error, and Check 22 keeps the embed tool's
+copies of the line-ending helpers byte-identical to the validator's shared core.
 
 The `compatibleArtifacts` array defines artifact slots, not already-installed
 artifact rows. An artifact zip import uses these rows to validate

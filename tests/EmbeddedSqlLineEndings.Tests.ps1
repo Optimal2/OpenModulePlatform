@@ -71,10 +71,26 @@ Describe 'Check 20: embedded SQL line endings vs .gitattributes' {
                 [Parameter(Mandatory = $true)][string]$Message
             )
 
-            & git -C $RepoRoot add -A
-            if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-            & git -C $RepoRoot commit -m $Message --quiet
-            if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+            # git writes advisory noise ('LF will be replaced by CRLF ...') to
+            # stderr, and a Windows PowerShell 5.1 native-command stderr line
+            # becomes a RemoteException that $ErrorActionPreference = 'Stop'
+            # (the harness setting) escalates to a terminating error -- even
+            # through 2>&1, where Out-String re-emits the wrapped ErrorRecord.
+            # Drop the preference for the two native calls and judge them by
+            # $LASTEXITCODE alone, keeping the output for the throw message.
+            $previousPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $addOutput = & git -C $RepoRoot add -A 2>&1 | Out-String
+                $addExitCode = $LASTEXITCODE
+                $commitOutput = & git -C $RepoRoot commit -m $Message --quiet 2>&1 | Out-String
+                $commitExitCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $previousPreference
+            }
+            if ($addExitCode -ne 0) { throw "git add failed: $addOutput" }
+            if ($commitExitCode -ne 0) { throw "git commit failed: $commitOutput" }
         }
 
         function Get-EmbeddedSqlText {
@@ -186,6 +202,77 @@ Describe 'Check 20: embedded SQL line endings vs .gitattributes' {
             ConvertTo-DeclaredLineEndings -Text "a`nb`r`nc" -Declared 'CRLF' | Should -Be "a`r`nb`r`nc"
             ConvertTo-DeclaredLineEndings -Text "a`r`nb`nc" -Declared 'LF' | Should -Be "a`nb`nc"
             ConvertTo-DeclaredLineEndings -Text "a`r`nb" -Declared '' | Should -Be "a`r`nb"
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Get-GitDeclaredLineEnding returns $null (not "") when git cannot answer, and the validator fails loudly' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            # No git init: 'git check-attr' cannot answer here. The function
+            # must say so with $null, and the validator must turn that into an
+            # error -- the old '' fallback silently read as "bytes untouched".
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -NoGit
+            # Give the sqlScripts entry embedded content so Checks 16/20 engage.
+            Write-EmbeddedSqlContentAsOnDisk -RepoRoot $repoRoot -DefinitionRelativePath 'TestModule/test.module-definition.json' -SqlRelativePath 'TestModule/sql/init.sql'
+
+            $declared = Get-GitDeclaredLineEnding -RepositoryRoot $repoRoot -RelativePath 'TestModule/sql/init.sql'
+            ($null -eq $declared) | Should -BeTrue
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'did not answer'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+}
+
+Describe 'Check 22: embed tool helper copies are byte-identical to the shared core' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-ComponentVersions.TestHelpers.ps1')
+        $script:embedToolSourcePath = Resolve-Path (Join-Path $PSScriptRoot '..\scripts\dev\embed-module-definition-sql.ps1')
+    }
+
+    It 'Passes when the embed tool carries the exact shared-core functions' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+            $embedCopyPath = Join-Path $repoRoot 'scripts\dev\embed-module-definition-sql.ps1'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $embedCopyPath) -Force
+            Copy-Item -LiteralPath $script:embedToolSourcePath -Destination $embedCopyPath -Force
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match 'byte-identical to the shared core'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails when the embed tool copy drifts from the shared core, even in a comment' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot
+            $embedCopyPath = Join-Path $repoRoot 'scripts\dev\embed-module-definition-sql.ps1'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $embedCopyPath) -Force
+            Copy-Item -LiteralPath $script:embedToolSourcePath -Destination $embedCopyPath -Force
+
+            # Drift one byte inside Get-GitDeclaredLineEnding's comment help.
+            $drifted = [System.IO.File]::ReadAllText($embedCopyPath).Replace('GIT COULD NOT ANSWER', 'GIT COULD NOT ANSWERX')
+            [System.IO.File]::WriteAllText($embedCopyPath, $drifted, [System.Text.UTF8Encoding]::new($false))
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'Check 22'
+            $result.Output | Should -Match 'byte-identical'
         }
         finally {
             Remove-TemporaryTestRepository -RootPath $repoRoot

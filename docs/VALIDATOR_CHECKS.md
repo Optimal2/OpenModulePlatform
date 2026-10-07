@@ -75,8 +75,10 @@ with a future canonical check. Reserve a number here before using it.
 | 17 | (repo-local) unconditional artifact-pointer overwrite guard | static SQL scan | exactly one consumer repository |
 | 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and Contoso) |
 | 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
-| 20 | Embedded sqlScripts line endings must match what `.gitattributes` declares for the SQL path (`git check-attr text eol`; text unset or no eol attribute = any form accepted) | worktree | every repository whose definitions embed SQL |
+| 20 | Embedded sqlScripts line endings must match what `.gitattributes` declares for the SQL path (`git check-attr text eol`; text unset or no eol attribute = any form accepted; a git lookup that cannot answer at all is a validation **error**, never a silent "bytes untouched") | worktree | every repository whose definitions embed SQL |
 | 21 | Direct `TimeZoneInfo.FindSystemTimeZoneById`/`TryConvertIanaIdToWindowsId` calls are confined to `*TimeZoneLookup.cs` in production `.cs` files (test projects and bin/obj excluded), because hosts without `icu.dll` (before Windows 10 1903 / Server 2019) run .NET in NLS mode where both fail for IANA ids; production code resolves zones through `OmpTimeZoneLookup` | worktree | this platform repository; synced to consumer validators by the omp-tidszon-utan-icu-server2016 campaign |
+| 22 | The embed tool's line-ending helpers (`Get-GitDeclaredLineEnding`, `ConvertTo-DeclaredLineEndings` in `scripts/dev/embed-module-definition-sql.ps1`) are byte-identical copies of the shared core (function texts compared via the PowerShell parser) | worktree | this platform repository only (vacuous where the embed tool is absent) |
+| 23 | (repo-local) `minModuleDefinitionVersion` must not lag the module's current definitionVersion | static | exactly one consumer repository (LogSearch) — renumbered from its local "Check 20" on 2026-10-07 to resolve the collision with canonical Check 20 |
 
 Checks 7, 8, 9, 11, 12, 13 and 19, and the unnumbered `repositoryVersion`
 rule (repositoryVersion must move when any component version moved since the
@@ -137,11 +139,15 @@ if ($null -ne $check15) {
 A Web.Shared (or other shared-project) cascade must take its consumer list from
 `scripts/omp/list-shared-consumers.ps1`, never from memory. The script walks the
 sibling repositories of the OpenModulePlatform checkout, finds every repository
-whose projects carry a `ProjectReference` into a shared project declared in this
+whose git-tracked projects — `.csproj` **and** `Directory.Build.props` /
+`Directory.Build.targets`, since a `ProjectReference` can legally live in any of
+them — carry a `ProjectReference` into a shared project declared in this
 repository's `omp-components.json` (`sharedProjects`), and reports whether each
 referencing repository declares the matching `sharedDependencies`/`treeId` entry
 that Check 14 enforces. It exits non-zero when a referencing repository does not
-declare the dependency, so it doubles as the gap detector.
+declare the dependency, so it doubles as the gap detector. It also exits
+non-zero when a sibling repository cannot be scanned at all (`git ls-files`
+fails): an unreadable repository must never read as "nothing to declare".
 
 ```powershell
 .\scripts\omp\list-shared-consumers.ps1

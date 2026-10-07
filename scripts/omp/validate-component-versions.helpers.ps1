@@ -487,10 +487,10 @@ function Get-GitDeclaredLineEnding {
     <#
     .SYNOPSIS
     Returns the line-ending form .gitattributes declares for a repository path:
-    'CRLF', 'LF', or '' when git leaves the bytes alone (the text attribute is
-    unset, no eol attribute applies, the path is outside a git work tree, or
-    git could not answer). Embed and freshness logic must treat '' as "keep
-    the bytes exactly as they are", never as a license to normalize.
+    'CRLF', 'LF', '' when git leaves the bytes alone (the text attribute is
+    unset or no eol attribute applies), or $null when GIT COULD NOT ANSWER
+    (git missing, non-zero exit, no output -- for example a repository root
+    that is not a git work tree).
 
     .DESCRIPTION
     The embed tool (scripts/dev/embed-module-definition-sql.ps1) used to embed
@@ -500,6 +500,13 @@ function Get-GitDeclaredLineEnding {
     produced an embedding that failed validation on every normal checkout.
     Reading the declared form from git check-attr makes the embedded bytes a
     function of the repository contract, not of the local working tree.
+
+    '' and $null are different answers. '' is a declaration: git stores the
+    bytes exactly, so embed and freshness logic must keep them exactly as they
+    are -- never a license to normalize. $null is NO answer: every caller must
+    treat it as an error (fail validation / abort the embed), because silently
+    falling back to "bytes untouched" re-embeds the local accident the
+    declared-form read exists to prevent.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -516,14 +523,14 @@ function Get-GitDeclaredLineEnding {
         $exitCode = $LASTEXITCODE
     }
     catch {
-        return ''
+        return $null
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
     if ($exitCode -ne 0 -or $null -eq $output) {
-        return ''
+        return $null
     }
 
     $textAttribute = ''

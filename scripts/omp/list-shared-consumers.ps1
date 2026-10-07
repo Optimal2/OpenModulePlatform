@@ -14,16 +14,22 @@
     ProjectReference but no sharedDependencies block at all.
 
     The script walks the sibling directories of the OpenModulePlatform
-    checkout, reads every git-tracked .csproj, and matches ProjectReference
-    entries against the shared projects declared in omp-components.json --
-    including references written with the $(OpenModulePlatformRoot) MSBuild
-    variable. For every referencing repository it reports whether the
-    repository's own omp-components.json declares a sharedDependencies entry
-    (with a treeId) for that project, which is what Check 14
+    checkout, reads every git-tracked .csproj AND every git-tracked
+    Directory.Build.props/Directory.Build.targets (a ProjectReference can
+    legally live there, and a reference hidden in one is invisible to a
+    .csproj-only scan), and matches ProjectReference entries against the
+    shared projects declared in omp-components.json -- including references
+    written with the $(OpenModulePlatformRoot) MSBuild variable. For every
+    referencing repository it reports whether the repository's own
+    omp-components.json declares a sharedDependencies entry (with a treeId)
+    for that project, which is what Check 14
     (validate-shared-dependencies.ps1) enforces.
 
     Exit code 1 when any referencing repository does not declare the shared
     dependency, so the script doubles as the gap detector before a cascade.
+    Exit code 1 also when a sibling repository cannot be read (git ls-files
+    fails): a skipped repository is exactly how a referencing consumer goes
+    unseen, so an unreadable one must never read as "nothing to declare".
 
     sharedProjects entries whose projectPath is a bare directory (source-linked
     content, not a .csproj) cannot be matched through ProjectReference and are
@@ -43,7 +49,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$PlatformRepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$PlatformRepositoryRoot = '',
 
     [Parameter(Mandatory = $false)]
     [string]$SiblingRoot = ''
@@ -51,6 +57,28 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Get-ScriptDirectory {
+    # $PSScriptRoot is EMPTY inside an advanced-function parameter default when
+    # the script runs under Windows PowerShell 5.1 -File, so the default cannot
+    # be expressed in the param block (measured: the default below crashed with
+    # "Cannot bind argument to parameter 'Path' because it is an empty string"
+    # exactly on the runtime the pre-push hook uses). Resolve it in the body.
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        return $PSScriptRoot
+    }
+
+    $scriptPath = $PSCommandPath
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        $scriptPath = $MyInvocation.MyCommand.Path
+    }
+
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        throw 'Could not resolve script directory.'
+    }
+
+    return Split-Path -Parent $scriptPath
+}
 
 function Get-OptionalPropertyValue {
     param(
@@ -73,6 +101,9 @@ function Get-OptionalPropertyValue {
     return $property.Value
 }
 
+if ([string]::IsNullOrWhiteSpace($PlatformRepositoryRoot)) {
+    $PlatformRepositoryRoot = (Resolve-Path (Join-Path (Get-ScriptDirectory) '..\..')).Path
+}
 $platformRoot = [System.IO.Path]::GetFullPath($PlatformRepositoryRoot)
 if ([string]::IsNullOrWhiteSpace($SiblingRoot)) {
     $SiblingRoot = Split-Path -Parent $platformRoot
@@ -172,6 +203,7 @@ function Test-PathMatch {
 }
 
 $references = @()
+$scanFailures = 0
 foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) {
     # The platform checkout itself is not its own consumer -- neither the copy
     # this script reads the manifest from, nor the conventional sibling one.
@@ -192,11 +224,13 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
         continue
     }
 
-    $csprojFiles = $null
+    # A ProjectReference can live in a .csproj or in a git-tracked
+    # Directory.Build.props/.targets; scan all three shapes in one git call.
+    $projectFiles = $null
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $csprojFiles = & git -C $sibling.FullName ls-files -- '*.csproj' 2>$null
+        $projectFiles = & git -C $sibling.FullName ls-files -- '*.csproj' '*Directory.Build.props' '*Directory.Build.targets' 2>$null
         $gitExitCode = $LASTEXITCODE
     }
     finally {
@@ -204,19 +238,23 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
     }
 
     if ($gitExitCode -ne 0) {
-        Write-Host "WARN  could not list .csproj files in '$($sibling.FullName)'; the repository was not scanned." -ForegroundColor Yellow
+        # WARN + skip is how a referencing consumer goes unseen: the repository
+        # is dropped from the list and the run can still read "all declared".
+        # Count it and make the exit code non-zero at the end.
+        $scanFailures++
+        Write-Host "ERROR could not list project files in '$($sibling.FullName)'; the repository was not scanned and the result is incomplete." -ForegroundColor Red
         continue
     }
 
-    foreach ($csprojRelative in @($csprojFiles)) {
-        $csprojFullPath = Join-Path $sibling.FullName $csprojRelative
-        if (-not (Test-Path -LiteralPath $csprojFullPath -PathType Leaf)) {
+    foreach ($projectFileRelative in @($projectFiles)) {
+        $projectFileFullPath = Join-Path $sibling.FullName $projectFileRelative
+        if (-not (Test-Path -LiteralPath $projectFileFullPath -PathType Leaf)) {
             continue
         }
 
-        $csprojText = Get-Content -LiteralPath $csprojFullPath -Raw -Encoding UTF8
-        $projectDirectory = Split-Path -Parent $csprojFullPath
-        foreach ($referenceMatch in [regex]::Matches($csprojText, '(?i)<ProjectReference\s+[^>]*Include\s*=\s*"([^"]+)"')) {
+        $projectFileText = Get-Content -LiteralPath $projectFileFullPath -Raw -Encoding UTF8
+        $projectDirectory = Split-Path -Parent $projectFileFullPath
+        foreach ($referenceMatch in [regex]::Matches($projectFileText, '(?i)<ProjectReference\s+[^>]*Include\s*=\s*"([^"]+)"')) {
             $include = $referenceMatch.Groups[1].Value
             foreach ($sharedProject in $sharedProjects) {
                 if (Test-PathMatch -Include $include -ProjectDirectory $projectDirectory -RelativeProjectPath $sharedProject.RelativeProjectPath) {
@@ -224,7 +262,7 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
                         Repository        = $sibling.Name
                         RepositoryFullPath = $sibling.FullName
                         SharedProject     = $sharedProject.RelativeDirectory
-                        ReferencedVia     = $csprojRelative
+                        ReferencedVia     = $projectFileRelative
                     }
                 }
             }
@@ -233,6 +271,11 @@ foreach ($sibling in @(Get-ChildItem -LiteralPath $siblingRootFull -Directory)) 
 }
 
 if ($references.Count -eq 0) {
+    if ($scanFailures -gt 0) {
+        Write-Host "$scanFailures sibling repositor$(if ($scanFailures -eq 1) { 'y' } else { 'ies' }) under '$siblingRootFull' could not be scanned (see the ERROR lines above), so 'no references found' is not a trustworthy answer." -ForegroundColor Red
+        exit 1
+    }
+
     Write-Host "No sibling repository under '$siblingRootFull' references a shared OpenModulePlatform project."
     exit 0
 }
@@ -275,6 +318,11 @@ foreach ($reference in $references) {
 }
 
 Write-Host ''
+if ($scanFailures -gt 0) {
+    Write-Host "$scanFailures sibling repositor$(if ($scanFailures -eq 1) { 'y' } else { 'ies' }) under '$siblingRootFull' could not be scanned (see the ERROR lines above); the declaration table above is incomplete." -ForegroundColor Red
+    exit 1
+}
+
 if ($undeclaredCount -gt 0) {
     Write-Host "$undeclaredCount of $($references.Count) shared-project reference(s) are NOT declared in the consumer's omp-components.json sharedDependencies. Add the declaration (and its treeId) so Check 14 sees the consumer." -ForegroundColor Red
     exit 1

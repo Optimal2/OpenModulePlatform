@@ -1146,7 +1146,9 @@ else {
 # unset, or no eol attribute) the historical LF normalization applies on both
 # sides and pure CRLF/LF drift is still tolerated; any other byte difference
 # is reported as staleness. Check 20 is the hard guard that a declared form is
-# also what the embedded bytes actually carry.
+# also what the embedded bytes actually carry. When git cannot ANSWER the
+# declaration question at all the declared form is unknown -- that is an
+# error, never a silent "bytes untouched".
 # ---------------------------------------------------------------------------
 $embeddedSqlChecked = 0
 $embeddedSqlFresh = 0
@@ -1214,7 +1216,14 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         # the comparison falls back to the historical LF normalization, which
         # stays byte-tolerant on purpose (there is no contract to be exact
         # against); Check 20 below is the hard guard when a form IS declared.
+        # When git cannot answer, the declared form is UNKNOWN and comparing
+        # against any assumed form would be a guess -- that is an error, like
+        # every other unreadable git answer in this family.
         $declaredEol = Get-GitDeclaredLineEnding -RepositoryRoot $repositoryRoot -RelativePath $sqlPath
+        if ($null -eq $declaredEol) {
+            Add-ValidationError -Errors $errors -Message "Check 16 could not determine the line-ending form .gitattributes declares for '$sqlPath' (script '$scriptKey', module '$moduleKey'): 'git check-attr text eol' did not answer (is '$repositoryRoot' a git work tree?). An unreadable declaration is an error, not 'bytes untouched'."
+            continue
+        }
         $comparisonEol = $declaredEol
         if ([string]::IsNullOrEmpty($comparisonEol)) {
             $comparisonEol = 'LF'
@@ -1270,7 +1279,8 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 # validate-module-definitions on every normal checkout, stopping deploys.
 # Only the manifest's module definitions are checked (never build-output
 # copies); where git declares no form for the SQL path (text unset, no eol
-# attribute, or the lookup cannot run) any line-ending form is accepted.
+# attribute) any line-ending form is accepted. A lookup that cannot run at
+# all is an error, like every other unreadable git answer in this family.
 # ---------------------------------------------------------------------------
 $embeddedEolChecked = 0
 $embeddedEolDeclared = 0
@@ -1318,7 +1328,13 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         }
 
         $declaredEol = Get-GitDeclaredLineEnding -RepositoryRoot $repositoryRoot -RelativePath $sqlPath
-        if ([string]::IsNullOrEmpty($declaredEol)) {
+        if ($null -eq $declaredEol) {
+            # git could not answer the declaration question, so 'any form is
+            # accepted' would be an unmeasured check reading as a passing one.
+            Add-ValidationError -Errors $errors -Message "Check 20 could not determine the line-ending form .gitattributes declares for '$sqlPath' (module '$moduleKey'): 'git check-attr text eol' did not answer (is '$repositoryRoot' a git work tree?). An unreadable declaration is an error, not 'bytes untouched'."
+            continue
+        }
+        if ($declaredEol -eq '') {
             # git leaves these bytes alone; there is no declared form to violate.
             continue
         }
@@ -1351,6 +1367,65 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         }
 
         $embeddedEolDeclared++
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Check 22: the embed tool's line-ending helpers are byte-identical copies of
+# the shared core. scripts/dev/embed-module-definition-sql.ps1 stays
+# standalone (it must run in a consumer repository without the validator next
+# to it), so it carries its OWN copies of Get-GitDeclaredLineEnding and
+# ConvertTo-DeclaredLineEndings. Nothing held the copies identical: a fix in
+# the shared core (for example the unreadable-git-answer error semantics)
+# silently left the embed tool with the old behaviour, and the two drift
+# detectors (Checks 16/20) would then disagree with the tool they guard. The
+# comparison extracts each function's exact text with the PowerShell parser,
+# so it is insensitive to everything outside the function and sensitive to
+# every byte inside it. Platform-only: where the embed tool does not exist
+# (consumer repositories, test fixtures) the check is vacuous.
+# ---------------------------------------------------------------------------
+$embedHelperCopyCount = 0
+$embedToolPath = Join-Path $repositoryRoot 'scripts\dev\embed-module-definition-sql.ps1'
+$helpersCorePath = Join-Path $repositoryRoot 'scripts\omp\validate-component-versions.helpers.ps1'
+
+function Get-FunctionExtentText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$FunctionName
+    )
+
+    $parseTokens = $null
+    $parseErrors = $null
+    $parsedAst = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$parseTokens, [ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) {
+        return $null
+    }
+
+    $functionAst = $parsedAst.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            [string]::Equals($node.Name, $FunctionName, [StringComparison]::Ordinal)
+        }, $false)
+    if ($null -eq $functionAst) {
+        return $null
+    }
+
+    return $functionAst.Extent.Text
+}
+
+if ((Test-Path -LiteralPath $embedToolPath -PathType Leaf) -and (Test-Path -LiteralPath $helpersCorePath -PathType Leaf)) {
+    foreach ($copiedFunctionName in @('Get-GitDeclaredLineEnding', 'ConvertTo-DeclaredLineEndings')) {
+        $embedHelperCopyCount++
+        $coreFunctionText = Get-FunctionExtentText -Path $helpersCorePath -FunctionName $copiedFunctionName
+        $embedFunctionText = Get-FunctionExtentText -Path $embedToolPath -FunctionName $copiedFunctionName
+        if ($null -eq $coreFunctionText -or $null -eq $embedFunctionText) {
+            Add-ValidationError -Errors $errors -Message "Check 22: could not extract function '$copiedFunctionName' from both scripts/omp/validate-component-versions.helpers.ps1 and scripts/dev/embed-module-definition-sql.ps1 (parse error or missing function). The embed tool must carry a byte-identical copy of the shared core."
+            continue
+        }
+
+        if (-not [string]::Equals($coreFunctionText, $embedFunctionText, [StringComparison]::Ordinal)) {
+            Add-ValidationError -Errors $errors -Message "Check 22: function '$copiedFunctionName' in scripts/dev/embed-module-definition-sql.ps1 differs from the shared-core copy in scripts/omp/validate-component-versions.helpers.ps1. The two must stay byte-identical: edit the shared core and copy the function into the embed tool in the same change."
+        }
     }
 }
 
@@ -1874,6 +1949,10 @@ if ($embeddedSqlChecked -gt 0) {
 
 if ($embeddedEolChecked -gt 0) {
     Write-Host "$checkMark $embeddedEolDeclared of $embeddedEolChecked embedded SQL script(s) carry the line endings .gitattributes declares"
+}
+
+if ($embedHelperCopyCount -gt 0) {
+    Write-Host "$checkMark $embedHelperCopyCount embed-tool helper function(s) are byte-identical to the shared core"
 }
 
 if ($transitiveCheckCount -gt 0 -or $transitiveErrorCount -gt 0) {

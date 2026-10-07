@@ -42,7 +42,13 @@ function New-TemporaryTestRepository {
         [string]$CompatibleArtifactMaxVersion = '',
 
         [Parameter(Mandatory = $false)]
-        [string]$CompatibleArtifactMinVersion = ''
+        [string]$CompatibleArtifactMinVersion = '',
+
+        # Skip git init/commit entirely: the fixture is then a directory that
+        # git cannot answer questions about, which is exactly what the
+        # fail-loud git-reader tests need.
+        [Parameter(Mandatory = $false)]
+        [switch]$NoGit
     )
 
     if (Test-Path -LiteralPath $RootPath -PathType Container) {
@@ -123,29 +129,31 @@ function New-TemporaryTestRepository {
     [System.IO.File]::WriteAllText((Join-Path $RootPath 'omp-components.json'), $manifestJson, [System.Text.Encoding]::UTF8)
 
     # Initialize git repository and create initial commit.
-    $originalLocation = Get-Location
-    try {
-        Set-Location -LiteralPath $RootPath
-        & git -C $RootPath init --quiet
-        if ($LASTEXITCODE -ne 0) { throw 'git init failed.' }
+    if (-not $NoGit) {
+        $originalLocation = Get-Location
+        try {
+            Set-Location -LiteralPath $RootPath
+            & git -C $RootPath init --quiet
+            if ($LASTEXITCODE -ne 0) { throw 'git init failed.' }
 
-        & git -C $RootPath config core.autocrlf false
-        if ($LASTEXITCODE -ne 0) { throw 'git config core.autocrlf failed.' }
+            & git -C $RootPath config core.autocrlf false
+            if ($LASTEXITCODE -ne 0) { throw 'git config core.autocrlf failed.' }
 
-        & git -C $RootPath config user.email 'test@example.com'
-        if ($LASTEXITCODE -ne 0) { throw 'git config user.email failed.' }
+            & git -C $RootPath config user.email 'test@example.com'
+            if ($LASTEXITCODE -ne 0) { throw 'git config user.email failed.' }
 
-        & git -C $RootPath config user.name 'Test User'
-        if ($LASTEXITCODE -ne 0) { throw 'git config user.name failed.' }
+            & git -C $RootPath config user.name 'Test User'
+            if ($LASTEXITCODE -ne 0) { throw 'git config user.name failed.' }
 
-        & git -C $RootPath add -A
-        if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
+            & git -C $RootPath add -A
+            if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
 
-        & git -C $RootPath commit -m 'Initial commit' --quiet
-        if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
-    }
-    finally {
-        Set-Location $originalLocation
+            & git -C $RootPath commit -m 'Initial commit' --quiet
+            if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+        }
+        finally {
+            Set-Location $originalLocation
+        }
     }
 
     return (Join-Path $ompScriptsDir 'validate-component-versions.ps1')

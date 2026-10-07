@@ -31,17 +31,37 @@ function ConvertTo-PortableModuleDefinitionSql {
         '')
 }
 
-# Get-GitDeclaredLineEnding and ConvertTo-DeclaredLineEndings are copies of the
-# shared validator core (scripts/omp/validate-component-versions.helpers.ps1);
-# this script stays standalone so it can run in a consumer repository without
-# the validator next to it. Keep them in sync.
+# Get-GitDeclaredLineEnding and ConvertTo-DeclaredLineEndings are BYTE-IDENTICAL
+# copies of the shared validator core
+# (scripts/omp/validate-component-versions.helpers.ps1); this script stays
+# standalone so it can run in a consumer repository without the validator next
+# to it. Never edit one copy without the other: Check 22 in
+# scripts/omp/validate-component-versions.ps1 compares the two function texts
+# and fails on any difference.
 function Get-GitDeclaredLineEnding {
     <#
     .SYNOPSIS
     Returns the line-ending form .gitattributes declares for a repository path:
-    'CRLF', 'LF', or '' when git leaves the bytes alone (the text attribute is
-    unset, no eol attribute applies, the path is outside a git work tree, or
-    git could not answer). '' means "keep the bytes exactly as they are".
+    'CRLF', 'LF', '' when git leaves the bytes alone (the text attribute is
+    unset or no eol attribute applies), or $null when GIT COULD NOT ANSWER
+    (git missing, non-zero exit, no output -- for example a repository root
+    that is not a git work tree).
+
+    .DESCRIPTION
+    The embed tool (scripts/dev/embed-module-definition-sql.ps1) used to embed
+    whichever line-ending form the SQL file happened to have on disk, so the
+    same module definition held LF bytes on one machine and CRLF bytes on
+    another, and a file rewritten by a Git Bash text tool (sed -i writes LF)
+    produced an embedding that failed validation on every normal checkout.
+    Reading the declared form from git check-attr makes the embedded bytes a
+    function of the repository contract, not of the local working tree.
+
+    '' and $null are different answers. '' is a declaration: git stores the
+    bytes exactly, so embed and freshness logic must keep them exactly as they
+    are -- never a license to normalize. $null is NO answer: every caller must
+    treat it as an error (fail validation / abort the embed), because silently
+    falling back to "bytes untouched" re-embeds the local accident the
+    declared-form read exists to prevent.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -58,14 +78,14 @@ function Get-GitDeclaredLineEnding {
         $exitCode = $LASTEXITCODE
     }
     catch {
-        return ''
+        return $null
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 
     if ($exitCode -ne 0 -or $null -eq $output) {
-        return ''
+        return $null
     }
 
     $textAttribute = ''
@@ -226,7 +246,11 @@ foreach ($definitionFile in $definitionFiles) {
         # disk made the result depend on the local checkout (core.autocrlf) or
         # on whatever tool last rewrote the file (sed -i writes LF), so the
         # same definition held different bytes on different machines.
-        $sqlText = ConvertTo-DeclaredLineEndings -Text $sqlText -Declared (Get-GitDeclaredLineEnding -RepositoryRoot $RepositoryRoot -RelativePath ([string]$script.path))
+        $declaredLineEnding = Get-GitDeclaredLineEnding -RepositoryRoot $RepositoryRoot -RelativePath ([string]$script.path)
+        if ($null -eq $declaredLineEnding) {
+            throw "Could not determine the line-ending form .gitattributes declares for '$($script.path)': 'git check-attr text eol' did not answer (is '$RepositoryRoot' a git work tree?). Refusing to embed the on-disk bytes as-is -- that is exactly the local-checkout dependence this tool exists to remove."
+        }
+        $sqlText = ConvertTo-DeclaredLineEndings -Text $sqlText -Declared $declaredLineEnding
         $sqlText = ConvertTo-PortableModuleDefinitionSql -SqlText $sqlText
         $contentEncoding = 'base64-utf8'
         $content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($sqlText))
