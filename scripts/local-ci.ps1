@@ -172,6 +172,8 @@ try {
                 'OpenModulePlatform.HostAgent.Runtime.Tests',
                 'OpenModulePlatform.Portal.Tests',
                 'OpenModulePlatform.Bootstrapper.Tests',
+                'OpenModulePlatform.Installation.Tests',
+                'OpenModulePlatform.Installer.Tests',
                 'OpenModulePlatform.Worker.Abstractions.Tests',
                 'OpenModulePlatform.WorkerProcessHost.Tests',
                 'OpenModulePlatform.WorkerManager.WindowsService.Tests',
