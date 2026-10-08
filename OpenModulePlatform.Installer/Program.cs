@@ -113,13 +113,13 @@ internal static class Program
             {
                 case ProfileMatchOutcome.NoProfilesFound:
                     Console.WriteLine("No installation profiles were found next to the installer (hosts\\<profile>\\bootstrap.json).");
-                    return 2;
+                    return DryRunExitCodes.NoOrSeveralMatchingProfiles;
                 case ProfileMatchOutcome.NoMatch:
                     Console.WriteLine($"No installation is prepared for this computer ({string.Join(", ", resolution.CandidateMachineNames)}).");
-                    return 2;
+                    return DryRunExitCodes.NoOrSeveralMatchingProfiles;
                 case ProfileMatchOutcome.MultipleMatches:
                     Console.WriteLine("More than one profile matches: " + string.Join(", ", resolution.MatchingProfiles.Select(p => p.DisplayName)));
-                    return 2;
+                    return DryRunExitCodes.NoOrSeveralMatchingProfiles;
             }
 
             var session = await InstallerSessionLoader.LoadAsync(resolution.Profile!);
@@ -129,10 +129,20 @@ internal static class Program
             Console.WriteLine("SQL target: " + session.Config.Sql.Server + "/" + session.Config.Sql.Database);
             Console.WriteLine();
 
-            if (AlreadyInstalledDetector.IsAlreadyInstalled(session.Config))
+            // A dry run never refuses on an existing LOCAL installation: it is
+            // reported as an information line and every check still runs and
+            // prints below. With --machine-name the dry run simulates another
+            // machine, so the local installation says nothing about the target
+            // and is purely informational there too. A real (non-dry) run keeps
+            // refusing - the GUI stops on the same detector.
+            var simulatingAnotherMachine = !string.IsNullOrWhiteSpace(cli.MachineName);
+            var localInstallationExists = AlreadyInstalledDetector.IsAlreadyInstalled(session.Config);
+            if (localInstallationExists)
             {
-                Console.WriteLine("An installation already exists on this computer. This program only performs the first installation.");
-                return 2;
+                Console.WriteLine(simulatingAnotherMachine
+                    ? $"Note: an installation already exists on THIS computer. That says nothing about {cli.MachineName.Trim()}, which this dry run simulates; the checks below still run in full."
+                    : "Note: an installation already exists on this computer. A real run would refuse (this program only performs the first installation); the checks below still run in full.");
+                Console.WriteLine();
             }
 
             var evaluation = await PrerequisiteEvaluator.EvaluateAsync(
@@ -152,19 +162,28 @@ internal static class Program
                 new ThrowingInstallActions(),
                 new ConsoleInstallProgress(),
                 dryRun: true);
-            if (InstallOrchestrator.BlockingChecks(evaluation).Count > 0)
+
+            var exitCode = DryRunExitCodes.Decide(
+                localInstallationExists,
+                simulatingAnotherMachine,
+                InstallOrchestrator.BlockingChecks(evaluation).Count);
+            if (exitCode == DryRunExitCodes.Blocked)
             {
                 Console.WriteLine();
                 Console.WriteLine("Dry run result: the installation WOULD BE BLOCKED. Fix the lines marked MISSING above that the installer cannot fix itself, then run again.");
-                return 3;
+            }
+            else if (exitCode == DryRunExitCodes.AlreadyInstalled)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Dry run result: an installation already exists on this computer. This program only performs the first installation.");
             }
 
-            return 0;
+            return exitCode;
         }
         catch (Exception ex) when (ex is InvalidOperationException or SystemException or IOException or System.Text.Json.JsonException)
         {
             Console.WriteLine("Dry run failed: " + ex.Message);
-            return 1;
+            return DryRunExitCodes.Error;
         }
     }
 

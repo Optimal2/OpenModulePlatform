@@ -35,7 +35,9 @@ and locks onto the one profile whose `profile.machineNames`,
 
 If the matched profile's HostAgent service already exists, or the install root
 already contains a HostAgent, the installer stops: this program only performs
-the first installation.
+the first installation. A `--dry-run` on such a machine instead reports the
+existing installation as an information line and still runs and prints every
+check (exit code 4, see the table below).
 
 ## What it checks and installs
 
@@ -53,7 +55,10 @@ The prerequisite panel shows one green/red line per requirement:
 - For an `https` binding with `iisBindingCertificateThumbprint` set: the
   certificate must exist in `LocalMachine\My` **with a private key**. Red
   otherwise, with a plain explanation - the installer never installs
-  certificates, so this blocks Install until fixed.
+  certificates, so this blocks Install until fixed. The thumbprint is
+  normalised before the lookup, so the colon-separated, spaced or lowercase
+  form copied from the certificate snap-in or certutil finds the certificate
+  just as plain hex does.
 - SQL connectivity with integrated security and that the configured database
   **exists** (the probe connects to `master` first, so "server unreachable" and
   "database does not exist" are reported distinctly). This installer never
@@ -115,7 +120,20 @@ pretends the installer runs on another computer, so a prepared profile can be
 validated before the server visit. When a red line the installer cannot fix
 itself remains (SQL unreachable, the database missing, the https certificate
 without a private key, ...), the dry run says plainly that the installation
-WOULD BE BLOCKED. Exit codes: 0 = dry run completed and nothing blocks the
-install, 2 = no or several matching profiles (or an existing installation),
-3 = the install would be blocked by a check the installer cannot fix itself,
-1 = an error.
+WOULD BE BLOCKED.
+
+An installation that already exists on the LOCAL computer never short-circuits
+the dry run: it is reported as an information line and the prerequisite list is
+still printed in full. With `--machine-name` the local installation says
+nothing about the simulated machine and stays purely informational (it does
+not decide the exit code).
+
+Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Dry run completed and nothing blocks the install |
+| 1 | An error (bad arguments, unreadable profile, ...) |
+| 2 | No or several matching profiles |
+| 3 | The install would be blocked by a check the installer cannot fix itself |
+| 4 | An installation already exists on this computer (the checks still ran in full; a real run would refuse) |

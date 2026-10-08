@@ -255,7 +255,12 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
 
     public (bool Found, bool HasPrivateKey)? ProbeLocalMachineCertificate(string thumbprint)
     {
-        if (string.IsNullOrWhiteSpace(thumbprint))
+        // Operators paste thumbprints from the certificate snap-in or certutil:
+        // colon/space separated, mixed case, sometimes with invisible
+        // formatting characters. Normalise before the store lookup or those
+        // forms never match.
+        var normalizedThumbprint = CertificateThumbprint.Normalize(thumbprint);
+        if (normalizedThumbprint.Length == 0)
         {
             return (false, false);
         }
@@ -270,7 +275,7 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
                 | System.Security.Cryptography.X509Certificates.OpenFlags.OpenExistingOnly);
             var matches = store.Certificates.Find(
                 System.Security.Cryptography.X509Certificates.X509FindType.FindByThumbprint,
-                thumbprint.Trim(),
+                normalizedThumbprint,
                 validOnly: false);
             if (matches.Count == 0)
             {
