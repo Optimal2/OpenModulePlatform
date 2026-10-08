@@ -86,11 +86,16 @@ function Protect-ConfigFile {
     param([Parameter(Mandatory = $true)][string] $FilePath)
 
     $json = Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8
+    $errorsBeforeParse = @($Error)
     try {
         $config = $json | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         # Never forward parser diagnostics: Windows PowerShell includes input text.
+        # Preserve older errors, but remove every record created by this parse.
+        foreach ($parseError in @($Error)) {
+            if ($errorsBeforeParse -notcontains $parseError) { $Error.Remove($parseError) }
+        }
         throw "Bootstrap file is not valid JSON: $FilePath"
     }
     Assert-BootstrapSqlPasswordSupported -Config $config
@@ -106,7 +111,7 @@ function Protect-ConfigFile {
     }
 
     $key = ConvertTo-AesKey -KeyText ([string]$config.security.portableEncryptionKey)
-    if ($null -ne $config.hostAgent) {
+    if ($null -ne $config.PSObject.Properties['hostAgent'] -and $null -ne $config.hostAgent) {
         Ensure-Property -Object $config.hostAgent -Name 'serviceAccountCredentialKey' -Value ''
         Ensure-Property -Object $config.hostAgent -Name 'iisAppPoolPasswordCredentialKey' -Value ''
         Ensure-Property -Object $config.hostAgent -Name 'serviceAppPasswordCredentialKey' -Value ''
@@ -125,7 +130,7 @@ function Protect-ConfigFile {
             $field.Property.Value = Protect-PortableSecret -Value $value -Key $key
         }
 
-        if ($null -ne $config.hostAgent.iisAppPoolOverrides) {
+        if ($null -ne $config.hostAgent.PSObject.Properties['iisAppPoolOverrides'] -and $null -ne $config.hostAgent.iisAppPoolOverrides) {
             foreach ($property in $config.hostAgent.iisAppPoolOverrides.PSObject.Properties) {
                 $identity = $property.Value
                 if ($null -eq $identity) {
@@ -136,7 +141,7 @@ function Protect-ConfigFile {
             }
         }
 
-        if ($null -ne $config.hostAgent.serviceAppIdentityOverrides) {
+        if ($null -ne $config.hostAgent.PSObject.Properties['serviceAppIdentityOverrides'] -and $null -ne $config.hostAgent.serviceAppIdentityOverrides) {
             foreach ($property in $config.hostAgent.serviceAppIdentityOverrides.PSObject.Properties) {
                 $identity = $property.Value
                 if ($null -eq $identity) {
@@ -147,7 +152,8 @@ function Protect-ConfigFile {
             }
         }
 
-        if ($null -ne $config.hostAgent.appSettings -and $null -ne $config.hostAgent.appSettings.HostAgent) {
+        if ($null -ne $config.hostAgent.PSObject.Properties['appSettings'] -and $null -ne $config.hostAgent.appSettings -and
+            $null -ne $config.hostAgent.appSettings.PSObject.Properties['HostAgent'] -and $null -ne $config.hostAgent.appSettings.HostAgent) {
             $hostAgentSettings = $config.hostAgent.appSettings.HostAgent
             Remove-PropertyIfPresent -Object $hostAgentSettings -Name 'IisAppPoolPassword'
             Ensure-Property -Object $hostAgentSettings -Name 'IisAppPoolPasswordCredentialKey' -Value ''
@@ -174,7 +180,7 @@ function Protect-ConfigFile {
                 }
             }
 
-            if ($null -ne $hostAgentSettings.SelfUpgrade) {
+            if ($null -ne $hostAgentSettings.PSObject.Properties['SelfUpgrade'] -and $null -ne $hostAgentSettings.SelfUpgrade) {
                 Remove-PropertyIfPresent -Object $hostAgentSettings.SelfUpgrade -Name 'ServiceAccountPassword'
                 Ensure-Property -Object $hostAgentSettings.SelfUpgrade -Name 'ServiceAccountPasswordCredentialKey' -Value ''
             }

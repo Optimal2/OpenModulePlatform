@@ -246,11 +246,17 @@ function Read-ProfileConfig {
     }
 
     $json = Get-Content -LiteralPath $bootstrapPath -Raw -Encoding UTF8
+    $errorsBeforeParse = @($Error)
     try {
         $config = $json | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
         # Windows PowerShell parser errors can include the entire secret-bearing input.
+        # Remove only records from this parse, including the underlying error
+        # retained separately from the caught wrapper on Windows PowerShell 5.1.
+        foreach ($parseError in @($Error)) {
+            if ($errorsBeforeParse -notcontains $parseError) { $Error.Remove($parseError) }
+        }
         throw "Bootstrap file is not valid JSON: $bootstrapPath"
     }
     Assert-BootstrapSqlPasswordSupported -Config $config
