@@ -68,7 +68,9 @@ internal static class NoOverwriteFile
     /// receives cleanup failures that leave a file behind; without it they go
     /// to <see cref="System.Diagnostics.Trace"/>.
     /// </summary>
-    public static void Write(string path, Action<Stream> write, Action<string>? reportWarning = null)
+    public static void Write(
+        string path, Action<Stream> write, Action<string>? reportWarning = null,
+        Func<string, FileStream>? createClaim = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(write);
@@ -78,7 +80,7 @@ internal static class NoOverwriteFile
             ?? throw new ArgumentException($"'{path}' has no parent directory.", nameof(path));
         Directory.CreateDirectory(directory);
 
-        var claim = ClaimName(fullPath);
+        var claim = ClaimName(fullPath, createClaim);
         var tempPath = System.IO.Path.Join(
             directory,
             $".{System.IO.Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
@@ -115,16 +117,33 @@ internal static class NoOverwriteFile
         }
     }
 
-    private static FileIdentity ClaimName(string fullPath)
+    private static FileIdentity ClaimName(string fullPath, Func<string, FileStream>? createClaim)
     {
         FileStream claim;
-        try
+        for (var attempt = 0; ; attempt++)
         {
-            claim = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        }
-        catch (IOException ex) when (File.Exists(fullPath))
-        {
-            throw ExistingFile(fullPath, ex);
+            try
+            {
+                // The optional factory lets tests reproduce Windows rename
+                // contention without depending on thread scheduling.
+                claim = createClaim is null
+                    ? new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)
+                    : createClaim(fullPath);
+                break;
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && File.Exists(fullPath))
+            {
+                throw ExistingFile(fullPath, ex);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                // CREATE_NEW can report access denied while another writer's
+                // rename/delete keeps the name in a delete-pending state.
+                // It may be invisible to File.Exists in that window. Retry
+                // only the atomic claim; persistent permission errors still
+                // propagate and the content callback has not run.
+                Thread.Sleep(10);
+            }
         }
 
         FileIdentity? identity;

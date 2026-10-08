@@ -1831,7 +1831,7 @@ foreach ($csFile in $allCsFiles) {
     $skipCsFile = $false
     for ($csSegmentIndex = 0; $csSegmentIndex -lt $csSegments.Count - 1; $csSegmentIndex++) {
         $csSegment = $csSegments[$csSegmentIndex]
-        if ($csSegment -match '^(?i:bin|obj)$' -or $csSegment -match '^(?i:tests?)$' -or $csSegment -match '(?i)\.tests?$') {
+        if ($csSegment -match '^(?i:bin|obj|artifacts|node_modules|\.git|\.vs|TestResults)$' -or $csSegment -match '^(?i:tests?)$' -or $csSegment -match '(?i)\.tests?$') {
             $skipCsFile = $true
             break
         }
@@ -1854,10 +1854,19 @@ foreach ($csFile in $allCsFiles) {
 # Repo-wide pass: a 'global using static [System.]TimeZoneInfo;' or 'global
 # using X = [System.]TimeZoneInfo;' in ANY production file applies to every
 # file in the compilation, so collect the directives before testing files.
-$timeZoneGlobalUsingStatic = $false
+$timeZoneBuildDirectives = Get-MSBuildGlobalTimeZoneDirectives -RepositoryRoot $repositoryRoot -TestProjectDirectories $timeZoneTestProjectDirectories
+$timeZoneGlobalUsingStatic = $timeZoneBuildDirectives.UsingStatic
 $timeZoneGlobalAliases = [System.Collections.Generic.List[string]]::new()
+foreach ($alias in $timeZoneBuildDirectives.Aliases) { $timeZoneGlobalAliases.Add($alias) }
+$timeZoneMaskedDirectiveFiles = @{}
 foreach ($csFile in $timeZoneProductionFiles) {
-    $timeZoneDirectives = Get-CSharpGlobalTimeZoneDirectives -MaskedText (Remove-CSharpCommentsAndStringLiterals -Text ([System.IO.File]::ReadAllText($csFile.FullName)))
+    $rawCsText = [System.IO.File]::ReadAllText($csFile.FullName)
+    # Most files contain no global directive. Avoid masking them twice, and
+    # cache the masked text of the few candidates for the call scan below.
+    if ($rawCsText -cnotmatch '\bglobal\b' -or $rawCsText -cnotmatch '\busing\b') { continue }
+    $maskedDirectiveText = Remove-CSharpCommentsAndStringLiterals -Text $rawCsText
+    $timeZoneMaskedDirectiveFiles[$csFile.FullName] = $maskedDirectiveText
+    $timeZoneDirectives = Get-CSharpGlobalTimeZoneDirectives -MaskedText $maskedDirectiveText
     if ($timeZoneDirectives.UsingStatic) {
         $timeZoneGlobalUsingStatic = $true
     }
@@ -1870,7 +1879,10 @@ foreach ($csFile in $timeZoneProductionFiles) {
 
 foreach ($csFile in $timeZoneProductionFiles) {
     $relativeCsPath = $csFile.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
-    $maskedCsText = Remove-CSharpCommentsAndStringLiterals -Text ([System.IO.File]::ReadAllText($csFile.FullName))
+    $maskedCsText = $timeZoneMaskedDirectiveFiles[$csFile.FullName]
+    if ($null -eq $maskedCsText) {
+        $maskedCsText = Remove-CSharpCommentsAndStringLiterals -Text ([System.IO.File]::ReadAllText($csFile.FullName))
+    }
     if (Test-TimeZoneLookupSourceFile -FileName $csFile.Name -MaskedText $maskedCsText) {
         continue
     }

@@ -725,17 +725,29 @@ function Remove-CSharpCommentsAndStringLiterals {
             }
 
             if ($inHole -and ($c -eq '{' -or $c -eq '}')) {
-                # Interpolation-hole braces: a run shorter than the string's
-                # '$' count is ordinary code punctuation; a full run opens a
-                # nested hole or closes the current one. The braces stay
-                # visible -- they are code.
-                $braceRun = 0
-                while ($i + $braceRun -lt $length -and $chars[$i + $braceRun] -eq $c) { $braceRun++ }
-                if ($braceRun -ge $contexts.Peek().Dollars) {
-                    if ($c -eq '{') { $contexts.Peek().HoleDepth++ }
-                    else { $contexts.Peek().HoleDepth-- }
+                # Nested C# braces always count individually, even inside a
+                # raw string. Only the outer hole delimiter consumes N braces
+                # at once (N dollars for raw strings, one otherwise).
+                $context = $contexts.Peek()
+                if ($c -eq '{') {
+                    $context.HoleDepth++
+                    $i++
                 }
-                $i += $braceRun
+                elseif ($context.HoleDepth -gt 1) {
+                    $context.HoleDepth--
+                    $i++
+                }
+                else {
+                    $delimiterLength = 1
+                    if ($context.RawRun -gt 0) { $delimiterLength = $context.Dollars }
+                    $braceRun = 0
+                    while ($i + $braceRun -lt $length -and $chars[$i + $braceRun] -eq '}') { $braceRun++ }
+                    if ($braceRun -ge $delimiterLength) {
+                        $context.HoleDepth = 0
+                        $i += $delimiterLength
+                    }
+                    else { $i++ }
+                }
                 continue
             }
 
@@ -880,10 +892,8 @@ function Test-DirectTimeZonePlatformCall {
     )
 
     $methods = '(?:FindSystemTimeZoneById|TryFindSystemTimeZoneById|TryConvertIanaIdToWindowsId)'
-    # nameof(X) is a name lookup, not a call -- never a match. The optional
-    # identifier character keeps a method named e.g. 'xnameof' from
-    # accidentally shielding a real call.
-    $nameofGuard = '(?<![\w]?nameof\s*\(\s*)'
+    # Only the keyword shields a name lookup; xnameof(...) is a real call.
+    $nameofGuard = '(?<!(?<!\w)nameof\s*\(\s*)'
 
     $qualifiedPattern = $nameofGuard + '(?<![\w.:])(?:global::)?(?:System\.)?TimeZoneInfo\s*\.\s*' + $methods + '\b'
     if ([regex]::IsMatch($MaskedText, $qualifiedPattern)) {
@@ -950,6 +960,54 @@ function Get-CSharpGlobalTimeZoneDirectives {
         UsingStatic = $usingStatic
         Aliases = $aliases
     }
+}
+
+function Get-MSBuildGlobalTimeZoneDirectives {
+    <#
+    .SYNOPSIS
+    Collects literal MSBuild Using items that generate global TimeZoneInfo
+    static imports or aliases. Test-project trees and generated output are
+    excluded. This is a conservative source scan, like the C# directive pass:
+    conditional items count without evaluating MSBuild properties/imports.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string[]]$TestProjectDirectories = @()
+    )
+
+    $usingStatic = $false
+    $aliases = [System.Collections.Generic.List[string]]::new()
+    $pending = [System.Collections.Generic.Stack[string]]::new()
+    $pending.Push([IO.Path]::GetFullPath($RepositoryRoot))
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        if ($TestProjectDirectories -contains $directory) { continue }
+        foreach ($file in [IO.Directory]::GetFiles($directory)) {
+            if ([IO.Path]::GetExtension($file) -notin @('.csproj', '.props', '.targets')) { continue }
+            $text = [IO.File]::ReadAllText($file)
+            if ($text -notmatch 'TimeZoneInfo') { continue }
+            $document = [xml]$text
+            foreach ($item in $document.SelectNodes('//*[local-name()="ItemGroup"]/*[local-name()="Using"]')) {
+                if ($item.GetAttribute('Include') -cnotmatch '^(?:global::)?System\.TimeZoneInfo$') { continue }
+                $staticValue = $item.GetAttribute('Static')
+                $aliasValue = $item.GetAttribute('Alias')
+                foreach ($metadata in $item.ChildNodes) {
+                    if ($metadata.LocalName -eq 'Static') { $staticValue = $metadata.InnerText }
+                    if ($metadata.LocalName -eq 'Alias') { $aliasValue = $metadata.InnerText }
+                }
+                if ($staticValue -ieq 'true') { $usingStatic = $true }
+                if ($aliasValue -cmatch '^[A-Za-z_][A-Za-z0-9_]*$' -and -not $aliases.Contains($aliasValue)) {
+                    $aliases.Add($aliasValue)
+                }
+            }
+        }
+        foreach ($child in [IO.Directory]::GetDirectories($directory)) {
+            $name = [IO.Path]::GetFileName($child)
+            if ($name -match '^(?i:\.git|\.vs|bin|obj|node_modules|artifacts|TestResults|tests?)$' -or $name -match '(?i)\.tests?$') { continue }
+            $pending.Push($child)
+        }
+    }
+    return [pscustomobject]@{ UsingStatic = $usingStatic; Aliases = $aliases }
 }
 
 function Test-TimeZoneLookupSourceFile {

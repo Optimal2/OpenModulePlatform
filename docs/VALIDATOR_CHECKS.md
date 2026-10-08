@@ -88,6 +88,15 @@ be read is a validation error, never a silent pass. Check 13 additionally
 scans the working tree and untracked files so an uncommitted own-source edit
 is caught before it is committed.
 
+Check 21 also collects literal MSBuild `<Using Include="System.TimeZoneInfo"`
+items with `Static="true"` or `Alias="X"` from production `.csproj`, `.props`
+and `.targets` files. XML comments and test-project directories are excluded.
+This is a conservative source scan: conditional items count without evaluating
+MSBuild conditions or imports. Nested C# braces inside interpolation holes are
+counted individually; only a raw string's outer hole delimiter consumes its
+number of `$` prefixes in braces. The `nameof` exemption requires a keyword
+boundary, so a call through `xnameof(...)` still counts.
+
 ## Finding the platform checkout (Checks 14 and 15)
 
 Check 15 compares against the OpenModulePlatform checkout. `validate-shared-scripts.ps1`

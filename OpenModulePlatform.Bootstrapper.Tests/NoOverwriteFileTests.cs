@@ -85,6 +85,55 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
+    public void AccessDeniedDuringCompetingPublishIsReportedAsExistingFile()
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+        var denied = new UnauthorizedAccessException("Simulated Windows rename/delete contention");
+        var called = false;
+        NoOverwriteFile.Write(path, stream =>
+        {
+            var ex = Assert.Throws<OutputFileExistsException>(() => NoOverwriteFile.Write(
+                path, _ => called = true, createClaim: _ => throw denied));
+            Assert.Same(denied, ex.InnerException);
+            stream.Write(Encoding.UTF8.GetBytes("winner"));
+        });
+        Assert.False(called);
+        Assert.Equal("winner", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void AccessDeniedWhileNameIsTemporarilyInvisibleRetriesTheAtomicClaim()
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+        var attempts = 0;
+        NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("winner")), createClaim: name =>
+        {
+            if (++attempts == 1)
+            {
+                throw new UnauthorizedAccessException("Simulated delete-pending name");
+            }
+            return new FileStream(name, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        });
+        Assert.Equal(2, attempts);
+        Assert.Equal("winner", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void PermanentAccessDeniedRemainsAnAccessErrorWithoutCallingWriter()
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+        var denied = new UnauthorizedAccessException("Permission denied");
+        var called = false;
+        var ex = Assert.Throws<UnauthorizedAccessException>(() => NoOverwriteFile.Write(
+            path, _ => called = true, createClaim: _ => throw denied));
+        Assert.Same(denied, ex);
+        Assert.False(called);
+        Assert.Empty(Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
     public async Task ConcurrentWritersProduceExactlyOneFile()
     {
         var path = Path.Join(_testRoot, "package.zip");
