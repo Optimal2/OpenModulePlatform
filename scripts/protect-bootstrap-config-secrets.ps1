@@ -86,7 +86,14 @@ function Protect-ConfigFile {
     param([Parameter(Mandatory = $true)][string] $FilePath)
 
     $json = Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8
-    $config = $json | ConvertFrom-Json
+    try {
+        $config = $json | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        # Never forward parser diagnostics: Windows PowerShell includes input text.
+        throw "Bootstrap file is not valid JSON: $FilePath"
+    }
+    Assert-BootstrapSqlPasswordSupported -Config $config
     Ensure-Property -Object $config -Name 'security' -Value ([pscustomobject]@{
         portableEncryptionKey = ''
         portableEncryptionKeyEnvironmentVariable = ''

@@ -245,7 +245,15 @@ function Read-ProfileConfig {
         throw "Sample profiles cannot be packaged for a fresh install. Remove these files and prepare a real profile: $sampleList"
     }
 
-    $config = Get-Content -LiteralPath $bootstrapPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $json = Get-Content -LiteralPath $bootstrapPath -Raw -Encoding UTF8
+    try {
+        $config = $json | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        # Windows PowerShell parser errors can include the entire secret-bearing input.
+        throw "Bootstrap file is not valid JSON: $bootstrapPath"
+    }
+    Assert-BootstrapSqlPasswordSupported -Config $config
 
     # Direct assignment on purpose: the function returns one array object
     # (comma-guarded, like Get-ProfileMachineNames); wrapping in @() would

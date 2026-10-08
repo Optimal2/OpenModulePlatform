@@ -1,6 +1,21 @@
 # Shared contract for portable bootstrap passwords. These are the fields the
 # bootstrapper decrypts; appSettings and SQL secrets are validated separately
 # by the package builder and must not silently become encrypted runtime settings.
+function Assert-BootstrapSqlPasswordSupported {
+    param([Parameter(Mandatory = $true)][object]$Config)
+
+    $sql = $Config.PSObject.Properties['sql']
+    if ($null -eq $sql -or $null -eq $sql.Value) { return }
+    $password = $sql.Value.PSObject.Properties['password']
+    if ($null -eq $password) { return }
+
+    # ResolveInstallerSecret handles only the five HostAgent field patterns.
+    # Reject even malformed envelopes here, before encryption or file writes.
+    if (([string]$password.Value).TrimStart().StartsWith('enc:aesgcm:', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'sql.password cannot be encrypted: the installer does not decrypt this field. Use integrated security and leave sql.password empty.'
+    }
+}
+
 function Get-BootstrapPortableSecretFields {
     param([Parameter(Mandatory = $true)][object]$Config)
 

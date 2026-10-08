@@ -1050,7 +1050,7 @@ The bootstrap JSON may contain portable encrypted values in these fields:
 `hostAgent.iisAppPoolOverrides.*.password`, `hostAgent.serviceAppPassword`,
 and `hostAgent.serviceAppIdentityOverrides.*.password` (the same five that
 `scripts/protect-bootstrap-config-secrets.ps1` encrypts and that
-`ResolveInstallerSecret` in `OpenModulePlatform.Bootstrapper/Program.cs`
+`ResolveInstallerSecret` in `OpenModulePlatform.Installation/InstallationEngine.HostAgent.cs`
 decrypts). The protection script and fresh-install package builder share this
 field list in `scripts/bootstrap-secret-fields.ps1`. The builder also rejects
 clear-text `sql.password`, any case-insensitive `*Password` key anywhere under
@@ -1059,8 +1059,14 @@ and `*Password` fields in an adjacent `package.psd1`. Diagnostics name only the
 field path, never its value. Empty values are allowed. Encrypted values must
 have a valid base64 nonce (12 bytes), nonempty ciphertext, and tag (16 bytes);
 the builder checks the envelope structure, not cryptographic authenticity.
-The protection script does not encrypt arbitrary appsettings or SQL values:
-configure those through the runtime's supported secret mechanism instead.
+The protection script requires **PowerShell 7.4 or later (`pwsh`)** for its
+AES-GCM APIs; the package builder also supports Windows PowerShell 5.1.
+The protection script does not encrypt arbitrary appsettings or SQL values.
+Both scripts reject encrypted `sql.password`: the installation engine does not
+decrypt that field. Use SQL integrated security and leave `sql.password` empty
+in fresh-install profiles. Configure appsettings through the runtime's supported
+secret mechanism instead. Invalid bootstrap JSON produces only a generic error
+and the file path, never the parser exception text (which may contain secrets).
 Produce values in the
 `enc:aesgcm:v1:...` format before packaging the private installer profile. The
 portable key can be stored as `security.portableEncryptionKey` or supplied

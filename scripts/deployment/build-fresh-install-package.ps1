@@ -24,8 +24,10 @@ Sample profiles are refused (*.sample.json files, or the sample profile folder
 itself): a fresh-install package always targets a real, prepared profile.
 Clear-text passwords are refused (bootstrap.json hostAgent/sql password fields,
 identity overrides, appSettings *Password keys, connection-string passwords,
-and every *Password field in an optional package.psd1); valid enc:aesgcm:v1: values
-are allowed. A set security.portableEncryptionKey warns: the package then
+and every *Password field in an optional package.psd1). Encrypted sql.password
+is also refused: use integrated security and leave that field empty. The five
+portable HostAgent password fields accept valid enc:aesgcm:v1: values.
+A set security.portableEncryptionKey warns: the package then
 carries a secret and must be guarded.
 
 The package name must be a plain folder name directly under -OutputRoot, and
