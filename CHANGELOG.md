@@ -8,6 +8,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Read-only fields on the user edit page look like fields.** The read-only
+  inputs on Admin > Users > Edit (user id, created, updated, last login,
+  account status, portal setting key and default, and the two users in the
+  ADFS duplicate preview) and the entry key on the
+  portal entry edit page had no `type`, so the portal's text-input styling
+  (border, rounded corners, padding) did not apply and they rendered as bare
+  browser inputs beside styled ones. They are `type="text"` now, the same
+  width and shape as the editable fields in the same grid.
 - **Maintenance cleanup quarantines instead of deleting.** A directory the
   maintenance cleanup removes (an orphan service-app directory, a leftover
   HostAgent install directory) is moved to a maintenance quarantine below the

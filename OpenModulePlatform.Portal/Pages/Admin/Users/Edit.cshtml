@@ -59,25 +59,25 @@
         <div class="field-grid field-grid--3">
             <div class="form-field">
                 <label>@L["User ID"]</label>
-                <input value="@Model.UserRow.UserId" readonly />
+                <input type="text" value="@Model.UserRow.UserId" readonly />
             </div>
             <div class="form-field">
                 <label>@L["Created"]</label>
-                <input value="@Model.FormatUtc(Model.UserRow.CreatedAt)" readonly />
+                <input type="text" value="@Model.FormatUtc(Model.UserRow.CreatedAt)" readonly />
             </div>
             <div class="form-field">
                 <label>@L["Updated"]</label>
-                <input value="@Model.FormatUtc(Model.UserRow.UpdatedAt)" readonly />
+                <input type="text" value="@Model.FormatUtc(Model.UserRow.UpdatedAt)" readonly />
             </div>
         </div>
         <div class="field-grid field-grid--2">
             <div class="form-field">
                 <label>@L["Last login"]</label>
-                <input value="@Model.FormatUtc(Model.UserRow.LastLoginAt)" readonly />
+                <input type="text" value="@Model.FormatUtc(Model.UserRow.LastLoginAt)" readonly />
             </div>
             <div class="form-field">
                 <label>@L["Current account status"]</label>
-                <input value="@Model.AccountStatusText(Model.UserRow.AccountStatus)" readonly />
+                <input type="text" value="@Model.AccountStatusText(Model.UserRow.AccountStatus)" readonly />
             </div>
         </div>
     </section>
@@ -164,7 +164,7 @@
                     <input type="hidden" asp-for="PortalSettingInput.UserSettingDefinitionId" />
                     <div class="form-field">
                         <label>@ompBranding.ApplyTerms(L["Portal setting"].Value)</label>
-                        <input value="@(selectedPortalSetting?.Key ?? string.Empty)" readonly />
+                        <input type="text" value="@(selectedPortalSetting?.Key ?? string.Empty)" readonly />
                     </div>
                 }
                 else
@@ -184,7 +184,7 @@
 
                 <div class="form-field">
                     <label>@L["Default value"]</label>
-                    <input value="@(selectedPortalSetting is null ? string.Empty : Model.PortalSettingDefaultText(selectedPortalSetting))" readonly />
+                    <input type="text" value="@(selectedPortalSetting is null ? string.Empty : Model.PortalSettingDefaultText(selectedPortalSetting))" readonly />
                 </div>
             </div>
 
@@ -355,11 +355,11 @@
                 <div class="field-grid field-grid--2 top-gap">
                     <div class="form-field">
                         <label>@L["Target user"]</label>
-                        <input value="@Model.MergeUserSummaryText(preview.TargetUser)" readonly />
+                        <input type="text" value="@Model.MergeUserSummaryText(preview.TargetUser)" readonly />
                     </div>
                     <div class="form-field">
                         <label>@L["Duplicate user"]</label>
-                        <input value="@Model.MergeUserSummaryText(preview.DuplicateUser)" readonly />
+                        <input type="text" value="@Model.MergeUserSummaryText(preview.DuplicateUser)" readonly />
                     </div>
                 </div>
 
