@@ -712,4 +712,157 @@ Describe 'Check 21: direct TimeZoneInfo IANA lookups stay inside *TimeZoneLookup
             Remove-TemporaryTestRepository -RootPath $repoRoot
         }
     }
+
+    # --- Second opinion on the synced Check 21 (omp-tidszon-utan-icu-server2016
+    # job 2, OMP 6cf3b3e0): each fixture below failed (or passed) the wrong way
+    # before the masking and matching fixes. ---
+
+    It 'Passes when the mention sits on a later line of a multi-line verbatim string (H1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { string S = @"line one' + "`r`n" + 'TimeZoneInfo.FindSystemTimeZoneById(""x"") is banned in prose"; }',
+                [System.Text.Encoding]::UTF8)
+
+            (Invoke-Validator -ValidatorPath $validatorPath) | Should -Be 0
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a real call after the closing quote of a multi-line verbatim string (H1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { string S = @"line one' + "`r`n" + 'line two"; void M() { _ = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a real call inside an interpolation hole (H2)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { string M(string id) { return $"zone: {TimeZoneInfo.FindSystemTimeZoneById(id)}"; } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a call after a verbatim string that holds a single quote (H3)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Holder { string S = @""""; }' + "`r`n" + 'class Calendar { void M() { _ = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a bare call when global using static sits in another file (H4)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\GlobalUsings.cs'),
+                'global using static System.TimeZoneInfo;',
+                [System.Text.Encoding]::UTF8)
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { void M() { _ = FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on an alias call when the global using alias sits in another file (H4)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\GlobalUsings.cs'),
+                'global using TZ = System.TimeZoneInfo;',
+                [System.Text.Encoding]::UTF8)
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { void M() { _ = TZ.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Passes on nameof(TimeZoneInfo.FindSystemTimeZoneById) (H4)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { string S = nameof(TimeZoneInfo.FindSystemTimeZoneById); }',
+                [System.Text.Encoding]::UTF8)
+
+            (Invoke-Validator -ValidatorPath $validatorPath) | Should -Be 0
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Passes on a bare nameof when global using static sits in another file (H4)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\GlobalUsings.cs'),
+                'global using static System.TimeZoneInfo;',
+                [System.Text.Encoding]::UTF8)
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { string S = nameof(FindSystemTimeZoneById); }',
+                [System.Text.Encoding]::UTF8)
+
+            (Invoke-Validator -ValidatorPath $validatorPath) | Should -Be 0
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Get-CSharpTestProjectDirectory throws an honest error for a missing repository root (H5)' {
+        $missingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('missing-' + [Guid]::NewGuid().ToString('N'))
+        { Get-CSharpTestProjectDirectory -RepositoryRoot $missingRoot } | Should -Throw '*does not exist*'
+    }
 }

@@ -1794,13 +1794,18 @@ else {
 # Matching rules (the shared core implements them; docs/VALIDATOR_CHECKS.md
 # has the canonical description):
 # - Comments and string/char literals are masked before matching, so a mention
-#   in prose or a literal never fails the build.
+#   in prose or a literal never fails the build. Verbatim and raw strings are
+#   masked across line breaks; interpolation holes are scanned as code, so a
+#   call inside $"{...}" counts.
 # - All qualified forms match: TimeZoneInfo.X, System.TimeZoneInfo.X,
 #   global::-prefixed, whitespace/newlines around the dot, and using-alias
 #   qualifiers (using TZ = System.TimeZoneInfo;). With
 #   'using static System.TimeZoneInfo;' the bare method name matches too.
+#   'global using' directives apply to every file in the compilation wherever
+#   they are declared, so they are collected repo-wide before any file is
+#   tested (Get-CSharpGlobalTimeZoneDirectives).
 # - Method-group use without parentheses counts (the method is just as direct
-#   when passed as a delegate).
+#   when passed as a delegate); nameof(...) is a name lookup and never counts.
 # - Excluded: bin/obj, directories named exactly 'test'/'tests' or ending in
 #   '.Test'/'.Tests', and everything under a test .csproj (name or
 #   Microsoft.NET.Test.Sdk / IsTestProject). A directory whose name merely
@@ -1812,6 +1817,7 @@ $timeZoneScanCount = 0
 
 $timeZoneTestProjectDirectories = @(Get-CSharpTestProjectDirectory -RepositoryRoot $repositoryRoot)
 $allCsFiles = @(Get-ChildItem -LiteralPath $repositoryRoot -Recurse -Filter '*.cs' -File -ErrorAction SilentlyContinue)
+$timeZoneProductionFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
 foreach ($csFile in $allCsFiles) {
     $relativeCsPath = $csFile.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
     $csSegments = $relativeCsPath -split '[\\/]'
@@ -1835,13 +1841,35 @@ foreach ($csFile in $allCsFiles) {
         continue
     }
 
+    $timeZoneProductionFiles.Add($csFile)
+}
+
+# Repo-wide pass: a 'global using static [System.]TimeZoneInfo;' or 'global
+# using X = [System.]TimeZoneInfo;' in ANY production file applies to every
+# file in the compilation, so collect the directives before testing files.
+$timeZoneGlobalUsingStatic = $false
+$timeZoneGlobalAliases = [System.Collections.Generic.List[string]]::new()
+foreach ($csFile in $timeZoneProductionFiles) {
+    $timeZoneDirectives = Get-CSharpGlobalTimeZoneDirectives -MaskedText (Remove-CSharpCommentsAndStringLiterals -Text ([System.IO.File]::ReadAllText($csFile.FullName)))
+    if ($timeZoneDirectives.UsingStatic) {
+        $timeZoneGlobalUsingStatic = $true
+    }
+    foreach ($timeZoneGlobalAlias in @($timeZoneDirectives.Aliases)) {
+        if (-not $timeZoneGlobalAliases.Contains($timeZoneGlobalAlias)) {
+            $timeZoneGlobalAliases.Add($timeZoneGlobalAlias)
+        }
+    }
+}
+
+foreach ($csFile in $timeZoneProductionFiles) {
+    $relativeCsPath = $csFile.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
     $maskedCsText = Remove-CSharpCommentsAndStringLiterals -Text ([System.IO.File]::ReadAllText($csFile.FullName))
     if (Test-TimeZoneLookupSourceFile -FileName $csFile.Name -MaskedText $maskedCsText) {
         continue
     }
 
     $timeZoneScanCount++
-    if (Test-DirectTimeZonePlatformCall -MaskedText $maskedCsText) {
+    if (Test-DirectTimeZonePlatformCall -MaskedText $maskedCsText -GlobalUsingStatic:$timeZoneGlobalUsingStatic -GlobalAliases $timeZoneGlobalAliases) {
         Add-ValidationError -Errors $errors -Message "Production file '$relativeCsPath' uses TimeZoneInfo.FindSystemTimeZoneById, TimeZoneInfo.TryFindSystemTimeZoneById or TimeZoneInfo.TryConvertIanaIdToWindowsId directly (possibly through a using alias or using static). On Windows hosts without icu.dll (before Windows 10 1903 / Server 2019) .NET runs in NLS mode and all three fail for IANA ids. Resolve zones through OmpTimeZoneLookup (OpenModulePlatform.Web.Shared) or a repository-local *TimeZoneLookup.cs file instead."
     }
 }
