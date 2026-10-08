@@ -237,12 +237,27 @@ function Assert-SafePayloadReference {
     #>
     param([Parameter(Mandatory = $true)][string]$Reference)
 
-    if ([System.IO.Path]::IsPathRooted($Reference) -or $Reference -match '^[A-Za-z]:') {
+    if ($Reference -match '^[A-Za-z]:') {
         throw "Artifact/payload sources must be relative to the payload root, not absolute paths: $Reference"
     }
 
     if ($Reference.Replace('\', '/').Split('/') -contains '..') {
         throw "Artifact/payload sources must stay inside the payload root ('..' is not allowed): $Reference"
+    }
+
+    # IsPathRooted comes last: on .NET Framework (Windows PowerShell 5.1) it
+    # throws on characters that are invalid in paths instead of returning
+    # false, and the checks above must win with their plain messages.
+    $rooted = $false
+    try {
+        $rooted = [System.IO.Path]::IsPathRooted($Reference)
+    }
+    catch {
+        $rooted = $true
+    }
+
+    if ($rooted) {
+        throw "Artifact/payload sources must be relative to the payload root, not absolute paths: $Reference"
     }
 }
 
@@ -325,16 +340,19 @@ function Resolve-PackageRoot {
         throw 'The package name must not be empty.'
     }
 
-    if ([System.IO.Path]::IsPathRooted($name) -or $name -match '^[A-Za-z]:') {
-        throw "The package name must be a plain folder name under the output root, not a rooted path: $PackageName"
-    }
-
+    # The plain-string checks come before any System.IO.Path call: on
+    # .NET Framework (Windows PowerShell 5.1) IsPathRooted throws on
+    # characters that are invalid in paths instead of returning false.
     if ($name -match '[/\\]' -or $name.Contains('..') -or $name -eq '.') {
         throw "The package name must be a plain folder name under the output root ('..' and path separators are not allowed): $PackageName"
     }
 
     if ($name.IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ge 0) {
         throw "The package name contains characters that are not valid in a folder name: $PackageName"
+    }
+
+    if ([System.IO.Path]::IsPathRooted($name) -or $name -match '^[A-Za-z]:') {
+        throw "The package name must be a plain folder name under the output root, not a rooted path: $PackageName"
     }
 
     $fullOutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
