@@ -894,7 +894,11 @@ else {
         $definitionText = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
         $definition = ConvertFrom-JsonDocument -Json $definitionText -Depth $jsonDepth
 
-        foreach ($script in @($definition.sqlScripts)) {
+        # Get-OptionalPropertyValue, not $definition.sqlScripts: a definition
+        # without sqlScripts is legal, and a direct read throws
+        # PropertyNotFoundException under Set-StrictMode (second opinion on the
+        # line-ending cleanup, 2026-10-08).
+        foreach ($script in @(Get-OptionalPropertyValue -Object $definition -Name 'sqlScripts')) {
             if ($null -eq $script) {
                 continue
             }
@@ -1289,6 +1293,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 # ---------------------------------------------------------------------------
 $embeddedEolChecked = 0
 $embeddedEolDeclared = 0
+$embeddedEolErrorCount = 0
 
 foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
     if ($null -eq $manifestDefinition) {
@@ -1337,6 +1342,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
             # git could not answer the declaration question, so 'any form is
             # accepted' would be an unmeasured check reading as a passing one.
             Add-ValidationError -Errors $errors -Message "Check 20 could not determine the line-ending form .gitattributes declares for '$sqlPath' (module '$moduleKey'): 'git check-attr text eol' did not answer (is '$repositoryRoot' a git work tree?). An unreadable declaration is an error, not 'bytes untouched'."
+            $embeddedEolErrorCount++
             continue
         }
         if ($declaredEol -eq '') {
@@ -1368,6 +1374,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         $matchesDeclaration = ($declaredEol -eq 'CRLF' -and $loneLfCount -eq 0) -or ($declaredEol -eq 'LF' -and $crlfCount -eq 0)
         if (-not $matchesDeclaration) {
             Add-ValidationError -Errors $errors -Message "Embedded SQL for script '$scriptKey' ($sqlPath, module '$moduleKey') has the wrong line endings: the embedded content carries $crlfCount CRLF and $loneLfCount lone-LF line ending(s), but .gitattributes declares eol=$declaredEolLower for that path. Re-embed with the embed tool in the OpenModulePlatform repository: scripts/dev/embed-module-definition-sql.ps1 -RepositoryRoot '<path to this repository>'."
+            $embeddedEolErrorCount++
             continue
         }
 
@@ -2024,8 +2031,16 @@ if ($embeddedSqlChecked -gt 0) {
     }
 }
 
-if ($embeddedEolChecked -gt 0) {
-    Write-Host "$checkMark $embeddedEolDeclared of $embeddedEolChecked embedded SQL script(s) carry the line endings .gitattributes declares"
+if ($embeddedEolChecked -gt 0 -or $embeddedEolErrorCount -gt 0) {
+    # Same contract as Check 16: the check mark belongs to a clean run only.
+    # The line used to print unconditionally, so a failed Check 20 still read
+    # as green in the summary (second opinion, 2026-10-08).
+    if ($embeddedEolErrorCount -eq 0) {
+        Write-Host "$checkMark $embeddedEolDeclared of $embeddedEolChecked embedded SQL script(s) carry the line endings .gitattributes declares"
+    }
+    else {
+        Write-Host "$crossMark $embeddedEolDeclared of $embeddedEolChecked embedded SQL script(s) carry the line endings .gitattributes declares ($embeddedEolErrorCount error(s))"
+    }
 }
 
 if ($embedHelperCopyCount -gt 0 -and $embedHelperCopyErrorCount -eq 0) {

@@ -248,7 +248,10 @@ function Compress-DirectoryToZip {
     unreadable (measured 2026-10-07). Building each entry name explicitly
     through System.IO.Compression makes the bytes independent of the host's
     Archive module version. Empty directories are not represented; the
-    package formats carry no empty-directory semantics.
+    package formats carry no empty-directory semantics. Hidden files ARE
+    included (the staging copy and this enumeration see them); the old
+    Compress-Archive packing silently dropped them -- a deliberate difference,
+    documented in docs/ARTIFACT_PACKAGES.md ("Zip entry semantics").
     #>
     param(
         [Parameter(Mandatory = $true)][string]$SourceDirectory,

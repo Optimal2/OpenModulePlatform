@@ -111,6 +111,32 @@ Manifest example:
 in `.zip` are treated as nested zip payloads and other paths are treated as
 directory prefixes.
 
+### Zip entry semantics (packages built by new-omp-artifact-package.ps1)
+
+`scripts/deployment/new-omp-artifact-package.ps1` writes every zip entry --
+outer package and nested `payload/artifact.zip` -- through
+`System.IO.Compression` with explicit forward-slash entry names, so the bytes
+are independent of the host's Archive module version (the inbox Archive
+1.0.1.0 under Windows PowerShell 5.1 made `Compress-Archive` write backslash
+entry names that the importers could not read, measured 2026-10-07). Two
+deliberate behaviour differences from the old `Compress-Archive` packing,
+decided 2026-10-08:
+
+- **Hidden files are included.** The payload staging copies with `-Force` and
+  the zip writer enumerates every file, so a payload file carrying the Hidden
+  attribute ships in the package. `Compress-Archive -Path <dir>\*` silently
+  dropped those files; what you publish is what ships.
+- **Empty directories are not represented.** Entries are written per file and
+  the importers create directories from file paths, so the package format
+  carries no empty-directory semantics. `Compress-Archive` used to write
+  directory entries for empty subdirectories.
+
+Universal module packages (`scripts/omp/export-universal-package.ps1` and
+`export-universal-object-root.ps1`) enumerate package files per declared
+folder pattern with `Get-ChildItem -File -Recurse`, so they likewise carry no
+directory entries -- but hidden files are NOT included there (the enumeration
+runs without `-Force`).
+
 `moduleDefinition.minVersion` is optional. Leave it out for normal code-only
 artifact releases that are compatible with the currently applied module
 definition. Set it only when this artifact requires SQL, OMP metadata, or

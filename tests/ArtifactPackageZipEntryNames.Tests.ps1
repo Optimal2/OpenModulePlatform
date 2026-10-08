@@ -32,8 +32,12 @@ Describe 'new-omp-artifact-package.ps1 zip entry names' {
             <#
             .SYNOPSIS
             Creates a minimal payload directory (including a SUBDIRECTORY
-            file, so at least one entry name needs a separator) and a
-            configuration file, in a throwaway temp root.
+            file, so at least one entry name needs a separator), a hidden
+            file, an EMPTY subdirectory, and a configuration file, in a
+            throwaway temp root. The hidden file and the empty subdirectory
+            pin the documented zip entry semantics (docs/ARTIFACT_PACKAGES.md,
+            "Zip entry semantics"): hidden files ship, empty directories are
+            not represented.
             #>
             param([Parameter(Mandatory = $true)][string]$RootPath)
 
@@ -45,6 +49,12 @@ Describe 'new-omp-artifact-package.ps1 zip entry names' {
             $null = New-Item -ItemType Directory -Path (Join-Path $payloadDir 'bin') -Force
             [System.IO.File]::WriteAllText((Join-Path $payloadDir 'web.config'), '<configuration />', [System.Text.UTF8Encoding]::new($false))
             [System.IO.File]::WriteAllText((Join-Path $payloadDir 'bin\app.dll'), 'fake-dll-bytes', [System.Text.UTF8Encoding]::new($false))
+
+            $hiddenFile = Join-Path $payloadDir 'bin\.hidden-marker.txt'
+            [System.IO.File]::WriteAllText($hiddenFile, 'hidden-payload-bytes', [System.Text.UTF8Encoding]::new($false))
+            [System.IO.File]::SetAttributes($hiddenFile, [System.IO.FileAttributes]::Hidden)
+
+            $null = New-Item -ItemType Directory -Path (Join-Path $payloadDir 'bin\empty-dir') -Force
 
             $configSource = Join-Path $RootPath 'odv.site.config.js'
             [System.IO.File]::WriteAllText($configSource, 'window.odv = {};', [System.Text.UTF8Encoding]::new($false))
@@ -174,6 +184,13 @@ Describe 'new-omp-artifact-package.ps1 zip entry names' {
             }
             $payloadNames | Should -Contain 'web.config'
             $payloadNames | Should -Contain 'bin/app.dll'
+
+            # Documented zip entry semantics (docs/ARTIFACT_PACKAGES.md):
+            # hidden files ship in the package; empty directories are not
+            # represented, and no directory entries are written at all.
+            $payloadNames | Should -Contain 'bin/.hidden-marker.txt'
+            $payloadNames | Should -Not -Contain 'bin/empty-dir/'
+            @($payloadNames + $outerNames | Where-Object { $_.EndsWith('/') }).Count | Should -Be 0 -Because 'the package carries file entries only, never directory entries'
         }
     }
 

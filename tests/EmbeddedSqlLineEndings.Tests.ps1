@@ -165,10 +165,26 @@ Describe 'Check 20: embedded SQL line endings vs .gitattributes' {
             $result.ExitCode | Should -Not -Be 0
             $result.Output | Should -Match 'wrong line endings'
             $result.Output | Should -Match 'eol=lf'
+
+            # The summary line used to print its check mark unconditionally,
+            # so this failing run still read as green in the summary (second
+            # opinion, 2026-10-08). The mark now follows the error counter,
+            # exactly like Check 16: no check-mark line, one cross-mark line.
+            $checkMark = [char]0x2713
+            $crossMark = [char]0x2717
+            $result.Output | Should -Not -Match "$checkMark[^\r\n]*carry the line endings"
+            $result.Output | Should -Match "$crossMark[^\r\n]*0 of 1 embedded SQL script\(s\) carry the line endings \.gitattributes declares \(1 error\(s\)\)"
         }
         finally {
             Remove-TemporaryTestRepository -RootPath $repoRoot
         }
+    }
+
+    It 'Carries exactly one Check 20 error counter initialization' {
+        # Same single-counter pin as Check 16: a duplicated block that resets
+        # the counters would let the check-mark line print on a failed run.
+        $validatorSource = Get-Content -LiteralPath $scriptPath -Raw -Encoding UTF8
+        @([regex]::Matches($validatorSource, '(?m)^\$embeddedEolErrorCount = 0\r?$')).Count | Should -Be 1
     }
 
     It 'Accepts any line endings when the SQL path is -text (git stores bytes as-is)' {

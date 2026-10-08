@@ -41,4 +41,27 @@ Describe 'run-script-analyzer.ps1 bootstrap' {
         $script:analyzerSource | Should -Match 'Import-Module\s+\$cached\.ManifestPath'
         $script:analyzerSource | Should -Not -Match 'Import-Module\s+PSScriptAnalyzer'
     }
+
+    It 'Pins an exact PSScriptAnalyzer version, like the Pester 6.1.0 pin' {
+        # The diagnostics a gate reports must not drift with whatever analyzer
+        # version a machine happens to carry (second opinion, 2026-10-08).
+        $script:analyzerSource | Should -Match '\[string\] \$RequiredVersion = ''1\.25\.0'''
+        $script:analyzerSource | Should -Match 'Save-Module -Name PSScriptAnalyzer -RequiredVersion \$RequiredVersion'
+        # Dot-sourcing pester-bootstrap.ps1 rebinds $RequiredVersion to the
+        # PESTER pin in this scope; the analyzer pin must be snapshot first.
+        $script:analyzerSource | Should -Match '\$pinnedScriptAnalyzerVersion = \$RequiredVersion'
+        $script:analyzerSource | Should -Match 'Get-CachedScriptAnalyzer -CacheRoot \$analyzerCacheRoot -RequiredVersion \$pinnedScriptAnalyzerVersion'
+    }
+
+    It 'Serves and seeds only the pinned version' {
+        # The cache lookup is the exact pinned folder, verified against its
+        # manifest -- never "the newest folder the cache happens to hold"...
+        $script:analyzerSource | Should -Match 'Join-Path \(Join-Path \$CacheRoot ''PSScriptAnalyzer''\) \$RequiredVersion'
+        $script:analyzerSource | Should -Not -Match 'Sort-Object Version -Descending'
+        # ...and a globally installed copy seeds the cache only when it IS the
+        # pinned version, verified by manifest, never "whatever Get-Module
+        # -ListAvailable finds first".
+        $script:analyzerSource | Should -Match '\$_\.Version\.ToString\(\) -eq \$RequiredVersion'
+        $script:analyzerSource | Should -Match 'Get-PesterManifestVersion -ManifestPath \(Join-Path \$global\.ModuleBase ''PSScriptAnalyzer\.psd1''\)\) -eq \$RequiredVersion'
+    }
 }
