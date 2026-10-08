@@ -6,6 +6,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'bootstrap-secret-fields.ps1')
+
 function New-PortableEncryptionKey {
     $bytes = [byte[]]::new(32)
     [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
@@ -34,7 +36,7 @@ function Protect-PortableSecret {
         [Parameter(Mandatory = $true)][byte[]] $Key
     )
 
-    if ([string]::IsNullOrEmpty($Value) -or $Value.StartsWith('enc:aesgcm:v1:', [System.StringComparison]::Ordinal)) {
+    if ([string]::IsNullOrEmpty($Value) -or (Test-BootstrapEncryptedSecret -Value $Value)) {
         return $Value
     }
 
@@ -83,7 +85,7 @@ function Remove-PropertyIfPresent {
 function Protect-ConfigFile {
     param([Parameter(Mandatory = $true)][string] $FilePath)
 
-    $json = Get-Content -LiteralPath $FilePath -Raw
+    $json = Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8
     $config = $json | ConvertFrom-Json
     Ensure-Property -Object $config -Name 'security' -Value ([pscustomobject]@{
         portableEncryptionKey = ''
@@ -108,16 +110,12 @@ function Protect-ConfigFile {
             entropyPurpose = 'OpenModulePlatform.HostAgent.CredentialStore.v1'
         })
 
-        if ($null -ne $config.hostAgent.PSObject.Properties['serviceAccountPassword']) {
-            $config.hostAgent.serviceAccountPassword = Protect-PortableSecret -Value $config.hostAgent.serviceAccountPassword -Key $key
-        }
-
-        if ($null -ne $config.hostAgent.PSObject.Properties['iisAppPoolPassword']) {
-            $config.hostAgent.iisAppPoolPassword = Protect-PortableSecret -Value $config.hostAgent.iisAppPoolPassword -Key $key
-        }
-
-        if ($null -ne $config.hostAgent.PSObject.Properties['serviceAppPassword']) {
-            $config.hostAgent.serviceAppPassword = Protect-PortableSecret -Value $config.hostAgent.serviceAppPassword -Key $key
+        foreach ($field in (Get-BootstrapPortableSecretFields -Config $config)) {
+            $value = [string]$field.Value
+            if ($value.StartsWith('enc:aesgcm:v1:', [StringComparison]::Ordinal) -and -not (Test-BootstrapEncryptedSecret -Value $value)) {
+                throw "Invalid encrypted password envelope in $($field.Path)."
+            }
+            $field.Property.Value = Protect-PortableSecret -Value $value -Key $key
         }
 
         if ($null -ne $config.hostAgent.iisAppPoolOverrides) {
@@ -128,12 +126,6 @@ function Protect-ConfigFile {
                 }
 
                 Ensure-Property -Object $identity -Name 'passwordCredentialKey' -Value ''
-                if ($null -ne $identity.PSObject.Properties['password']) {
-                    $identity.password = Protect-PortableSecret -Value $identity.password -Key $key
-                }
-                elseif ($null -ne $identity.PSObject.Properties['Password']) {
-                    $identity.Password = Protect-PortableSecret -Value $identity.Password -Key $key
-                }
             }
         }
 
@@ -145,12 +137,6 @@ function Protect-ConfigFile {
                 }
 
                 Ensure-Property -Object $identity -Name 'passwordCredentialKey' -Value ''
-                if ($null -ne $identity.PSObject.Properties['password']) {
-                    $identity.password = Protect-PortableSecret -Value $identity.password -Key $key
-                }
-                elseif ($null -ne $identity.PSObject.Properties['Password']) {
-                    $identity.Password = Protect-PortableSecret -Value $identity.Password -Key $key
-                }
             }
         }
 

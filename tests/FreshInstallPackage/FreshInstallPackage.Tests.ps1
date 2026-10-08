@@ -107,6 +107,8 @@ Describe 'build-fresh-install-package.ps1' {
         $readme | Should -Match '--dry-run'
         $readme | Should -Match 'SVENSKA'
         $readme | Should -Match 'ENGLISH'
+        $readme | Should -Match ('Det h' + [char]0x00e4 + 'r paketet')
+        [BitConverter]::ToString([System.IO.File]::ReadAllBytes((Join-Path $packageRoot 'README.txt')), 0, 3) | Should -Be 'EF-BB-BF'
     }
 
     It 'prints the summary with profile, machine names, bundle version and hash' {
@@ -225,7 +227,7 @@ Describe 'build-fresh-install-package.ps1' {
         $encryptedProfile = Join-Path $script:workRoot 'profiles\encrypted'
         New-Item -ItemType Directory -Path $encryptedProfile -Force | Out-Null
         $bootstrap = Get-Content -LiteralPath (Join-Path $script:profileFolder 'bootstrap.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-        $bootstrap.hostAgent | Add-Member -NotePropertyName serviceAccountPassword -NotePropertyValue 'enc:aesgcm:v1:QWvkqQJrorJuQaUc:katEz0VtYxe:nNvXJoMMB5rEgBDSNK21g=='
+        $bootstrap.hostAgent | Add-Member -NotePropertyName serviceAccountPassword -NotePropertyValue 'enc:aesgcm:v1:AAAAAAAAAAAAAAAA:c2VjcmV0:AAAAAAAAAAAAAAAAAAAAAA=='
         $bootstrap | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $encryptedProfile 'bootstrap.json') -Encoding UTF8
 
         & $script:invokeBuilder -ProfilePath $encryptedProfile -BundlePath $script:fakeBundle -PackageName 'PkgEncrypted' | Out-Null
@@ -344,14 +346,14 @@ Describe 'fresh-install-package-helpers.ps1' {
     It 'Test-ClearTextSecret allows empty and enc:aesgcm:v1: values and refuses clear text' {
         Test-ClearTextSecret -Value '' | Should -BeFalse
         Test-ClearTextSecret -Value '   ' | Should -BeFalse
-        Test-ClearTextSecret -Value 'enc:aesgcm:v1:QWvkqQJrorJuQaUc:katEz0VtYxe:nNvXJoMMB5rEgBDSNK21g==' | Should -BeFalse
+        Test-ClearTextSecret -Value 'enc:aesgcm:v1:AAAAAAAAAAAAAAAA:c2VjcmV0:AAAAAAAAAAAAAAAAAAAAAA==' | Should -BeFalse
         Test-ClearTextSecret -Value 'Secret123' | Should -BeTrue
     }
 
     It 'Find-PasswordFields walks nested package.psd1 data and skips enc values' {
         $data = @{
             SqlPassword = 'Secret123'
-            RunAsPassword = 'enc:aesgcm:v1:a:b:c'
+            RunAsPassword = 'enc:aesgcm:v1:AAAAAAAAAAAAAAAA:c2VjcmV0:AAAAAAAAAAAAAAAAAAAAAA=='
             Nested = @{ AppPoolPassword = 'clear' }
             Items = @(@{ ServicePassword = 'clear2' }, @{ Name = 'no password here' })
         }

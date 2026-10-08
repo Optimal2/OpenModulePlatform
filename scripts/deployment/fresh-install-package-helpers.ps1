@@ -1,12 +1,14 @@
-# File: scripts/deployment/fresh-install-package-helpers.ps1
+﻿# File: scripts/deployment/fresh-install-package-helpers.ps1
 <#
 .SYNOPSIS
 Helper functions for build-fresh-install-package.ps1, dot-sourced by that
 script and by tests/FreshInstallPackage/FreshInstallPackage.Tests.ps1 (so the
 pure validations can be unit-tested without building a package).
 
-No code runs at dot-source time; this file only defines functions.
+Loads the shared bootstrap secret contract and defines packaging functions.
 #>
+
+. (Join-Path $PSScriptRoot '../bootstrap-secret-fields.ps1')
 
 function Write-Step {
     param([string]$Message)
@@ -59,8 +61,8 @@ function Test-ClearTextSecret {
     <#
     .SYNOPSIS
     True when a password field holds a clear-text value. Empty fields are
-    fine, and enc:aesgcm:v1: values (scripts/protect-bootstrap-config-secrets.ps1)
-    are allowed: they are encrypted, not clear text.
+    fine, and structurally valid enc:aesgcm:v1: values from
+    scripts/protect-bootstrap-config-secrets.ps1 are allowed.
     #>
     param([string]$Value)
 
@@ -68,7 +70,65 @@ function Test-ClearTextSecret {
         return $false
     }
 
-    return -not $Value.Trim().StartsWith('enc:aesgcm:v1:', [System.StringComparison]::Ordinal)
+    return -not (Test-BootstrapEncryptedSecret -Value $Value)
+}
+
+function Find-ClearTextBootstrapSettings {
+    <# Recursively inspect appSettings password keys and connection strings.
+       Only paths leave this function, including when parsing fails. #>
+    param([object]$Node, [string]$Path = '', [bool]$InAppSettings = $false)
+
+    if ($null -eq $Node) { return }
+    if ($Node -is [string]) {
+        $passwordAssignments = [regex]::Matches($Node, '(?i)(?:^|;)\s*["'']?(?:Password|Pwd)["'']?\s*=')
+        if ($passwordAssignments.Count -gt 0) {
+            try {
+                # A parser keeps only the last duplicate key. Refuse repeated
+                # password assignments so an earlier clear-text value cannot hide.
+                if ($passwordAssignments.Count -gt 1) {
+                    $Path
+                    return
+                }
+                $connection = [System.Data.Common.DbConnectionStringBuilder]::new()
+                # PowerShell's dictionary adapter treats .ConnectionString =
+                # as a dictionary entry; use the actual property setter.
+                $connection.set_ConnectionString($Node)
+                foreach ($key in $connection.get_Keys()) {
+                    if ($key -iin @('Password', 'Pwd')) {
+                        if (Test-ClearTextSecret -Value ([string]$connection[$key])) { $Path }
+                        return
+                    }
+                }
+                # DbConnectionStringBuilder omits an unquoted empty assignment.
+                $assignment = $passwordAssignments[0]
+                if ($Node.Substring($assignment.Index + $assignment.Length) -match '^\s*(?:""|''''|)\s*(?:;|$)') { return }
+                # A password-like assignment that the parser cannot identify
+                # safely (for example a quoted key) must not bypass the check.
+                $Path
+            }
+            catch { $Path }
+        }
+        return
+    }
+    if ($Node -is [System.Collections.IEnumerable]) {
+        $index = 0
+        foreach ($item in $Node) {
+            Find-ClearTextBootstrapSettings -Node $item -Path ("{0}[{1}]" -f $Path, $index) -InAppSettings $InAppSettings
+            $index++
+        }
+        return
+    }
+    if ($Node -is [pscustomobject]) {
+        foreach ($property in $Node.PSObject.Properties) {
+            $childPath = if ($Path) { $Path + '.' + $property.Name } else { $property.Name }
+            $isAppSettings = $InAppSettings -or $childPath -ieq 'hostAgent.appSettings'
+            if ($isAppSettings -and $property.Name.EndsWith('Password', [StringComparison]::OrdinalIgnoreCase) -and
+                (Test-ClearTextSecret -Value ([string]$property.Value))) {
+                $childPath
+            }
+            Find-ClearTextBootstrapSettings -Node $property.Value -Path $childPath -InAppSettings $isAppSettings
+        }
+    }
 }
 
 function Find-PasswordFields {
@@ -119,10 +179,9 @@ function Find-ClearTextPasswordFields {
     <#
     .SYNOPSIS
     Names the password fields that hold clear-text values: bootstrap.json
-    hostAgent.serviceAccountPassword / hostAgent.iisAppPoolPassword /
-    hostAgent.serviceAppPassword and sql.password, plus every *Password field
-    in an optional package.psd1 next to bootstrap.json. A fresh-install
-    package must never carry clear-text passwords.
+    portable identity passwords (shared with the protection script),
+    sql.password, appSettings *Password keys, connection-string passwords,
+    and every *Password field in an optional package.psd1 next to bootstrap.json.
     #>
     param(
         [Parameter(Mandatory = $true)][object]$Config,
@@ -131,12 +190,13 @@ function Find-ClearTextPasswordFields {
 
     $bad = [System.Collections.Generic.List[string]]::new()
 
-    $hostAgent = Get-ManifestValue -Object $Config -Name 'hostAgent'
-    foreach ($field in @('serviceAccountPassword', 'iisAppPoolPassword', 'serviceAppPassword')) {
-        $value = [string](Get-ManifestValue -Object $hostAgent -Name $field)
-        if (Test-ClearTextSecret -Value $value) {
-            $bad.Add("hostAgent.$field")
+    foreach ($field in (Get-BootstrapPortableSecretFields -Config $Config)) {
+        if (Test-ClearTextSecret -Value ([string]$field.Value)) {
+            $bad.Add($field.Path)
         }
+    }
+    foreach ($field in (Find-ClearTextBootstrapSettings -Node $Config)) {
+        $bad.Add($field)
     }
 
     $sql = Get-ManifestValue -Object $Config -Name 'sql'
@@ -153,7 +213,7 @@ function Find-ClearTextPasswordFields {
         }
     }
 
-    return , @($bad)
+    return , @($bad | Select-Object -Unique)
 }
 
 function Read-ProfileConfig {
@@ -641,5 +701,5 @@ to the executable. --dry-run exit codes: 0 = green, 2 = no or several matching
 profiles, 3 = the installation would be blocked, 4 = an installation already
 exists on this computer, 1 = an error.
 '@
-    Set-Content -LiteralPath $Path -Value $readme -Encoding UTF8
+    [System.IO.File]::WriteAllText($Path, $readme + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($true))
 }

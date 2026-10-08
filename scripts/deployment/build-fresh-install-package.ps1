@@ -22,8 +22,9 @@ it lives in the output folder and the local cache only.
 
 Sample profiles are refused (*.sample.json files, or the sample profile folder
 itself): a fresh-install package always targets a real, prepared profile.
-Clear-text passwords are refused (bootstrap.json hostAgent/sql password fields
-and every *Password field in an optional package.psd1); enc:aesgcm:v1: values
+Clear-text passwords are refused (bootstrap.json hostAgent/sql password fields,
+identity overrides, appSettings *Password keys, connection-string passwords,
+and every *Password field in an optional package.psd1); valid enc:aesgcm:v1: values
 are allowed. A set security.portableEncryptionKey warns: the package then
 carries a secret and must be guarded.
 

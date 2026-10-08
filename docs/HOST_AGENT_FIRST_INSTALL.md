@@ -1051,7 +1051,17 @@ The bootstrap JSON may contain portable encrypted values in these fields:
 and `hostAgent.serviceAppIdentityOverrides.*.password` (the same five that
 `scripts/protect-bootstrap-config-secrets.ps1` encrypts and that
 `ResolveInstallerSecret` in `OpenModulePlatform.Bootstrapper/Program.cs`
-decrypts). Produce values in the
+decrypts). The protection script and fresh-install package builder share this
+field list in `scripts/bootstrap-secret-fields.ps1`. The builder also rejects
+clear-text `sql.password`, any case-insensitive `*Password` key anywhere under
+`hostAgent.appSettings`, `Password=` / `Pwd=` credentials in connection strings,
+and `*Password` fields in an adjacent `package.psd1`. Diagnostics name only the
+field path, never its value. Empty values are allowed. Encrypted values must
+have a valid base64 nonce (12 bytes), nonempty ciphertext, and tag (16 bytes);
+the builder checks the envelope structure, not cryptographic authenticity.
+The protection script does not encrypt arbitrary appsettings or SQL values:
+configure those through the runtime's supported secret mechanism instead.
+Produce values in the
 `enc:aesgcm:v1:...` format before packaging the private installer profile. The
 portable key can be stored as `security.portableEncryptionKey` or supplied
 through `security.portableEncryptionKeyEnvironmentVariable`. This encryption is
