@@ -141,10 +141,14 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
                 ImportPath = importRoot
             }
         };
+        var clock = new ImportTestTimeProvider();
         var service = new ArtifactZipImportService(
             new StaticOptionsMonitor<HostAgentSettings>(settings),
             _fixture.CreateHostAgentRepository(),
-            NullLogger<ArtifactZipImportService>.Instance);
+            NullLogger<ArtifactZipImportService>.Instance,
+            clock);
+        await service.ImportPendingAsync(CancellationToken.None);
+        clock.UtcNow += TimeSpan.FromSeconds(10);
         await service.ImportPendingAsync(CancellationToken.None);
     }
 

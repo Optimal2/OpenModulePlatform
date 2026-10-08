@@ -595,6 +595,9 @@ module package zip only.
       "ProcessedPath": "",
       "FailedPath": "",
       "MaxFilesPerCycle": 10,
+      "MinFileAgeSeconds": 10,
+      "StableSizeSeconds": 10,
+      "NotReadyTimeoutMinutes": 60,
       "CopyConfigurationFilesFromPreviousVersion": true
     }
   }
@@ -606,6 +609,39 @@ The import folder recognizes only top-level `.zip` files that contain
 configuration objects, config overlays, widgets, and widget runtime data inside
 that universal package instead of dropping individual object files into the
 folder.
+
+Copy incoming packages as `<name>.zip.part` in the import folder and rename to
+`<name>.zip` when the copy is complete. A separate staging folder on the same
+volume is not required. Names beginning with `~` and files without a final `.zip`
+extension (including `.part`, `.tmp`, `.crdownload`, and `.partial`) are ignored.
+
+Before importing, HostAgent requires the last-write time to be at least
+`MinFileAgeSeconds` old and observes an unchanged size **and** last-write time
+for `StableSizeSeconds`. Both settings default to 10 seconds and accept zero
+to disable that particular delay; negative values are invalid. Observations
+are in memory: service restart, removal, or a newly renamed path starts a new
+observation window. Changing either size or last-write time resets the window.
+Import therefore normally starts on a later polling cycle, even for old files.
+Use the running service for folder imports: a standalone `--run-once` process
+cannot span a positive stability window, and separate invocations do not share
+observations. Its initial provisioning cycle still runs; folder imports wait
+for the long-running service to observe them across cycles.
+
+HostAgent then opens the source exclusively and checks its private temporary
+copy for a complete ZIP end-of-central-directory record, including ZIP64,
+in-bounds central directory fields, and successful archive entry enumeration.
+Young, changing, locked, and incomplete files stay in place for a later cycle;
+readiness is logged once per file per state change. Waiting files do not consume
+`MaxFilesPerCycle`, so they cannot block ready packages behind them.
+
+Only a ZIP that remains structurally invalid after an observed unchanged period
+of `NotReadyTimeoutMinutes` (default 60, minimum 1) moves to `failed` with an
+`.error.txt` containing `incomplete or corrupt zip, unchanged for N minutes`.
+The timeout does not reject locked/unreadable files, nor does an old file timestamp
+skip the observation period. This checks the ZIP structure, not the semantic
+validity of its contents; complete packages still fail immediately on invalid
+manifests, version conflicts, or other content errors. Producers must stop writing
+before the final rename; stability cannot predict a writer resuming later.
 
 HostAgent performs only the unattended choices that are safe to automate. It
 applies imported module definitions and runs their embedded idempotent SQL in
@@ -646,14 +682,15 @@ with history cannot accidentally downgrade a running installation.
 The folder import is intentionally strict. Duplicate module definitions with the
 same version but different JSON, duplicate artifact versions with different
 content, invalid package filenames, unknown module/app/package combinations,
-unsafe repair SQL, and malformed JSON or zip files fail without prompting. An
+unsafe repair SQL, and malformed JSON fail without prompting once the ZIP is ready. An
 inner artifact that the package's own module definition does not accept is
 skipped as historical package content; one that the applied definition's slot
 rejects on version is a failure (see above). Successful files move to
 `processed`; failed files move to
-`failed` with an adjacent `.error.txt`. Files that are not universal package
-zips are treated as unsupported and moved to `failed` once HostAgent can open
-them exclusively.
+`failed` with an adjacent `.error.txt`. Structurally complete ZIP files that are
+not universal packages are treated as unsupported and moved to `failed` after
+the readiness checks. Incomplete or corrupt ZIP files follow the timeout above;
+other file extensions are ignored.
 
 ## Runtime file mirrors
 

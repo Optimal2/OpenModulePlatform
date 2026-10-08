@@ -11,7 +11,10 @@ runbook live in `docs/HOST_AGENT.md`. In short, the runtime provides:
 - desired artifact discovery from OMP SQL, an immutable local artifact cache,
   SHA-256 verification and provisioning state in `omp.HostArtifactStates`
 - artifact package import from the import folder, including universal module
-  packages and package extraction (`ArtifactZipImportService`)
+  packages and package extraction (`ArtifactZipImportService`); import waits for
+  minimum age, stable size/last-write time, exclusive access, and ZIP/ZIP64
+  completeness. Copy as `.zip.part`, then rename to `.zip` when complete; see
+  [Import folder](../docs/HOST_AGENT.md#import-folder) for settings and retry rules.
 - IIS web app and Windows service app deployment
   (`WebAppDeploymentService`, `ServiceAppDeploymentService`), with
   configuration continuity between artifact versions

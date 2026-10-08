@@ -42,16 +42,20 @@ public sealed class ArtifactZipImportService
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ILogger<ArtifactZipImportService> _logger;
+    private readonly TimeProvider _timeProvider;
+    private readonly Dictionary<string, ImportObservation> _importObservations = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _nextArtifactContentHashAuditUtc = DateTimeOffset.MinValue;
 
     public ArtifactZipImportService(
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
-        ILogger<ArtifactZipImportService> logger)
+        ILogger<ArtifactZipImportService> logger,
+        TimeProvider? timeProvider = null)
     {
         _settings = settings;
         _repository = repository;
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task ImportPendingAsync(CancellationToken cancellationToken)
@@ -66,8 +70,20 @@ public sealed class ArtifactZipImportService
 
         if (!importSettings.IsEnabled)
         {
+            _importObservations.Clear();
             return;
         }
+
+        if (await ImportFilesAsync(settings, cancellationToken))
+        {
+            await AuditArtifactContentHashGapAsync(force: true, cancellationToken);
+        }
+    }
+
+    // Kept separate from the database audit so folder readiness can be verified without SQL.
+    internal async Task<bool> ImportFilesAsync(HostAgentSettings settings, CancellationToken cancellationToken)
+    {
+        var importSettings = settings.ArtifactZipImport;
 
         var importPath = Path.GetFullPath(importSettings.ImportPath.Trim());
         var processedPath = Path.GetFullPath(importSettings.ResolveProcessedPath());
@@ -89,31 +105,32 @@ public sealed class ArtifactZipImportService
         PruneImportArchivesAndStaging(settings, importSettings, processedPath, failedPath);
 
         var importPaths = Directory.EnumerateFiles(importPath, "*", SearchOption.TopDirectoryOnly)
+            .Where(IsImportFileName)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .Take(importSettings.MaxFilesPerCycle)
             .ToList();
-        if (importPaths.Count > 0)
+        var pendingPaths = importPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var stalePath in _importObservations.Keys.Where(path => !pendingPaths.Contains(path)).ToArray())
         {
-            _logger.LogInformation(
-                "Found pending HostAgent import file(s). ImportPath={ImportPath}, Count={Count}",
-                importPath,
-                importPaths.Count);
+            _importObservations.Remove(stalePath);
         }
 
+        var completed = 0;
         foreach (var path in importPaths)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await ImportOneAsync(settings, importSettings, path, processedPath, failedPath, cancellationToken);
+            // Waiting files must not consume the cycle budget and starve ready packages.
+            if (!File.Exists(path) && ++completed >= importSettings.MaxFilesPerCycle)
+            {
+                break;
+            }
         }
 
-        if (importPaths.Count > 0)
-        {
-            // An import is the only thing that changes the catalog, so re-measure now rather
-            // than up to six hours later: an operator re-importing packages to fill missing
-            // hashes needs the number to move in the same log they are watching (R12-F12).
-            await AuditArtifactContentHashGapAsync(force: true, cancellationToken);
-        }
+        return completed > 0;
     }
+
+    internal static bool IsImportFileName(string path)
+        => !Path.GetFileName(path).StartsWith('~') && path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Counts, on a recurring schedule, how many enabled artifacts carry no content hash and
@@ -509,7 +526,7 @@ public sealed class ArtifactZipImportService
 
         try
         {
-            if (!await TryCopyReadyFileAsync(importPath, tempImportPath, cancellationToken))
+            if (!await TryCopyReadyFileAsync(importSettings, importPath, tempImportPath, cancellationToken))
             {
                 return;
             }
@@ -593,31 +610,128 @@ public sealed class ArtifactZipImportService
         {
             TryDelete(tempImportPath);
             TryDelete(stagingPath);
+            if (!File.Exists(importPath))
+            {
+                _importObservations.Remove(importPath);
+            }
         }
     }
 
     private async Task<bool> TryCopyReadyFileAsync(
+        HostAgentArtifactZipImportSettings settings,
         string importPath,
         string tempImportPath,
         CancellationToken cancellationToken)
     {
         try
         {
+            var info = new FileInfo(importPath);
+            var observation = Observe(importPath, info.Length, info.LastWriteTimeUtc);
+            if (!HasSettled(importPath, observation, settings))
+            {
+                return false;
+            }
+
             await using var source = new FileStream(importPath, FileMode.Open, FileAccess.Read, FileShare.None);
-            await using var target = new FileStream(tempImportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            await source.CopyToAsync(target, cancellationToken);
+            // Recheck under the exclusive handle: a writer may have changed it after stat.
+            observation = Observe(importPath, source.Length, File.GetLastWriteTimeUtc(importPath));
+            if (!HasSettled(importPath, observation, settings))
+            {
+                return false;
+            }
+
+            await using (var target = new FileStream(tempImportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                await source.CopyToAsync(target, cancellationToken);
+            }
+
+            try
+            {
+                ImportZipStructureValidator.Validate(tempImportPath, cancellationToken);
+            }
+            catch (InvalidDataException)
+            {
+                if (_timeProvider.GetUtcNow() - observation.UnchangedSince >= TimeSpan.FromMinutes(settings.NotReadyTimeoutMinutes))
+                {
+                    throw new InvalidOperationException($"incomplete or corrupt zip, unchanged for {settings.NotReadyTimeoutMinutes} minutes");
+                }
+
+                LogReadiness(importPath, "incomplete or corrupt zip; waiting for completion");
+                return false;
+            }
+
+            LogReadiness(importPath, "ready");
             return true;
         }
-        catch (IOException ex)
+        catch (IOException)
         {
-            _logger.LogInformation(ex, "HostAgent import file is not yet ready (in use by another process). The file will be retried automatically on the next import cycle. File={ImportPath}", importPath);
+            LogReadiness(importPath, "locked or temporarily unreadable; retrying next cycle");
             return false;
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "HostAgent could not open import file (access denied). It will be retried on the next import cycle; if this persists, verify NTFS permissions on the file and its directory. File={ImportPath}", importPath);
+            LogReadiness(importPath, "access denied; retrying next cycle (verify NTFS permissions if persistent)");
             return false;
         }
+    }
+
+    private ImportObservation Observe(string path, long length, DateTime lastWriteUtc)
+    {
+        if (!_importObservations.TryGetValue(path, out var observation))
+        {
+            observation = new ImportObservation();
+            _importObservations.Add(path, observation);
+        }
+
+        if (observation.Length != length || observation.LastWriteUtc != lastWriteUtc)
+        {
+            observation.Length = length;
+            observation.LastWriteUtc = lastWriteUtc;
+            observation.UnchangedSince = _timeProvider.GetUtcNow();
+        }
+
+        return observation;
+    }
+
+    private bool HasSettled(string path, ImportObservation observation, HostAgentArtifactZipImportSettings settings)
+    {
+        var now = _timeProvider.GetUtcNow();
+        if (now - observation.LastWriteUtc < TimeSpan.FromSeconds(settings.MinFileAgeSeconds))
+        {
+            LogReadiness(path, "too young; waiting for minimum file age");
+            return false;
+        }
+
+        if (now - observation.UnchangedSince < TimeSpan.FromSeconds(settings.StableSizeSeconds))
+        {
+            LogReadiness(path, "size or last-write time not yet stable");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void LogReadiness(string path, string state)
+    {
+        if (!_importObservations.TryGetValue(path, out var observation))
+        {
+            observation = new ImportObservation();
+            _importObservations.Add(path, observation);
+        }
+
+        if (observation.State != state)
+        {
+            observation.State = state;
+            _logger.LogInformation("HostAgent import readiness: {State}. File={ImportPath}", state, path);
+        }
+    }
+
+    private sealed class ImportObservation
+    {
+        public long Length { get; set; } = -1;
+        public DateTime LastWriteUtc { get; set; }
+        public DateTimeOffset UnchangedSince { get; set; }
+        public string? State { get; set; }
     }
 
     private async Task<UniversalHostAgentImportResult> ImportUniversalModulePackageZipAsync(

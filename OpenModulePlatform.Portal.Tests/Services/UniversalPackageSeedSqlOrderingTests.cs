@@ -519,11 +519,22 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
                 ImportPath = importRoot
             }
         };
+        var clock = new ImportTestTimeProvider();
         var service = new ArtifactZipImportService(
             new StaticOptionsMonitor<HostAgentSettings>(settings),
             _fixture.CreateHostAgentRepository(),
-            logger ?? NullLogger<ArtifactZipImportService>.Instance);
+            logger ?? NullLogger<ArtifactZipImportService>.Instance,
+            clock);
+        // Observe first, then import after the default age and stability windows.
         await service.ImportPendingAsync(CancellationToken.None);
+        clock.UtcNow += TimeSpan.FromSeconds(10);
+        await service.ImportPendingAsync(CancellationToken.None);
+    }
+
+    private sealed class ImportTestTimeProvider : TimeProvider
+    {
+        public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => UtcNow;
     }
 
     private PortableModulePackageService CreatePortalService(string storeRoot,

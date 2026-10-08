@@ -694,6 +694,12 @@ public sealed class HostAgentArtifactZipImportSettings
 
     public int MaxFilesPerCycle { get; set; } = 10;
 
+    public int MinFileAgeSeconds { get; set; } = 10;
+
+    public int StableSizeSeconds { get; set; } = 10;
+
+    public int NotReadyTimeoutMinutes { get; set; } = 60;
+
     // Archived processed/failed import files (universal packages are multi-GB) were
     // kept forever, so the store volume slowly filled with dead zips (R5-D15). Prune
     // archives older than this many days; 0 disables pruning (keep forever).
@@ -752,6 +758,11 @@ public sealed class HostAgentArtifactZipImportSettings
         if (MaxFilesPerCycle < 1)
         {
             throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxFilesPerCycle must be at least 1.");
+        }
+
+        if (MinFileAgeSeconds < 0 || StableSizeSeconds < 0 || NotReadyTimeoutMinutes < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:MinFileAgeSeconds and StableSizeSeconds must be nonnegative; NotReadyTimeoutMinutes must be at least 1.");
         }
 
         const long OneMegabyte = 1024L * 1024;
