@@ -101,11 +101,22 @@ The cleanup job types are:
     (`BuildHostAgentLeftoverFindings`)
   - leftover WorkerManager services (`BuildWorkerManagerLeftoverServiceFindings`)
   - orphaned service-app directories and Windows services below the services
-    root that no enabled `AppInstance` claims, legacy/unprefixed duplicate
+    root that no `AppInstance` on the host owns, legacy/unprefixed duplicate
     ("twin") services of a claimed canonical service, and services under the
-    services root that share a display name (`BuildOrphanServiceAppFindings`);
-    the local artifact cache, the active HostAgent directories and the
-    credential-store directories are never flagged
+    services root that share a display name (`BuildOrphanServiceAppFindings`).
+    Ownership is judged from two sets: what the HostAgent deploys right now,
+    and every instance on the host that can show a claim whether or not it is
+    enabled, allowed or desired: a recorded deployment
+    (`omp.HostAppDeploymentStates.TargetPath`, which survives the instance
+    being disabled) or an install path / installation name
+    (`GetHostOwnedServiceAppDeploymentsAsync`). Ownership follows the
+    instance's host scope: an instance moved to another host no longer owns
+    the directory it left behind here. Directories below a path in
+    `HostAgent:MaintenanceAllowedDirectories` (host-local, absolute paths,
+    below the services root) are owned by declaration. The Windows-service
+    cleanup refuses a service an instance on the host owns, active or paused. The local artifact cache, the maintenance
+    quarantine, the active HostAgent directories and the credential-store
+    directories are never flagged
   - orphaned `omp.Hosts` rows: hosts without an environment, not belonging to
     an active `omp.Instances` row, and with no app instances
     (`BuildOrphanHostFindings`)

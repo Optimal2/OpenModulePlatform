@@ -1256,12 +1256,16 @@ public sealed class HostAgentJobProcessor
             hostKey,
             MaxServiceAppDeploymentsForOrphanScan,
             cancellationToken);
+        var ownedDeployments = await _repository.GetHostOwnedServiceAppDeploymentsAsync(
+            hostKey,
+            cancellationToken);
 
         return BuildOrphanServiceAppFindingsCore(
             hostId,
             hostKey,
             settings,
             deployments,
+            ownedDeployments,
             serviceLookup: null,
             EnumerateServiceAppServices(settings),
             cancellationToken);
@@ -1288,6 +1292,33 @@ public sealed class HostAgentJobProcessor
         string hostKey,
         HostAgentSettings settings,
         IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        Func<string, (string? State, string? ExecutablePath)?>? serviceLookup,
+        IReadOnlyList<ServiceAppServiceCandidate>? serviceAppServiceCandidates,
+        CancellationToken cancellationToken)
+        => BuildOrphanServiceAppFindingsCore(
+            hostId,
+            hostKey,
+            settings,
+            activeDeployments,
+            ownedDeployments: [],
+            serviceLookup,
+            serviceAppServiceCandidates,
+            cancellationToken);
+
+    /// <summary>
+    /// The orphan scan over the services root. <paramref name="activeDeployments"/> is
+    /// what the HostAgent deploys right now; <paramref name="ownedDeployments"/> is every
+    /// instance that can show ownership of a directory on this host whether or not it is
+    /// active (<see cref="OmpHostArtifactRepository.GetHostOwnedServiceAppDeploymentsAsync"/>).
+    /// A directory either set claims is not an orphan, and neither is one below a
+    /// configured <see cref="HostAgentSettings.MaintenanceAllowedDirectories"/> entry.
+    /// </summary>
+    internal static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppFindingsCore(
+        Guid hostId,
+        string hostKey,
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> ownedDeployments,
         Func<string, (string? State, string? ExecutablePath)?>? serviceLookup,
         IReadOnlyList<ServiceAppServiceCandidate>? serviceAppServiceCandidates,
         CancellationToken cancellationToken)
@@ -1342,6 +1373,10 @@ public sealed class HostAgentJobProcessor
         var expectedTargetPaths = new HashSet<string>(GetPathComparer());
         var expectedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Both sets claim directories and service names: what the HostAgent deploys
+        // now, and what any instance on this host owns. An owned instance may have no
+        // service name yet (a generic installation name, never deployed); its install
+        // path still names the directory, so ownership resolves the path without one.
         foreach (var deployment in activeDeployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1355,11 +1390,28 @@ public sealed class HostAgentJobProcessor
             var targetPath = ResolveExpectedServiceAppTargetPath(settings, deployment, serviceName);
             if (!string.IsNullOrWhiteSpace(targetPath))
             {
-                expectedTargetPaths.Add(
-                    Path.GetFullPath(targetPath)
-                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                expectedTargetPaths.Add(NormalizeDirectoryPath(targetPath));
             }
         }
+
+        foreach (var deployment in ownedDeployments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var serviceName = ResolveExpectedServiceAppServiceName(deployment);
+            if (!string.IsNullOrWhiteSpace(serviceName))
+            {
+                expectedServiceNames.Add(serviceName);
+            }
+
+            var ownedPath = ResolveOwnedServiceAppTargetPath(settings, deployment, serviceName);
+            if (!string.IsNullOrWhiteSpace(ownedPath))
+            {
+                expectedTargetPaths.Add(ownedPath);
+            }
+        }
+
+        var allowedDirectories = ResolveMaintenanceAllowedDirectories(settings);
 
         if (!Directory.Exists(servicesRoot))
         {
@@ -1385,7 +1437,8 @@ public sealed class HostAgentJobProcessor
                 continue;
             }
 
-            if (expectedTargetPaths.Contains(fullDirectory))
+            if (expectedTargetPaths.Contains(fullDirectory)
+                || IsMaintenanceAllowedDirectory(allowedDirectories, fullDirectory))
             {
                 continue;
             }
@@ -1430,7 +1483,7 @@ public sealed class HostAgentJobProcessor
             }
 
             var directoryDetail =
-                $"Host '{hostKey}' has a service-app directory '{fullDirectory}' that is not owned by any active enabled AppInstance.";
+                $"Host '{hostKey}' has a service-app directory '{fullDirectory}' that no AppInstance on this host owns (deployed, enabled or not).";
             var directoryAction = JsonSerializer.Serialize(new MaintenanceFindingAction
             {
                 TargetKind = MaintenanceTargetKinds.Directory,
@@ -1450,7 +1503,7 @@ public sealed class HostAgentJobProcessor
                 Title = "Orphan service-app directory",
                 Detail = directoryDetail,
                 RecommendedAction = "Remove the orphan service-app directory after confirming it is no longer needed (the cleanup moves it to the maintenance quarantine).",
-                SafetyNotes = "The directory is not owned by any active enabled AppInstance on this host, is not the HostAgent install directory, and is not a WorkerManager directory.",
+                SafetyNotes = "No AppInstance on this host owns the directory (not by a recorded deployment, not by an install path or installation name, enabled or not), it is not below a configured allowed directory, it is not the HostAgent install directory, and it is not a WorkerManager directory.",
                 ActionJson = directoryAction,
                 Severity = 2,
                 Confidence = hasStoppedService ? (byte)90 : (byte)80
@@ -1552,6 +1605,61 @@ public sealed class HostAgentJobProcessor
 
         return ServiceAppDeploymentNaming.ResolveTargetPath(settings, deployment, serviceName);
     }
+
+    /// <summary>
+    /// The directory an owning instance claims, for the ownership model: the recorded
+    /// deployment's target path, else the install path (absolute, or below the services
+    /// root), else the folder a service name would give. Unlike
+    /// <see cref="ResolveExpectedServiceAppTargetPath"/> it does not need a service name
+    /// to use the install path: a paused instance with a generic installation name has
+    /// no name yet and still owns its folder. Normalized, or <see langword="null"/> when
+    /// the instance names no directory at all.
+    /// </summary>
+    internal static string? ResolveOwnedServiceAppTargetPath(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string? serviceName)
+    {
+        var deployedTargetPath = ServiceAppDeploymentNaming.Clean(deployment.DeployedTargetPath);
+        if (!string.IsNullOrWhiteSpace(deployedTargetPath))
+        {
+            try
+            {
+                return NormalizeDirectoryPath(deployedTargetPath);
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+            {
+                // A recorded path that cannot be resolved names nothing; the install
+                // path below may still.
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ServicesRoot))
+        {
+            return null;
+        }
+
+        var installPath = ServiceAppDeploymentNaming.Clean(deployment.InstallPath);
+        var nameForFolder = string.IsNullOrWhiteSpace(installPath) ? serviceName : "unnamed";
+        if (string.IsNullOrWhiteSpace(nameForFolder))
+        {
+            return null;
+        }
+
+        try
+        {
+            return NormalizeDirectoryPath(ServiceAppDeploymentNaming.ResolveTargetPath(settings, deployment, nameForFolder));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or InvalidOperationException)
+        {
+            // An install path that escapes the services root or cannot be resolved
+            // names nothing this host would own.
+            return null;
+        }
+    }
+
+    private static string NormalizeDirectoryPath(string path)
+        => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static (string? State, string? ExecutablePath) LookupServiceCandidate(
         string serviceName,
@@ -1667,6 +1775,15 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The Windows service was already missing.");
         }
 
+        // The same ownership the scan uses: a service an instance on this host owns,
+        // active or paused, is not deleted on the strength of a finding written
+        // before the ownership model widened (findings are never closed by a scan).
+        var owner = await FindOwningServiceAppInstanceAsync(hostKey, serviceName, cancellationToken);
+        if (owner is not null)
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Skipped", $"Refusing to delete Windows service '{serviceName}': AppInstance '{owner}' on this host owns it.");
+        }
+
         // action is non-null past the guard above; Clean returns null (never
         // whitespace) for a blank input, so a plain null check is the guard here.
         var canonicalServiceName = ServiceAppDeploymentNaming.Clean(action.CanonicalServiceName);
@@ -1704,6 +1821,30 @@ public sealed class HostAgentJobProcessor
             entry,
             "Error",
             $"sc.exe delete failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
+    }
+
+    /// <summary>
+    /// The key of the app instance on this host (deployed, enabled or not) whose
+    /// expected service name is <paramref name="serviceName"/>, or <see langword="null"/>.
+    /// </summary>
+    private async Task<string?> FindOwningServiceAppInstanceAsync(string hostKey, string serviceName, CancellationToken cancellationToken)
+    {
+        var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
+            hostKey,
+            MaxServiceAppDeploymentsForOrphanScan,
+            cancellationToken);
+        var ownedDeployments = await _repository.GetHostOwnedServiceAppDeploymentsAsync(hostKey, cancellationToken);
+        foreach (var deployment in deployments.Concat(ownedDeployments))
+        {
+            var resolvedName = ResolveExpectedServiceAppServiceName(deployment);
+            if (!string.IsNullOrWhiteSpace(resolvedName)
+                && string.Equals(resolvedName, serviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return deployment.AppInstanceKey;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1942,15 +2083,20 @@ public sealed class HostAgentJobProcessor
         }
 
         // Re-verify the finding-time safety conditions at cleanup time: the directory
-        // must still be an unowned orphan below the configured services root.
+        // must still be an unowned orphan below the configured services root. Ownership
+        // is judged with the same two sets as the scan, so a directory an instance has
+        // claimed since the finding was written is refused here.
         var settings = _settings.CurrentValue;
         var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
             hostKey,
             MaxServiceAppDeploymentsForOrphanScan,
             cancellationToken);
+        var ownedDeployments = await _repository.GetHostOwnedServiceAppDeploymentsAsync(
+            hostKey,
+            cancellationToken);
         var serviceCandidates = resolveServiceAppServiceCandidates(settings);
 
-        var refusal = ValidateOrphanServiceAppDirectoryCleanup(settings, deployments, serviceCandidates, directory);
+        var refusal = ValidateOrphanServiceAppDirectoryCleanup(settings, deployments, ownedDeployments, serviceCandidates, directory);
         if (refusal is not null)
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", refusal);
@@ -2277,6 +2423,14 @@ public sealed class HostAgentJobProcessor
         IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
         IReadOnlyList<ServiceAppServiceCandidate> serviceAppServiceCandidates,
         string directory)
+        => ValidateOrphanServiceAppDirectoryCleanup(settings, activeDeployments, [], serviceAppServiceCandidates, directory);
+
+    internal static string? ValidateOrphanServiceAppDirectoryCleanup(
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> ownedDeployments,
+        IReadOnlyList<ServiceAppServiceCandidate> serviceAppServiceCandidates,
+        string directory)
     {
         if (string.IsNullOrWhiteSpace(settings.ServicesRoot))
         {
@@ -2338,20 +2492,30 @@ public sealed class HostAgentJobProcessor
             return $"Refusing to delete '{candidate}': the folder name matches a protected platform service.";
         }
 
+        if (IsMaintenanceAllowedDirectory(ResolveMaintenanceAllowedDirectories(settings), candidate))
+        {
+            return $"Refusing to remove '{candidate}': it is below a directory listed in HostAgent:MaintenanceAllowedDirectories.";
+        }
+
         foreach (var deployment in activeDeployments)
         {
             var serviceName = ResolveExpectedServiceAppServiceName(deployment);
             var targetPath = ResolveExpectedServiceAppTargetPath(settings, deployment, serviceName);
-            if (string.IsNullOrWhiteSpace(targetPath))
+            if (!string.IsNullOrWhiteSpace(targetPath)
+                && string.Equals(NormalizeDirectoryPath(targetPath), candidate, GetPathComparison()))
             {
-                continue;
+                return $"Refusing to remove '{candidate}': it is owned by active AppInstance '{deployment.AppInstanceKey}'.";
             }
+        }
 
-            var expectedPath = Path.GetFullPath(targetPath)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (string.Equals(expectedPath, candidate, GetPathComparison()))
+        foreach (var deployment in ownedDeployments)
+        {
+            var serviceName = ResolveExpectedServiceAppServiceName(deployment);
+            var ownedPath = ResolveOwnedServiceAppTargetPath(settings, deployment, serviceName);
+            if (!string.IsNullOrWhiteSpace(ownedPath)
+                && string.Equals(ownedPath, candidate, GetPathComparison()))
             {
-                return $"Refusing to delete '{candidate}': it is now owned by active enabled AppInstance '{deployment.AppInstanceKey}'.";
+                return $"Refusing to remove '{candidate}': it is owned by AppInstance '{deployment.AppInstanceKey}'.";
             }
         }
 
@@ -2383,6 +2547,39 @@ public sealed class HostAgentJobProcessor
 
         return Path.GetFullPath(root);
     }
+
+    /// <summary>
+    /// The configured <see cref="HostAgentSettings.MaintenanceAllowedDirectories"/>,
+    /// normalized; entries that cannot be resolved are dropped (Validate already
+    /// refused relative ones at startup).
+    /// </summary>
+    internal static IReadOnlyList<string> ResolveMaintenanceAllowedDirectories(HostAgentSettings settings)
+    {
+        var resolved = new List<string>();
+        foreach (var entry in settings.MaintenanceAllowedDirectories)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                continue;
+            }
+
+            try
+            {
+                resolved.Add(Path.GetFullPath(entry.Trim())
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+            {
+                // Dropped: a path that cannot be resolved cannot protect anything either.
+            }
+        }
+
+        return resolved;
+    }
+
+    /// <summary>True when <paramref name="candidate"/> is one of the allowed directories or sits below one.</summary>
+    internal static bool IsMaintenanceAllowedDirectory(IReadOnlyList<string> allowedDirectories, string candidate)
+        => allowedDirectories.Any(allowed => IsSameOrChildPath(allowed, candidate));
 
     /// <summary>
     /// The normalized full path of the configured local artifact cache root, or
@@ -2665,7 +2862,7 @@ public sealed class HostAgentJobProcessor
 
             var isRunning = string.Equals(candidate.State, "RUNNING", StringComparison.OrdinalIgnoreCase);
             var detail =
-                $"Host '{hostKey}' has a Windows service '{candidate.Name}' in state '{candidate.State ?? "unknown"}' that is not owned by any active enabled AppInstance.";
+                $"Host '{hostKey}' has a Windows service '{candidate.Name}' in state '{candidate.State ?? "unknown"}' that no AppInstance on this host owns (deployed, enabled or not).";
             var action = JsonSerializer.Serialize(new MaintenanceFindingAction
             {
                 TargetKind = MaintenanceTargetKinds.WindowsService,
@@ -2684,7 +2881,7 @@ public sealed class HostAgentJobProcessor
                 Title = "Orphan service-app Windows service",
                 Detail = detail,
                 RecommendedAction = $"Review and delete the orphan Windows service '{candidate.Name}' after confirming it is no longer needed.",
-                SafetyNotes = "The service executable is located under the configured service-apps root, and the service is not owned by any active enabled AppInstance, HostAgent, or WorkerManager. Cleanup is human-gated.",
+                SafetyNotes = "The service executable is located under the configured service-apps root, and no AppInstance on this host (deployed, enabled or not), HostAgent, or WorkerManager owns the service. Cleanup is human-gated.",
                 ActionJson = action,
                 Severity = 2,
                 Confidence = isRunning ? (byte)95 : (byte)90
@@ -2771,7 +2968,7 @@ public sealed class HostAgentJobProcessor
             {
                 detail =
                     $"Host '{hostKey}' has a Windows service '{twin.Name}' in state '{twin.State ?? "unknown"}' ({location} the services root) that is a legacy/unprefixed duplicate of the claimed canonical service '{canonical.Name}' for the same app (same executable '{executableFileName}'). " +
-                    "The duplicate is not owned by any active enabled AppInstance; it is likely left behind by a rename of AppInstances.InstallationName.";
+                    "No AppInstance on this host owns the duplicate; it is likely left behind by a rename of AppInstances.InstallationName.";
                 recommendedAction =
                     $"Confirm that the canonical service '{canonical.Name}' is running, then delete the duplicate service '{twin.Name}' via the human-gated maintenance cleanup.";
                 confidence = 95;

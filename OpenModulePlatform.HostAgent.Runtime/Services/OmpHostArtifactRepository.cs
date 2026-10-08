@@ -4431,6 +4431,137 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         CancellationToken ct)
         => GetDeploymentRuntimeRecoveryCandidatesAsync(hostKey, "service-app", ct);
 
+    /// <summary>
+    /// Every service-app directory this host can show an owner for, whether or not the
+    /// owner is active: the maintenance scan's ownership model.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GetDesiredServiceAppDeploymentsAsync"/> answers a different question --
+    /// what the HostAgent should deploy right now -- and deliberately leaves out instances
+    /// that are disabled, not allowed, not desired or not yet provisioned. Judging
+    /// orphans by that set made every paused instance's directory an orphan. This read
+    /// returns two kinds of evidence instead, as deployment descriptors so the scan can
+    /// resolve paths and service names exactly as it does for desired deployments:
+    /// <list type="bullet">
+    /// <item>Every app instance scoped to this host (directly or through an active host
+    /// template assignment) whose artifact is a service app or that has no artifact yet,
+    /// regardless of IsEnabled, IsAllowed and DesiredState: its install path or
+    /// installation name names the directory it would own.</item>
+    /// <item>For those instances, the <c>omp.HostAppDeploymentStates</c> row for this
+    /// host when there is one: the target path and service name the HostAgent actually
+    /// put on this disk. The row is keyed on (HostId, AppInstanceId) and survives the
+    /// instance being disabled, so it is the evidence the desired-set query lacks.</item>
+    /// </list>
+    /// Ownership follows the instance's host scope on purpose: an instance moved to
+    /// another host leaves its deployment-state row here, and that row alone must not
+    /// keep the left-behind directory owned forever, or it could never be reclaimed.
+    /// It never touches the desired-set query, which also drives what
+    /// <c>ServiceAppDeploymentService</c> deploys; widening that one would deploy to
+    /// disabled instances.
+    /// </remarks>
+    public async Task<IReadOnlyList<ServiceAppDeploymentDescriptor>> GetHostOwnedServiceAppDeploymentsAsync(
+        string hostKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS uniqueidentifier) AS AppInstanceId,
+        CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
+        CAST(NULL AS nvarchar(200)) AS DisplayName,
+        CAST(NULL AS nvarchar(500)) AS InstallPath,
+        CAST(NULL AS nvarchar(150)) AS InstallationName,
+        CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(50)) AS Version,
+        CAST(NULL AS nvarchar(100)) AS TargetName,
+        CAST(NULL AS nvarchar(500)) AS DeployedTargetPath,
+        CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName,
+        CAST(NULL AS tinyint) AS DeploymentState,
+        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey,
+        CAST(NULL AS nvarchar(100)) AS AppKey;
+    RETURN;
+END;
+
+SELECT
+    ai.AppInstanceId,
+    ai.AppInstanceKey,
+    ai.DisplayName,
+    ai.InstallPath,
+    ai.InstallationName,
+    ISNULL(ar.ArtifactId, 0) AS ArtifactId,
+    ISNULL(ar.Version, N'') AS Version,
+    ar.TargetName,
+    hds.TargetPath AS DeployedTargetPath,
+    hds.RuntimeName AS DeployedRuntimeName,
+    hds.DeploymentState,
+    ISNULL(mi.ModuleInstanceKey, N'') AS ModuleInstanceKey,
+    ISNULL((SELECT AppKey FROM omp.Apps WHERE AppId = ar.AppId), N'') AS AppKey
+FROM omp.AppInstances ai
+INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
+LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+LEFT JOIN omp.HostAppDeploymentStates hds
+    ON hds.HostId = @hostId
+   AND hds.AppInstanceId = ai.AppInstanceId
+WHERE
+  (
+      ai.HostId = @hostId
+      OR
+      (
+          ai.HostId IS NULL
+          AND ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.HostDeploymentAssignments hda
+              WHERE hda.HostId = @hostId
+                AND hda.HostTemplateId = ai.TargetHostTemplateId
+                AND hda.IsActive = 1
+          )
+      )
+  )
+  AND (ar.ArtifactId IS NULL OR ar.PackageType = N'service-app')
+ORDER BY ai.AppInstanceKey;";
+
+        var result = new List<ServiceAppDeploymentDescriptor>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            result.Add(new ServiceAppDeploymentDescriptor
+            {
+                HostKey = hostKey,
+                AppInstanceId = rdr.GetGuid(0),
+                AppInstanceKey = rdr.GetString(1),
+                DisplayName = rdr.GetString(2),
+                InstallPath = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                InstallationName = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                ArtifactId = rdr.GetInt32(5),
+                Version = rdr.GetString(6),
+                TargetName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                DeployedTargetPath = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                DeployedRuntimeName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                DeploymentState = rdr.IsDBNull(10) ? null : rdr.GetByte(10),
+                ModuleInstanceKey = rdr.GetString(11),
+                AppKey = rdr.GetString(12)
+            });
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<DisabledServiceAppServiceDescriptor>> GetDisabledServiceAppServicesAsync(
         string hostKey,
         int maxDeployments,

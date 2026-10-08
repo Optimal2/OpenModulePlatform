@@ -782,4 +782,91 @@ public sealed class OrphanServiceAppFinderTests
         Assert.Contains("OrphanApp", finding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Finder_TreatsADisabledInstancesRecordedDeploymentAsOwner()
+    {
+        using var root = new TempServicesRoot();
+        var settings = CreateSettings(root.Path);
+        var paused = Directory.CreateDirectory(Path.Join(root.Path, "OMP.Paused")).FullName;
+        Directory.CreateDirectory(Path.Join(root.Path, "OrphanApp"));
+        var owned = new[]
+        {
+            // A deployment-state row survives the instance being disabled: the path is
+            // what the HostAgent put on this disk, so the directory has an owner.
+            new ServiceAppDeploymentDescriptor { AppInstanceKey = "paused", DeployedTargetPath = paused, DeployedRuntimeName = "OMP.Paused" }
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            owned,
+            _ => null,
+            null,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Contains("OrphanApp", finding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Finder_TreatsAnInstancesInstallPathAsOwnerWithoutADeployment()
+    {
+        using var root = new TempServicesRoot();
+        var settings = CreateSettings(root.Path);
+        Directory.CreateDirectory(Path.Join(root.Path, "Rig"));
+        var owned = new[]
+        {
+            new ServiceAppDeploymentDescriptor { AppInstanceKey = "rig", InstallPath = "Rig", InstallationName = "default" }
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            owned,
+            _ => null,
+            null,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void Finder_SkipsDirectoriesBelowAnAllowedDirectory()
+    {
+        using var root = new TempServicesRoot();
+        var settings = CreateSettings(root.Path);
+        var rigs = Directory.CreateDirectory(Path.Join(root.Path, "Rigs")).FullName;
+        Directory.CreateDirectory(Path.Join(root.Path, "OrphanApp"));
+        settings.MaintenanceAllowedDirectories.Add(rigs);
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Contains("OrphanApp", finding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Settings_RejectAnAllowedDirectoryThatContainsTheServicesRoot()
+    {
+        var settings = new HostAgentSettings
+        {
+            ServicesRoot = Path.Join(Path.GetTempPath(), "services"),
+            CentralArtifactRoot = Path.GetTempPath(),
+            LocalArtifactCacheRoot = Path.GetTempPath()
+        };
+        settings.MaintenanceAllowedDirectories.Add(Path.GetTempPath());
+
+        Assert.Throws<InvalidOperationException>(settings.Validate);
+    }
+
 }

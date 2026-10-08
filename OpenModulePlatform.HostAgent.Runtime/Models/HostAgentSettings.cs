@@ -83,6 +83,16 @@ public sealed class HostAgentSettings
     public int MaintenanceScanIntervalMinutes { get; set; } = 1440;
 
     /// <summary>
+    /// Directories below the services root that the maintenance scan must treat as
+    /// owned although no app instance claims them (a simulator rig, a hand-placed
+    /// tool): never flagged as orphans, never removed by a cleanup. Absolute paths; a
+    /// directory is covered when it is one of these or sits below one. Host-local
+    /// configuration on purpose: ownership of this host's disk is this host's to
+    /// declare, not something a database write can widen.
+    /// </summary>
+    public List<string> MaintenanceAllowedDirectories { get; set; } = [];
+
+    /// <summary>
     /// Days a row stays in omp.SystemLog (the platform's central Warn-and-above
     /// log) before the HostAgent deletes it. 0 keeps rows forever. Default 90.
     /// </summary>
@@ -267,6 +277,22 @@ public sealed class HostAgentSettings
         if (SystemLogRetentionDays < 0)
         {
             throw new InvalidOperationException("HostAgent:SystemLogRetentionDays must be zero or greater.");
+        }
+
+        foreach (var allowed in MaintenanceAllowedDirectories)
+        {
+            if (string.IsNullOrWhiteSpace(allowed) || !Path.IsPathRooted(allowed.Trim()))
+            {
+                throw new InvalidOperationException($"HostAgent:MaintenanceAllowedDirectories entries must be absolute paths; '{allowed}' is not.");
+            }
+
+            // An entry that is the services root, or above it, would mark every
+            // directory below the root as owned and switch the orphan scan off.
+            if (!string.IsNullOrWhiteSpace(ServicesRoot)
+                && OpenModulePlatform.Artifacts.OmpPathContainment.IsSameOrChildPath(allowed.Trim(), ServicesRoot.Trim()))
+            {
+                throw new InvalidOperationException($"HostAgent:MaintenanceAllowedDirectories entry '{allowed}' is the services root or contains it; list directories below the root instead.");
+            }
         }
 
         if (DeployWebApps)

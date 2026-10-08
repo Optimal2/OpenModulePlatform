@@ -272,6 +272,43 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
         }
     }
 
+    [Fact]
+    public void ValidateCleanup_RefusesADirectoryOwnedByADisabledInstance()
+    {
+        using var root = new TempDirectory();
+        var paused = CreateSubDirectory(root.Path, "OMP.Paused");
+        var owned = new[] { new ServiceAppDeploymentDescriptor { AppInstanceKey = "paused", DeployedTargetPath = paused } };
+
+        var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
+            CreateSettings(root.Path),
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            owned,
+            Array.Empty<ServiceAppServiceCandidate>(),
+            paused);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("owned by AppInstance 'paused'", refusal, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidateCleanup_RefusesADirectoryBelowAnAllowedDirectory()
+    {
+        using var root = new TempDirectory();
+        var rigs = CreateSubDirectory(root.Path, "Rigs");
+        var rig = CreateSubDirectory(rigs, "VGR-Sim");
+        var settings = CreateSettings(root.Path);
+        settings.MaintenanceAllowedDirectories.Add(rigs);
+
+        var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            Array.Empty<ServiceAppServiceCandidate>(),
+            rig);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("MaintenanceAllowedDirectories", refusal, StringComparison.Ordinal);
+    }
+
     private static string CreateSubDirectory(string root, string name)
     {
         var path = Path.Join(root, name);

@@ -8,6 +8,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Maintenance scan: a paused instance still owns its directory.** The
+  orphan scan judged ownership from the set the HostAgent deploys right now
+  (instances that are enabled, allowed, desired and provisioned), so the
+  directory of every disabled or not-yet-deployed instance was reported as an
+  orphan. It now also counts every instance on the host that can show a
+  claim, whether or not it is active: a recorded deployment
+  (`omp.HostAppDeploymentStates.TargetPath`, which survives the instance
+  being disabled) or an install path / installation name. The cleanup-time
+  re-check uses the same two sets, and the query that drives deployments is
+  untouched. A new host-local setting, `HostAgent:MaintenanceAllowedDirectories`,
+  lists directories (a simulator rig, a hand-placed tool) that are owned by
+  declaration: never flagged, never removed.
+
 - **Read-only fields on the user edit page look like fields.** The read-only
   inputs on Admin > Users > Edit (user id, created, updated, last login,
   account status, portal setting key and default, and the two users in the
