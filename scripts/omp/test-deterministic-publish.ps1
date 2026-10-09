@@ -33,7 +33,7 @@ try {
     $env:GITHUB_ACTIONS = 'false'
     $projects = @('OpenModulePlatform.WorkerProcessHost', 'OpenModulePlatform.Artifacts',
         'OpenModulePlatform.Worker.Abstractions', 'OpenModulePlatform.EventPublisher.Abstractions')
-    $tracked = @(git -C $repoRoot ls-files -- Directory.Build.props Directory.Build.targets Directory.Packages.props global.json NuGet.Config build @projects)
+    $tracked = @(git -C $repoRoot ls-files -- Directory.Build.props Directory.Build.targets Directory.Packages.props global.json build scripts/omp/DeterministicArtifactEncoding.cs @projects)
     if ($LASTEXITCODE -ne 0 -or $tracked.Count -lt 10) { throw 'Could not enumerate the tracked build inputs.' }
     $results = @()
     $legs = @('first', 'different length second')

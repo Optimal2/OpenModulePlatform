@@ -10,7 +10,8 @@
     <NeutralLanguage>en</NeutralLanguage>
     <!-- Normalize compiler inputs for installer/local builds as well as CI.
          Deterministic explicitly fixes MVID/PE timestamps to the input content;
-         portable symbols retain debugging without embedding machine paths. -->
+         portable symbols use virtual paths (local source lookup needs manual
+         mapping; see docs/DETERMINISTIC_BUILDS.md). -->
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>
     <DebugType>portable</DebugType>

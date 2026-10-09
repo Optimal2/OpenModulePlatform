@@ -22,6 +22,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # Shared runtime-configuration rule (appsettings*.json, odv.site.config.js) —
 # the canonical build-time mirror used by every packaging script (R3-G7).
 . (Join-Path $PSScriptRoot '..\omp\runtime-configuration-files.ps1')
+. (Join-Path $PSScriptRoot '..\omp\deterministic-artifact.ps1')
 # Guard in front of every "delete a root and create it again" below.
 . (Join-Path $PSScriptRoot '..\omp\Assert-SafeToClean.ps1')
 
@@ -492,7 +493,7 @@ function Compress-FolderToZip {
         Remove-Item -LiteralPath $Destination -Force
     }
 
-    Compress-Archive -Path (Join-Path $Source '*') -DestinationPath $Destination -Force
+    Compress-OmpDeterministicDirectory -Source $Source -Destination $Destination
 }
 
 function Compress-ArtifactPayloadFolderToZip {
@@ -571,7 +572,7 @@ function Get-SafeArtifactConfigurationPackageSourcePath {
         $safe = "config-$Index.txt"
     }
 
-    return ('configuration/{0:000}-{1}' -f $Index, $safe)
+    return [string]::Format([Globalization.CultureInfo]::InvariantCulture, 'configuration/{0:000}-{1}', $Index, $safe)
 }
 
 function Get-ComponentArtifactConfigurationFiles {
@@ -640,41 +641,6 @@ function Test-ComponentHasArtifactIdentity {
         -and -not [string]::IsNullOrWhiteSpace((Get-ManifestPropertyValue -Object $Component -Name 'version'))
 }
 
-function Get-EmbeddedWorkerHostMinVersion {
-    param([Parameter(Mandatory = $true)][string]$PayloadZip)
-
-    $entryName = 'omp-worker-plugin.json'
-    $archive = [System.IO.Compression.ZipFile]::OpenRead($PayloadZip)
-    try {
-        $entry = $archive.Entries | Where-Object {
-            [string]::Equals($_.FullName.Replace('\', '/'), $entryName, [StringComparison]::OrdinalIgnoreCase)
-        } | Select-Object -First 1
-        if ($null -eq $entry) {
-            return ''
-        }
-
-        $reader = [System.IO.StreamReader]::new($entry.Open())
-        try {
-            $document = $reader.ReadToEnd() | ConvertFrom-Json
-        }
-        finally {
-            $reader.Dispose()
-        }
-
-        if ([int]$document.formatVersion -ne 1 `
-                -or $null -eq $document.workerHost `
-                -or -not [string]::Equals([string]$document.workerHost.componentKey, 'omp-workerprocesshost', [StringComparison]::OrdinalIgnoreCase) `
-                -or [string]::IsNullOrWhiteSpace([string]$document.workerHost.minVersion)) {
-            throw "Artifact payload compatibility metadata '$entryName' is invalid."
-        }
-
-        return ([string]$document.workerHost.minVersion).Trim()
-    }
-    finally {
-        $archive.Dispose()
-    }
-}
-
 function New-ArtifactPackage {
     param(
         [Parameter(Mandatory = $true)][string]$PayloadZip,
@@ -684,112 +650,13 @@ function New-ArtifactPackage {
         [string]$MinModuleDefinitionVersion = '',
         [string]$MinWorkerHostVersion = ''
     )
-
-    $stagingRoot = Join-Path $BuildRoot ('artifact-package-' + [Guid]::NewGuid().ToString('N'))
-    $payloadDestination = Join-Path $stagingRoot 'payload\artifact.zip'
-
-    try {
-        Copy-RequiredFile -Source $PayloadZip -Destination $payloadDestination
-
-        $embeddedMinWorkerHostVersion = Get-EmbeddedWorkerHostMinVersion -PayloadZip $payloadDestination
-        $resolvedMinWorkerHostVersion = if ([string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
-            $embeddedMinWorkerHostVersion
-        }
-        else {
-            $MinWorkerHostVersion.Trim()
-        }
-        if (-not [string]::IsNullOrWhiteSpace($embeddedMinWorkerHostVersion) `
-                -and -not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion) `
-                -and -not [string]::Equals($embeddedMinWorkerHostVersion, $MinWorkerHostVersion.Trim(), [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Artifact payload worker-host requirement '$embeddedMinWorkerHostVersion' does not match requested version '$($MinWorkerHostVersion.Trim())'."
-        }
-
-        if ([string]::IsNullOrWhiteSpace($embeddedMinWorkerHostVersion) `
-                -and -not [string]::IsNullOrWhiteSpace($resolvedMinWorkerHostVersion)) {
-            $archive = [System.IO.Compression.ZipFile]::Open($payloadDestination, [System.IO.Compression.ZipArchiveMode]::Update)
-            try {
-                $entryName = 'omp-worker-plugin.json'
-                $existing = $archive.Entries | Where-Object {
-                    [string]::Equals($_.FullName.Replace('\', '/'), $entryName, [StringComparison]::OrdinalIgnoreCase)
-                } | Select-Object -First 1
-                if ($null -ne $existing) {
-                    throw "Artifact payload already contains reserved compatibility metadata '$entryName'."
-                }
-
-                $compatibilityDocument = [ordered]@{
-                    formatVersion = 1
-                    workerHost = [ordered]@{
-                        componentKey = 'omp-workerprocesshost'
-                        minVersion = $resolvedMinWorkerHostVersion
-                    }
-                } | ConvertTo-Json -Depth 4
-                $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
-                $stream = $entry.Open()
-                try {
-                    $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
-                    try { $writer.Write($compatibilityDocument) }
-                    finally { $writer.Dispose() }
-                }
-                finally { $stream.Dispose() }
-            }
-            finally {
-                $archive.Dispose()
-            }
-        }
-
-        $manifestConfigurationFiles = @()
-        foreach ($configurationFile in $ConfigurationFiles) {
-            $relativePath = [string]$configurationFile.RelativePath
-            $sourcePath = [string]$configurationFile.SourcePath
-            $packageSourcePath = [string]$configurationFile.PackageSourcePath
-
-            if ([string]::IsNullOrWhiteSpace($relativePath) -or [string]::IsNullOrWhiteSpace($sourcePath) -or [string]::IsNullOrWhiteSpace($packageSourcePath)) {
-                throw "Artifact configuration file entries require RelativePath, SourcePath, and PackageSourcePath."
-            }
-
-            # PackageSourcePath comes from a component manifest (including
-            # sibling repos), so a value like 'configuration/../../x' would
-            # write outside the staging root. Confine it under the staging root
-            # before copying (R3-G3).
-            $configurationDestination = Join-Path $stagingRoot $packageSourcePath.Replace('/', '\')
-            $fullStagingRoot = [System.IO.Path]::GetFullPath($stagingRoot).TrimEnd('\') + '\'
-            $fullDestination = [System.IO.Path]::GetFullPath($configurationDestination)
-            if (-not $fullDestination.StartsWith($fullStagingRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-                throw "PackageSourcePath '$packageSourcePath' escapes the staging root and was rejected."
-            }
-            Copy-RequiredFile -Source $sourcePath -Destination $configurationDestination
-            $manifestConfigurationFiles += [ordered]@{
-                relativePath = $relativePath.Replace('\', '/').Trim('/')
-                source = $packageSourcePath.Replace('\', '/').Trim('/')
-            }
-        }
-
-        $manifest = [ordered]@{
-            formatVersion = 1
-            payload = [ordered]@{
-                type = 'zip'
-                path = 'payload/artifact.zip'
-            }
-            configurationFiles = @($manifestConfigurationFiles)
-        }
-        if (-not [string]::IsNullOrWhiteSpace($MinModuleDefinitionVersion)) {
-            $manifest.moduleDefinition = [ordered]@{
-                minVersion = $MinModuleDefinitionVersion.Trim()
-            }
-        }
-        if (-not [string]::IsNullOrWhiteSpace($resolvedMinWorkerHostVersion)) {
-            $manifest.workerHost = [ordered]@{
-                componentKey = 'omp-workerprocesshost'
-                minVersion = $resolvedMinWorkerHostVersion
-            }
-        }
-
-        $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stagingRoot 'omp-artifact-package.json') -Encoding UTF8
-        Compress-FolderToZip -Source $stagingRoot -Destination $Destination
-    }
-    finally {
-        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    # Keep the installer API; all payload/metadata/zip production belongs to the canonical packer.
+    $mappings = @($ConfigurationFiles | ForEach-Object { "$($_.RelativePath)=$($_.SourcePath)" })
+    $sources = @($ConfigurationFiles | ForEach-Object { [string]$_.PackageSourcePath })
+    & (Join-Path $PSScriptRoot 'new-omp-artifact-package.ps1') -ModuleKey installer -AppKey artifact `
+        -PackageType artifact -TargetName artifact -Version 1.0.0 -PayloadPath $PayloadZip -OutputPath $Destination `
+        -ConfigurationFile $mappings -ConfigurationPackageSource $sources `
+        -MinModuleDefinitionVersion $MinModuleDefinitionVersion -MinWorkerHostVersion $MinWorkerHostVersion
 }
 
 function Compress-PackageRootToZip {
@@ -811,7 +678,7 @@ function Compress-PackageRootToZip {
         Remove-Item -LiteralPath $Destination -Force
     }
 
-    Compress-Archive -Path @($items | ForEach-Object { $_.FullName }) -DestinationPath $Destination -Force
+    [OpenModulePlatform.Artifacts.DeterministicArtifactEncoding]::WriteDirectoryExcept($PackageRoot, $Destination, '.build')
 }
 
 function Test-ZipContainsEntry {
@@ -867,28 +734,15 @@ function New-OpenDocViewerArtifactPackage {
         New-Item -ItemType Directory -Path (Split-Path -Parent $configurationDestination) -Force | Out-Null
 
         if ([string]::IsNullOrWhiteSpace($SiteConfigPath)) {
-            Set-Content -LiteralPath $configurationDestination -Value (New-NeutralOpenDocViewerSiteConfig) -Encoding UTF8
+            [IO.File]::WriteAllText($configurationDestination, (New-NeutralOpenDocViewerSiteConfig).Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false))
         }
         else {
             Copy-RequiredFile -Source $SiteConfigPath -Destination $configurationDestination
         }
 
-        $manifest = [ordered]@{
-            formatVersion = 1
-            payload = [ordered]@{
-                type = 'zip'
-                path = 'payload/artifact.zip'
-            }
-            configurationFiles = @(
-                [ordered]@{
-                    relativePath = 'odv.site.config.js'
-                    source = 'configuration/000-odv.site.config.js'
-                }
-            )
-        }
-
-        $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stagingRoot 'omp-artifact-package.json') -Encoding UTF8
-        Compress-FolderToZip -Source $stagingRoot -Destination $Destination
+        New-ArtifactPackage -PayloadZip $PayloadZip -Destination $Destination -BuildRoot $BuildRoot -ConfigurationFiles @(
+            @{ RelativePath = 'odv.site.config.js'; SourcePath = $configurationDestination; PackageSourcePath = 'configuration/000-odv.site.config.js' }
+        )
     }
     finally {
         Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -1351,7 +1205,7 @@ function New-WorkerManagerArtifactConfigurationFile {
         }
     }
 
-    $configuration | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $configurationPath -Encoding UTF8
+    Write-OmpCanonicalJson -Path $configurationPath -Value $configuration
     return [ordered]@{
         RelativePath = 'appsettings.json'
         SourcePath = $configurationPath

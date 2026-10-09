@@ -35,6 +35,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PayloadPath,
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [string[]]$ConfigurationFile = @(),
+    # Optional explicit entry names retained by the installer refresh adapter.
+    [string[]]$ConfigurationPackageSource = @(),
     [string]$MinModuleDefinitionVersion,
     [string]$MinWorkerHostVersion,
     # Source provenance stamped into the artifact manifest so a package can be
@@ -53,6 +55,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # Shared canonical runtime-configuration rule (mirrors
 # OpenModulePlatform.Artifacts RuntimeConfigurationFiles).
 . (Join-Path $PSScriptRoot '..\omp\runtime-configuration-files.ps1')
+. (Join-Path $PSScriptRoot '..\omp\deterministic-artifact.ps1')
 
 $script:TokenPattern = '^[A-Za-z0-9][A-Za-z0-9._+-]*$'
 
@@ -111,7 +114,7 @@ function Get-SafeConfigurationSourceName {
         $safe = "config-$Index.txt"
     }
 
-    return ('configuration/{0:000}-{1}' -f $Index, $safe)
+    return [string]::Format([Globalization.CultureInfo]::InvariantCulture, 'configuration/{0:000}-{1}', $Index, $safe)
 }
 
 function Resolve-ConfigurationMapping {
@@ -177,9 +180,10 @@ function Add-WorkerPluginCompatibilityManifest {
                 componentKey = 'omp-workerprocesshost'
                 minVersion = $MinVersion.Trim()
             }
-        } | ConvertTo-Json -Depth 4
+        }
+        $document = [OpenModulePlatform.Artifacts.DeterministicArtifactEncoding]::Json($document)
 
-        $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+        $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::NoCompression)
         $entry.LastWriteTime = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
         $stream = $entry.Open()
         try {
@@ -259,36 +263,7 @@ function Compress-DirectoryToZip {
         [Parameter(Mandatory = $true)][string]$DestinationZip
     )
 
-    $parent = Split-Path -Parent $DestinationZip
-    New-Item -ItemType Directory -Path $parent -Force | Out-Null
-    if (Test-Path -LiteralPath $DestinationZip -PathType Leaf) {
-        Remove-Item -LiteralPath $DestinationZip -Force
-    }
-
-    $sourceRootFull = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\')
-    $archive = [System.IO.Compression.ZipFile]::Open($DestinationZip, [System.IO.Compression.ZipArchiveMode]::Create)
-    try {
-        # Zip bytes are artifact identity too. Enumeration order and source file
-        # timestamps vary across fresh checkouts and rebuilds, without changing
-        # content. Ordinal order and the ZIP epoch make both archive layers stable.
-        $files = [string[]]@([System.IO.Directory]::EnumerateFiles($sourceRootFull, '*', [System.IO.SearchOption]::AllDirectories))
-        [Array]::Sort($files, [StringComparer]::Ordinal)
-        foreach ($file in $files) {
-            $entryName = $file.Substring($sourceRootFull.Length).TrimStart('\', '/') -replace '\\', '/'
-            $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
-            $entry.LastWriteTime = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
-            $inputStream = [System.IO.File]::OpenRead($file)
-            try {
-                $outputStream = $entry.Open()
-                try { $inputStream.CopyTo($outputStream) }
-                finally { $outputStream.Dispose() }
-            }
-            finally { $inputStream.Dispose() }
-        }
-    }
-    finally {
-        $archive.Dispose()
-    }
+    Compress-OmpDeterministicDirectory -Source $SourceDirectory -Destination $DestinationZip
 }
 
 function Compress-PayloadDirectory {
@@ -371,12 +346,22 @@ try {
 
     $payloadDestination = Join-Path $packageRoot 'payload\artifact.zip'
     New-Item -ItemType Directory -Path (Split-Path -Parent $payloadDestination) -Force | Out-Null
-    Copy-Item -LiteralPath $payloadZip -Destination $payloadDestination -Force
+    ConvertTo-OmpDeterministicZip -Source $payloadZip -Destination $payloadDestination
 
     $configurationItems = [System.Collections.Generic.List[object]]::new()
     $index = 1
     foreach ($mapping in $ConfigurationFile) {
-        $configurationItems.Add((Resolve-ConfigurationMapping -Mapping $mapping -Index $index))
+        $item = Resolve-ConfigurationMapping -Mapping $mapping -Index $index
+        if ($ConfigurationPackageSource.Count -gt 0) {
+            if ($ConfigurationPackageSource.Count -ne $ConfigurationFile.Count) {
+                throw 'ConfigurationPackageSource must have one entry per configuration file.'
+            }
+            $item.PackageSourcePath = Normalize-ZipPath -Value $ConfigurationPackageSource[$index - 1]
+            if (-not $item.PackageSourcePath.StartsWith('configuration/', [StringComparison]::Ordinal)) {
+                throw 'Configuration package sources must stay under configuration/.'
+            }
+        }
+        $configurationItems.Add($item)
         $index++
     }
 
@@ -419,7 +404,7 @@ try {
         $manifest.sourceDirty = [bool]$SourceDirty
     }
 
-    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'omp-artifact-package.json') -Encoding UTF8
+    Write-OmpCanonicalJson -Path (Join-Path $packageRoot 'omp-artifact-package.json') -Value $manifest
 
     New-Item -ItemType Directory -Path (Split-Path -Parent $resolvedOutputPath) -Force | Out-Null
     if (Test-Path -LiteralPath $resolvedOutputPath -PathType Leaf) {

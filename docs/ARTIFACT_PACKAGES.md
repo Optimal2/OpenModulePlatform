@@ -114,8 +114,8 @@ directory prefixes.
 ### Zip entry semantics (packages built by new-omp-artifact-package.ps1)
 
 `scripts/deployment/new-omp-artifact-package.ps1` writes every zip entry --
-outer package and nested `payload/artifact.zip` -- through
-`System.IO.Compression` with explicit forward-slash entry names, so the bytes
+outer package and nested `payload/artifact.zip` -- through the shared
+`DeterministicArtifactEncoding` writer with explicit forward-slash entry names, so the bytes
 are independent of the host's Archive module version (the inbox Archive
 1.0.1.0 under Windows PowerShell 5.1 made `Compress-Archive` write backslash
 entry names that the importers could not read, measured 2026-10-07). Two
@@ -133,10 +133,15 @@ decided 2026-10-08:
 
 Directory payloads and the outer envelope use ordinal entry order and the ZIP
 epoch (1980-01-01) for entry timestamps. Generated worker compatibility metadata
-uses that timestamp too. Repacking identical inputs with the same toolchain now
-produces identical zip bytes, regardless of checkout/build timestamps. An
-already-zipped input payload is preserved as supplied; its producer remains
-responsible for deterministic bytes. See [deterministic builds](DETERMINISTIC_BUILDS.md).
+uses that timestamp too. Installer refresh, the canonical PowerShell packer and
+the C# writer share a ZIP64/store wire format without compression or OS-specific
+attributes, plus canonical UTF-8 JSON without a BOM. Already-zipped inputs are
+re-encoded as well, preserving file contents while normalizing the container.
+Identical payload and manifest inputs (including any optional provenance and
+configuration files) produce identical bytes across Windows PowerShell 5.1,
+PowerShell 7 and C#. Store mode increases package sizes; it removes dependence
+on the runtime's compression implementation. See
+[deterministic builds](DETERMINISTIC_BUILDS.md) for tests and debugging limitations.
 
 Universal module packages (`scripts/omp/export-universal-package.ps1` and
 `export-universal-object-root.ps1`) enumerate package files per declared

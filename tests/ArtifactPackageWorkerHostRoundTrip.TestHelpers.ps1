@@ -75,7 +75,6 @@ function Import-HostAgentArtifactPackageFunctions {
     $functionNames = @(
         'Copy-RequiredFile',
         'Compress-FolderToZip',
-        'Get-EmbeddedWorkerHostMinVersion',
         'New-ArtifactPackage'
     )
     $functionAsts = $ast.FindAll({

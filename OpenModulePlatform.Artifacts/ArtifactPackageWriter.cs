@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections;
 using OpenModulePlatform.Worker.Abstractions.Models;
 
 namespace OpenModulePlatform.Artifacts;
@@ -71,78 +72,83 @@ public sealed class ArtifactPackageWriter
         var normalizedMinWorkerHostVersion = string.IsNullOrWhiteSpace(minWorkerHostVersion)
             ? embeddedMinWorkerHostVersion
             : minWorkerHostVersion.Trim();
-        var payloadToPackage = payloadZipPath;
-        string? compatibilityPayloadPath = null;
+        var compatibilityPayloadPath = Path.Join(Path.GetTempPath(), "OpenModulePlatform", "ArtifactPackages", $"{Guid.NewGuid():N}.payload.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(compatibilityPayloadPath)!);
+        var payloadToPackage = compatibilityPayloadPath;
 
-        if (!string.IsNullOrWhiteSpace(minWorkerHostVersion) && embeddedMinWorkerHostVersion is not null)
+        if (!string.IsNullOrWhiteSpace(minWorkerHostVersion) && embeddedMinWorkerHostVersion is not null
+            && !string.Equals(minWorkerHostVersion.Trim(), embeddedMinWorkerHostVersion, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Artifact payload already contains reserved compatibility metadata '{WorkerPluginCompatibilityManifest.FileName}'.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(minWorkerHostVersion))
-        {
-            compatibilityPayloadPath = Path.Join(
-                Path.GetTempPath(),
-                "OpenModulePlatform",
-                "ArtifactPackages",
-                $"{Guid.NewGuid():N}.worker-compatible.payload.zip");
-            Directory.CreateDirectory(Path.GetDirectoryName(compatibilityPayloadPath)!);
-            File.Copy(payloadZipPath, compatibilityPayloadPath, overwrite: true);
-            AddWorkerPluginCompatibilityManifest(compatibilityPayloadPath, normalizedMinWorkerHostVersion!);
-            payloadToPackage = compatibilityPayloadPath;
+                "Artifact payload worker-host requirement does not match the requested version.");
         }
 
         try
         {
+            DeterministicArtifactEncoding.NormalizeZip(payloadZipPath, compatibilityPayloadPath);
+            if (!string.IsNullOrWhiteSpace(minWorkerHostVersion) && embeddedMinWorkerHostVersion is null)
+            {
+                AddWorkerPluginCompatibilityManifest(compatibilityPayloadPath, normalizedMinWorkerHostVersion!);
+                var normalizedPayload = compatibilityPayloadPath + ".normalized";
+                try
+                {
+                    DeterministicArtifactEncoding.NormalizeZip(compatibilityPayloadPath, normalizedPayload);
+                    File.Move(normalizedPayload, compatibilityPayloadPath, overwrite: true);
+                }
+                finally { TryDelete(normalizedPayload); }
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationZipPath))!);
             TryDelete(destinationZipPath);
 
             var normalizedConfigurationFiles = NormalizeConfigurationFiles(configurationFiles);
-            using var package = ZipFile.Open(destinationZipPath, ZipArchiveMode.Create);
-
-            package.CreateEntryFromFile(payloadToPackage, PayloadEntryName, CompressionLevel.NoCompression);
-            var manifest = new
+            var intermediate = destinationZipPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
             {
-                formatVersion = 1,
-                payload = new
+                using (var package = ZipFile.Open(intermediate, ZipArchiveMode.Create))
                 {
-                    type = "zip",
-                    path = PayloadEntryName
-                },
-                moduleDefinition = string.IsNullOrWhiteSpace(minModuleDefinitionVersion)
-                    ? null
-                    : new { minVersion = minModuleDefinitionVersion.Trim() },
-                workerHost = normalizedMinWorkerHostVersion is null
-                    ? null
-                    : new
+                    WriteFileEntry(package, PayloadEntryName, payloadToPackage);
+                    var manifest = new
                     {
-                        componentKey = WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
-                        minVersion = normalizedMinWorkerHostVersion
-                    },
-                configurationFiles = normalizedConfigurationFiles.Select(file => new
-                {
-                    file.RelativePath,
-                    source = file.SourcePath
-                })
-            };
+                        formatVersion = 1,
+                        payload = new
+                        {
+                            type = "zip",
+                            path = PayloadEntryName
+                        },
+                        moduleDefinition = string.IsNullOrWhiteSpace(minModuleDefinitionVersion)
+                            ? null
+                            : new { minVersion = minModuleDefinitionVersion.Trim() },
+                        workerHost = normalizedMinWorkerHostVersion is null
+                            ? null
+                            : new
+                            {
+                                componentKey = WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
+                                minVersion = normalizedMinWorkerHostVersion
+                            },
+                        configurationFiles = normalizedConfigurationFiles.Select(file => new
+                        {
+                            file.RelativePath,
+                            source = file.SourcePath
+                        })
+                    };
 
-            WriteTextEntry(
-                package,
-                ArtifactPackageExtractor.ManifestEntryName,
-                JsonSerializer.Serialize(manifest, JsonOptions));
+                    WriteTextEntry(
+                        package,
+                        ArtifactPackageExtractor.ManifestEntryName,
+                        CanonicalJson(manifest));
 
-            foreach (var file in normalizedConfigurationFiles)
-            {
-                WriteTextEntry(package, file.SourcePath, file.FileContent);
+                    foreach (var file in normalizedConfigurationFiles)
+                    {
+                        WriteTextEntry(package, file.SourcePath, file.FileContent);
+                    }
+                }
+                DeterministicArtifactEncoding.NormalizeZip(intermediate, destinationZipPath);
             }
+            finally { TryDelete(intermediate); }
         }
         finally
         {
-            if (compatibilityPayloadPath is not null)
-            {
-                TryDelete(compatibilityPayloadPath);
-            }
+            TryDelete(compatibilityPayloadPath);
         }
     }
 
@@ -170,7 +176,7 @@ public sealed class ArtifactPackageWriter
         WriteTextEntry(
             payload,
             WorkerPluginCompatibilityManifest.FileName,
-            JsonSerializer.Serialize(manifest, JsonOptions));
+            CanonicalJson(manifest));
     }
 
     private static string? ReadEmbeddedMinWorkerHostVersion(string payloadZipPath)
@@ -211,15 +217,16 @@ public sealed class ArtifactPackageWriter
         // payload tree, and every file on the other side was then packed into a zip the Portal
         // serves as a download -- an exfiltration path with web delivery attached. Skipping
         // reparse points at enumeration is the only place this can be stopped: by the time a path
-        // reaches CreateEntryFromFile it looks like an ordinary file below the payload root.
+        // reaches the file reader it looks like an ordinary file below the payload root.
         var files = Directory.EnumerateFiles(payloadDirectoryPath, "*", OmpReparsePointGuard.RecursiveNoFollow)
-            .OrderBy(file => Path.GetRelativePath(payloadDirectoryPath, file), StringComparer.OrdinalIgnoreCase);
+            .Where(file => !RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(Path.GetFileName(file)))
+            .OrderBy(file => Path.GetRelativePath(payloadDirectoryPath, file), StringComparer.Ordinal);
 
         foreach (var file in files)
         {
             var relativePath = Path.GetRelativePath(payloadDirectoryPath, file).Replace('\\', '/');
             ValidatePackagePath(relativePath, "payload file");
-            payload.CreateEntryFromFile(file, relativePath, CompressionLevel.Optimal);
+            WriteFileEntry(payload, relativePath, file);
         }
     }
 
@@ -269,7 +276,7 @@ public sealed class ArtifactPackageWriter
             safeName = $"config-{index + 1}.txt";
         }
 
-        return $"configuration/{index + 1:000}-{safeName}";
+        return FormattableString.Invariant($"configuration/{index + 1:000}-{safeName}");
     }
 
     private static string NormalizeDeploymentPath(string value)
@@ -301,13 +308,38 @@ public sealed class ArtifactPackageWriter
 
     private static void WriteTextEntry(ZipArchive package, string entryName, string content)
     {
-        var entry = package.CreateEntry(entryName, CompressionLevel.Optimal);
+        var entry = package.CreateEntry(entryName, CompressionLevel.NoCompression);
+        entry.LastWriteTime = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
         using var stream = entry.Open();
         using var writer = new StreamWriter(
             stream,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             leaveOpen: false);
         writer.Write(content);
+    }
+
+    private static void WriteFileEntry(ZipArchive package, string entryName, string path)
+    {
+        var entry = package.CreateEntry(entryName, CompressionLevel.NoCompression);
+        entry.LastWriteTime = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        using var input = File.OpenRead(path);
+        using var output = entry.Open();
+        input.CopyTo(output);
+    }
+
+    private static string CanonicalJson(object value)
+    {
+        static object ConvertElement(JsonElement element) => element.ValueKind switch
+        {
+            JsonValueKind.Object => new Hashtable(element.EnumerateObject().ToDictionary(p => p.Name, p => ConvertElement(p.Value))),
+            JsonValueKind.Array => element.EnumerateArray().Select(ConvertElement).ToArray(),
+            JsonValueKind.String => element.GetString()!,
+            JsonValueKind.Number => element.GetInt64(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new InvalidOperationException("Unsupported generated artifact metadata.")
+        };
+        return DeterministicArtifactEncoding.Json(ConvertElement(JsonSerializer.SerializeToElement(value, JsonOptions)));
     }
 
     private static void TryDelete(string path)

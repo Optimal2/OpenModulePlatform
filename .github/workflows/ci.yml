@@ -154,6 +154,10 @@ jobs:
           & "./scripts/omp/test-deterministic-publish.ps1"
           & "./scripts/omp/test-deterministic-publish.ps1" -UseIsolatedBuildRoots
 
+      - name: Compare installer, canonical and C# artifacts under both PowerShell engines
+        shell: pwsh
+        run: python scripts/omp/test-artifact-producers.py --output artifacts/producer-determinism
+
       - name: Validate component versions
         shell: pwsh
         run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit '${{ steps.base.outputs.sha }}'

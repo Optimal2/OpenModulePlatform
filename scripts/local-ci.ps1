@@ -160,6 +160,9 @@ try {
     }
 
     if (-not $SkipTests) {
+        Invoke-Step 'Cross-shell artifact producer determinism' {
+            python (Join-Path $repoRoot 'scripts/omp/test-artifact-producers.py') --output (Join-Path $repoRoot ('artifacts/producer-determinism-' + [Guid]::NewGuid().ToString('N')))
+        }
         Invoke-Step 'Deterministic publish and artifact package' {
             & (Join-Path $repoRoot 'scripts\omp\test-deterministic-publish.ps1')
         }
