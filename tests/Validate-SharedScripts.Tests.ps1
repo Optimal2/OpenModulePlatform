@@ -346,6 +346,17 @@ Describe 'validate-shared-scripts: web repositories carry and import the pinning
         . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
     }
 
+    It 'Fails when the Razor generator source is missing despite an imported target' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerIsWeb -ConsumerTargetsBody 'canonical targets' -ConsumerImportsTargets
+        try {
+            Remove-Item -LiteralPath (Join-Path $pair.Consumer 'build\DeterministicRazor\DeterministicRazorGenerator.cs')
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'DeterministicRazorGenerator\.cs is missing') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
     It 'Fails when a repository with a web project lacks the target' {
         $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerIsWeb
         try {

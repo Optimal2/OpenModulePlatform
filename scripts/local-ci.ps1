@@ -166,6 +166,9 @@ try {
         Invoke-Step 'Deterministic publish and artifact package' {
             & (Join-Path $repoRoot 'scripts\omp\test-deterministic-publish.ps1')
         }
+        Invoke-Step 'Static web assets ordering and content sensitivity' {
+            python (Join-Path $repoRoot 'scripts/omp/test-static-web-assets.py') --output (Join-Path $repoRoot ('artifacts/static-assets-' + [Guid]::NewGuid().ToString('N')))
+        }
         $buildStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         Invoke-Step 'Build solution' {
             dotnet build (Join-Path $repoRoot 'OpenModulePlatform.slnx') --configuration Release --nologo -v q

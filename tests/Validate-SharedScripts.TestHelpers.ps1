@@ -63,6 +63,9 @@ function New-Pair {
     if (-not [string]::IsNullOrEmpty($ConsumerTargetsBody)) {
         New-Item -ItemType Directory -Path (Join-Path $consumer 'build') -Force | Out-Null
         [IO.File]::WriteAllText((Join-Path $consumer 'build\OpenModulePlatform.DeterministicStaticWebAssets.targets'), $ConsumerTargetsBody)
+        New-Item -ItemType Directory -Path (Join-Path $consumer 'build\DeterministicRazor') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $consumer 'build\DeterministicRazor\DeterministicRazor.csproj'), 'canonical project')
+        [IO.File]::WriteAllText((Join-Path $consumer 'build\DeterministicRazor\DeterministicRazorGenerator.cs'), 'canonical generator')
     }
     if (-not [string]::IsNullOrEmpty($ConsumerSuitePath)) {
         $suitePath = Join-Path (Join-Path $consumer 'tests') $ConsumerSuitePath
@@ -83,6 +86,9 @@ function New-Pair {
         New-Item -ItemType Directory -Path (Join-Path $platform 'scripts\omp') -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $platform 'build') -Force | Out-Null
         [IO.File]::WriteAllText((Join-Path $platform 'build\OpenModulePlatform.DeterministicStaticWebAssets.targets'), 'canonical targets')
+        New-Item -ItemType Directory -Path (Join-Path $platform 'build\DeterministicRazor') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $platform 'build\DeterministicRazor\DeterministicRazor.csproj'), 'canonical project')
+        [IO.File]::WriteAllText((Join-Path $platform 'build\DeterministicRazor\DeterministicRazorGenerator.cs'), 'canonical generator')
         [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\run-script-tests.ps1'), 'canonical runner')
         [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\pester-bootstrap.ps1'), 'canonical bootstrap')
         if (-not $OmitPlatformScripts) {

@@ -17,6 +17,46 @@ permissions:
   contents: read
 
 jobs:
+  razor-determinism:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Compare every web publish and package across source and intermediate paths
+        shell: ${{ matrix.shell }}
+        run: '& "./scripts/omp/test-deterministic-publish.ps1" -Project WorkerProcessHost,Portal,Auth,Content,Iframe,Example,Blazor,ServiceWeb,WorkerWeb -UseIsolatedBuildRoots -OutputRoot "$env:RUNNER_TEMP/razor-determinism"'
+      - name: Verify endpoint ordering and content sensitivity
+        shell: pwsh
+        run: python scripts/omp/test-static-web-assets.py --output artifacts/static-assets-test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: razor-determinism-${{ matrix.shell }}
+          path: |
+            ${{ runner.temp }}/razor-determinism/hashes.json
+            ${{ runner.temp }}/razor-determinism/metadata-probe.log
+            ${{ runner.temp }}/razor-determinism/*/*.publish.log
+
+  razor-cross-shell:
+    needs: razor-determinism
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: razor-determinism-*
+          path: artifacts/razor-shells
+      - name: Compare payload and package hashes between independent Windows runners
+        shell: pwsh
+        run: python scripts/omp/compare-publish-evidence.py artifacts/razor-shells/razor-determinism-pwsh/hashes.json artifacts/razor-shells/razor-determinism-powershell/hashes.json
+
   module-fragment-ui:
     # Independent of the matrix/gates: Chromium verifies the HTTP/rendering contract
     # without SQL Server. A browser/startup failure fails this job, never skips it.
@@ -147,12 +187,6 @@ jobs:
       - name: Enforce module SQL ownership
         shell: pwsh
         run: .\scripts\omp\Test-ModuleSqlGuards.ps1
-
-      - name: Verify deterministic local publish and artifact packages
-        shell: pwsh
-        run: |
-          & "./scripts/omp/test-deterministic-publish.ps1"
-          & "./scripts/omp/test-deterministic-publish.ps1" -UseIsolatedBuildRoots
 
       - name: Compare installer, canonical and C# artifacts under both PowerShell engines
         shell: pwsh

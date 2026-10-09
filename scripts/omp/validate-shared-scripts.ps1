@@ -114,7 +114,9 @@ $sharedScripts = @(
 # content has changed under the same version" (measured 2026-09-28). A
 # repository without web projects needs neither the file nor the import.
 $sharedWebBuildFiles = @(
-    'build/OpenModulePlatform.DeterministicStaticWebAssets.targets'
+    'build/OpenModulePlatform.DeterministicStaticWebAssets.targets',
+    'build/DeterministicRazor/DeterministicRazor.csproj',
+    'build/DeterministicRazor/DeterministicRazorGenerator.cs'
 )
 
 # The canonical Pester step: the runner and the bootstrap it dot-sources. Three
@@ -187,7 +189,7 @@ function Test-HasWebProject {
     while ($pending.Count -gt 0) {
         $directory = $pending.Pop()
         foreach ($project in [IO.Directory]::GetFiles($directory, '*.csproj')) {
-            if ([IO.File]::ReadAllText($project) -match 'Sdk\s*=\s*"Microsoft\.NET\.Sdk\.Web"') {
+            if ([IO.File]::ReadAllText($project) -match 'Sdk\s*=\s*"Microsoft\.NET\.Sdk\.(Web|Razor)"') {
                 return $true
             }
         }
@@ -410,8 +412,8 @@ if (Test-HasWebProject -Root $consumerRoot) {
         # A verbatim copy that nothing imports changes nothing.
         $importsPath = Join-Path $consumerRoot 'Directory.Build.targets'
         $fileName = [regex]::Escape([IO.Path]::GetFileName($relative))
-        $imported = (Test-Path -LiteralPath $importsPath -PathType Leaf) -and
-            ([IO.File]::ReadAllText($importsPath) -match ('<Import\s+Project="[^"]*build[\\/]' + $fileName + '"'))
+        $imported = $relative -notlike '*.targets' -or ((Test-Path -LiteralPath $importsPath -PathType Leaf) -and
+            ([IO.File]::ReadAllText($importsPath) -match ('<Import\s+Project="[^"]*build[\\/]' + $fileName + '"')))
         if (-not $imported) {
             $drift += "  - $relative matches the canonical copy but the root Directory.Build.targets does not import it."
             continue

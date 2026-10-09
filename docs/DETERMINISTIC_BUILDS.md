@@ -87,7 +87,7 @@ inside signed binaries.
 ```
 
 The check copies tracked build inputs from the working tree, publishes the real
-WorkerProcessHost and its three OMP dependencies in separate paths (including
+WorkerProcessHost, Portal and their OMP dependencies in separate paths (including
 spaces), and changes source timestamps between copies. It compares SHA-256 for
 every published file and the production artifact packer's complete zip. With
 `-UseIsolatedBuildRoots`, the first build is in-tree and the other two use
@@ -96,7 +96,10 @@ that variant: the existing isolation guard correctly rejects roots underneath
 an OMP checkout. `-OutputRoot` selects a fresh evidence directory; publish logs
 and `hashes.json` are retained there on both success and failure.
 
-The normal check runs in local-ci and CI; CI additionally checks isolated roots.
+The default WorkerProcessHost/Portal check runs in local-ci. CI checks all eight
+web apps, WorkerProcessHost and isolated roots under both Windows PowerShell 5.1
+and PowerShell 7, then compares every file and package hash between the two
+independent Windows runners. `-Project` can select a smaller project set.
 The script explicitly sets `GITHUB_ACTIONS=false` during the probe, so CI tests
 the installer/local contract rather than accidentally hiding its regression.
 Pester also checks archive order/timestamp independence, generated worker
@@ -128,15 +131,67 @@ once when introducing these new assembly bytes.
 
 ## Consumers
 
-The changed root props file is OMP-owned, not a Check 15 verbatim shared file;
-referenced OMP projects load it directly. No existing shared `build/*.targets`
-file changed. Consumers need the updated OMP checkout and new component versions
-when their packages contain the rebuilt OMP binaries. Their own assembly paths
-require an equivalent policy in their own repository-specific build props;
-do not replace those props wholesale with OMP's. Consumers using the canonical
-artifact packer receive the zip fix from the updated OMP checkout; independently
-copied packers must be refreshed. Keep consumer changes in their owning repos.
-The inspected consumer build scripts call the packer in their OMP checkout;
-they do not need a copied helper sync. Update that checkout as a unit (packer,
-PowerShell loader and C# encoding source). Consumer artifact versions must
-advance before publishing their new-format packages.
+The root props file is OMP-owned; referenced OMP projects load it directly.
+Consumers must also sync these Check 15 files for their own web/Razor projects:
+
+- `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
+- `build/DeterministicRazor/DeterministicRazor.csproj`
+- `build/DeterministicRazor/DeterministicRazorGenerator.cs`
+
+Keep the root `Directory.Build.targets` import. Do not replace consumer props
+wholesale: preserve their own root and isolated-output PathMap policy. The
+shared target supplies a project-local map only when PathMap is empty. Referenced
+OMP binaries and consumer web outputs change once with this fix, so bump every
+artifact containing them before packaging. This includes non-web artifacts that
+actually reference Web.Shared. Unrelated services need no bump.
+
+Consumers using the canonical artifact packer receive its fix from the updated
+OMP checkout; independently copied packers must be refreshed. Update the OMP
+checkout as a unit (packer, PowerShell loader, encoding source and build files).
+Consumer changes belong in their own repositories.
+
+## Razor source and static endpoint contract
+
+Compiler PathMap alone does not normalize the text produced by the SDK Razor
+generator. Absolute paths remain in `#pragma checksum` and `#line`, and generated
+source is embedded in portable PDBs. TagHelper IDs contain generated-text offsets,
+so different path lengths also change IL. Rewriting directives after generation
+fixes Web.Shared but still leaves Portal different.
+
+The build-only [Razor adapter](../build/DeterministicRazor/README.md) maps the
+generator's AdditionalText paths and project directory through the compiler's
+source resolver before generation. Contents and TargetPath/CssScope metadata are
+preserved. Both Razor Pages and Blazor components keep the selected SDK compiler,
+portable symbols and embedded sources; no debug information is discarded.
+On Windows, Csc resolves a virtual `/_/` directive against the current drive.
+The target maps that drive-qualified virtual root back to `/_/` as well. The
+metadata probe rejects any physical PDB document and requires generated Razor
+documents, so two builds on the same drive cannot hide a cross-drive regression.
+
+The static-assets target now sorts Endpoints, Selectors, ResponseHeaders and
+EndpointProperties ordinally and pins Last-Modified. It preserves all other
+values and unknown arrays. `test-static-web-assets.py` deliberately reverses the
+sets and changes timestamps, then verifies byte equality, idempotence, preserved
+ETags/selection metadata and sensitivity to an actual asset change.
+
+Baseline `58edc7b9`, SDK 10.0.401, two directories of different lengths and source
+timestamps 2020/2024: 4 of 397 Portal publish files differed (Portal and Web.Shared
+DLL/PDB). All 93 embedded Portal Razor sources matched after accounting for
+physical source paths and TagHelper IDs; there were no other source differences.
+View identifiers and RazorCompiledItem attributes were unchanged.
+Static manifests, scoped CSS, compressed files and asset fingerprints all matched
+in that baseline run; the adversarial ordering test covers the intermittent
+manifest-order failure separately. The red package hashes were
+`4181ECB0665979012E9A6C018D15932156BE8730E521515E9D62866E04337C15` and
+`21F0D6BC9CF41A527827F3A951308F2E26A10C0721874B73D5D29FF2D944D9F4`.
+
+After the fix, all 397 Portal publish files matched, including DLL/PDB, manifests,
+CSS, compressed assets and fingerprints. Both package SHA-256 values were
+`1E238FFC50DA52D3CC8C958585EE63739E16ED76F3859E714B77F61A3190FB04`.
+The metadata probe measured 506 virtual PDB documents, including 103 generated
+Razor sources. As a negative control, it rejected the intermediate implementation
+that left Windows drive letters in Razor document names. WorkerProcessHost also
+remained byte-identical (45 files). The eight-web-app two-path matrix passed;
+CI repeats the complete matrix with the final virtual-root guard in both shells.
+These recorded fixture hashes predate subsequent upstream asset/version changes;
+each current run retains its complete `hashes.json` for comparison.
