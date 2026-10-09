@@ -1,4 +1,4 @@
-<Project>
+<Project TreatAsLocalProperty="PathMap">
   <PropertyGroup>
     <Version>0.1.0</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
@@ -8,7 +8,12 @@
     <Product>OpenModulePlatform</Product>
     <Authors>OpenModulePlatform contributors</Authors>
     <NeutralLanguage>en</NeutralLanguage>
-    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Normalize compiler inputs for installer/local builds as well as CI.
+         Deterministic explicitly fixes MVID/PE timestamps to the input content;
+         portable symbols retain debugging without embedding machine paths. -->
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <Deterministic>true</Deterministic>
+    <DebugType>portable</DebugType>
 
     <!--
       Keep the git commit OUT of AssemblyInformationalVersion.
@@ -97,6 +102,22 @@
     <BaseIntermediateOutputPath>$(OmpIsolatedBuildRoot)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     <BaseOutputPath>$(OmpIsolatedBuildRoot)\bin\$(MSBuildProjectName)\</BaseOutputPath>
+  </PropertyGroup>
+
+  <!--
+    SourceLink is intentionally optional above, so its source-root mapping is
+    not sufficient for local builds. Map the checkout ourselves: this covers
+    PDB documents, CallerFilePath literals and the PE CodeView PDB path.
+    Isolated obj/bin have a different layout (obj/Project instead of Project/obj);
+    map those more-specific prefixes first to the SAME virtual in-tree layout.
+    PathMap is local so a package caller's global PathMap cannot suppress these
+    OMP mappings; retain that caller mapping last for any other source roots.
+  -->
+  <PropertyGroup>
+    <_OmpCallerPathMap>$(PathMap)</_OmpCallerPathMap>
+    <PathMap>$(MSBuildThisFileDirectory)=/_/openmoduleplatform/</PathMap>
+    <PathMap Condition="'$(_OmpIsolatedBuildRootIsValid)' == 'true'">$([MSBuild]::EnsureTrailingSlash('$(BaseIntermediateOutputPath)'))=/_/openmoduleplatform/$(MSBuildProjectName)/obj/,$([MSBuild]::EnsureTrailingSlash('$(BaseOutputPath)'))=/_/openmoduleplatform/$(MSBuildProjectName)/bin/,$(PathMap)</PathMap>
+    <PathMap Condition="'$(_OmpCallerPathMap)' != ''">$(PathMap),$(_OmpCallerPathMap)</PathMap>
   </PropertyGroup>
 
   <!--

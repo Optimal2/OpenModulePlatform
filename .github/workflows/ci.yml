@@ -148,6 +148,12 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\Test-ModuleSqlGuards.ps1
 
+      - name: Verify deterministic local publish and artifact packages
+        shell: pwsh
+        run: |
+          & "./scripts/omp/test-deterministic-publish.ps1"
+          & "./scripts/omp/test-deterministic-publish.ps1" -UseIsolatedBuildRoots
+
       - name: Validate component versions
         shell: pwsh
         run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit '${{ steps.base.outputs.sha }}'

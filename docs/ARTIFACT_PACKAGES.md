@@ -131,6 +131,13 @@ decided 2026-10-08:
   carries no empty-directory semantics. `Compress-Archive` used to write
   directory entries for empty subdirectories.
 
+Directory payloads and the outer envelope use ordinal entry order and the ZIP
+epoch (1980-01-01) for entry timestamps. Generated worker compatibility metadata
+uses that timestamp too. Repacking identical inputs with the same toolchain now
+produces identical zip bytes, regardless of checkout/build timestamps. An
+already-zipped input payload is preserved as supplied; its producer remains
+responsible for deterministic bytes. See [deterministic builds](DETERMINISTIC_BUILDS.md).
+
 Universal module packages (`scripts/omp/export-universal-package.ps1` and
 `export-universal-object-root.ps1`) enumerate package files per declared
 folder pattern with `Get-ChildItem -File -Recurse`, so they likewise carry no

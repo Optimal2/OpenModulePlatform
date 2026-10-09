@@ -180,6 +180,7 @@ function Add-WorkerPluginCompatibilityManifest {
         } | ConvertTo-Json -Depth 4
 
         $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+        $entry.LastWriteTime = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
         $stream = $entry.Open()
         try {
             $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
@@ -267,9 +268,22 @@ function Compress-DirectoryToZip {
     $sourceRootFull = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\')
     $archive = [System.IO.Compression.ZipFile]::Open($DestinationZip, [System.IO.Compression.ZipArchiveMode]::Create)
     try {
-        foreach ($file in [System.IO.Directory]::EnumerateFiles($sourceRootFull, '*', [System.IO.SearchOption]::AllDirectories)) {
+        # Zip bytes are artifact identity too. Enumeration order and source file
+        # timestamps vary across fresh checkouts and rebuilds, without changing
+        # content. Ordinal order and the ZIP epoch make both archive layers stable.
+        $files = [string[]]@([System.IO.Directory]::EnumerateFiles($sourceRootFull, '*', [System.IO.SearchOption]::AllDirectories))
+        [Array]::Sort($files, [StringComparer]::Ordinal)
+        foreach ($file in $files) {
             $entryName = $file.Substring($sourceRootFull.Length).TrimStart('\', '/') -replace '\\', '/'
-            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+            $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+            $entry.LastWriteTime = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+            $inputStream = [System.IO.File]::OpenRead($file)
+            try {
+                $outputStream = $entry.Open()
+                try { $inputStream.CopyTo($outputStream) }
+                finally { $outputStream.Dispose() }
+            }
+            finally { $inputStream.Dispose() }
         }
     }
     finally {

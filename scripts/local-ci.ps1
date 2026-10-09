@@ -160,6 +160,9 @@ try {
     }
 
     if (-not $SkipTests) {
+        Invoke-Step 'Deterministic publish and artifact package' {
+            & (Join-Path $repoRoot 'scripts\omp\test-deterministic-publish.ps1')
+        }
         $buildStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         Invoke-Step 'Build solution' {
             dotnet build (Join-Path $repoRoot 'OpenModulePlatform.slnx') --configuration Release --nologo -v q
