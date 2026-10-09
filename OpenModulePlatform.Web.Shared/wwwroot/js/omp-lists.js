@@ -760,7 +760,7 @@
 
     // Where the Popover API exists the popover and its copy box are shown as
     // manual popovers: the browser's top layer puts them above everything,
-    // whatever z-index or overflow the page has around the badge. Manual, not
+    // whatever z-index the page has around the badge. Manual, not
     // auto, because the copy box stands beside the popover and an auto
     // popover would take a click on it for a click outside; closing stays
     // with the document listeners below. Older browsers get plain fixed
@@ -773,11 +773,35 @@
         }
     }
 
+    // showPopover() throws on an element that is not (or no longer) in the
+    // document; the box then stays a plain fixed element rather than leaving
+    // openInfoPopover half done.
     function revealInLayer(element) {
-        if (supportsPopover) {
+        if (!supportsPopover) {
+            return;
+        }
+
+        try {
             element.showPopover();
+        } catch {
+            element.removeAttribute('popover');
         }
     }
+
+    // A modal dialog opened while a popover outside it is up would leave the
+    // popover painted above the dialog but inert there (a modal dialog blocks
+    // everything outside itself), so the popover closes. Dialogs fire a
+    // toggle event (it does not bubble, hence the capture); where they do not,
+    // the click that opened the dialog has closed the popover already.
+    document.addEventListener('toggle', (event) => {
+        if (activeInfoPopover
+            && event.target instanceof HTMLDialogElement
+            && event.newState === 'open'
+            && event.target.matches(':modal')
+            && !event.target.contains(activeInfoPopover)) {
+            closeInfoPopover();
+        }
+    }, true);
 
     function closeInfoPopover() {
         activeInfoPopover?.remove();

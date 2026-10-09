@@ -301,9 +301,6 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
 .info-popover__copy[popover] {
     inset: auto;
     margin: 0;
-}
-
-.info-popover__copy[popover] {
     overflow: visible;
 }
 
