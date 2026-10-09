@@ -274,7 +274,11 @@ foreach ($definitionFile in $definitionFiles) {
 
     if ($changed) {
         $updated = $document | ConvertTo-Json -Depth $jsonDepth
-        [System.IO.File]::WriteAllText($definitionFile.FullName, $updated + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+        # The packer copies the definition file raw, so its bytes must match a CI
+        # LF checkout. ConvertTo-Json emits the platform newline ([Environment]::NewLine
+        # would be CRLF here); normalize to LF exactly like bump-version.ps1.
+        $portableJson = ($updated + "`n").Replace("`r`n", "`n")
+        [System.IO.File]::WriteAllText($definitionFile.FullName, $portableJson, [System.Text.UTF8Encoding]::new($false))
         Write-Host "Embedded SQL in $($definitionFile.Name)"
     }
 }

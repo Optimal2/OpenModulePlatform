@@ -4,6 +4,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 
@@ -75,6 +76,29 @@ changed['Endpoints'][0]['AssetFile'] = 'changed.js.gz'
 assert normalize('changed', changed) != first, 'A real asset change lost its identity'
 print('PASS: endpoint ordering, timestamps, idempotence, semantics and content sensitivity.')
 
+# The normalizer must tolerate the shapes a real publish manifest can carry:
+# endpoints that omit Selectors/ResponseHeaders/EndpointProperties entirely, and
+# members that are JSON null. Neither may crash (MSB4018/NRE) nor change bytes
+# when the endpoint order is permuted.
+sparse = {'Route': 'missing.js', 'AssetFile': 'missing.js', 'FutureOrderedField': ['z', 'a']}
+nulls = {
+    'Route': 'nulls.js', 'AssetFile': 'nulls.js',
+    'Selectors': None, 'ResponseHeaders': None, 'EndpointProperties': None,
+    'FutureOrderedField': ['z', 'a'],
+}
+sparse_manifest = {'Version': 1, 'ManifestType': 'Publish', 'Endpoints': [copy.deepcopy(sparse), copy.deepcopy(nulls)]}
+sparse_permuted = copy.deepcopy(sparse_manifest)
+sparse_permuted['Endpoints'].reverse()
+sparse_first = normalize('sparse', sparse_manifest)
+sparse_second = normalize('sparse-permuted', sparse_permuted)
+assert sparse_first == sparse_second, 'Null/missing members changed published bytes'
+sparse_actual = json.loads(sparse_first)
+assert {e['Route'] for e in sparse_actual['Endpoints']} == {'missing.js', 'nulls.js'}
+for item in sparse_actual['Endpoints']:
+    assert item['FutureOrderedField'] == ['z', 'a']
+    assert item['AssetFile'] in ('missing.js', 'nulls.js')
+print('PASS: null and missing endpoint members are tolerated deterministically.')
+
 # A consumer and its OMP reference both carry this helper project and pass the
 # same isolated root. Their obj/bin must not collide within that build graph.
 paths = []
@@ -96,3 +120,65 @@ for name in ['platform', 'consumer with spaces']:
     assert '=/_/omp-build/bin/' in properties['PathMap']
 assert len(set(paths)) == 4, 'Consumer/platform helper copies share obj/bin'
 print('PASS: consumer and platform Razor helper copies have distinct isolated outputs.')
+
+# A consumer does not live inside the OMP repository: it imports the shared build
+# files from its own Directory.Build.targets. Build a tiny Razor web project from
+# two different source paths (one with spaces and a longer name) and require
+# identical assembly and PDB bytes, proving the determinism wrapper maps the
+# consumer's project directory to a virtual path at both locations.
+fixture = root / 'consumer-fixture'
+(fixture / 'Pages').mkdir(parents=True)
+(fixture / 'consumer.csproj').write_text(
+    '<Project Sdk="Microsoft.NET.Sdk.Web">\n'
+    '  <PropertyGroup>\n'
+    '    <TargetFramework>net10.0</TargetFramework>\n'
+    '    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>\n'
+    '    <Deterministic>true</Deterministic>\n'
+    '    <DebugType>portable</DebugType>\n'
+    '    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>\n'
+    '    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>\n'
+    '  </PropertyGroup>\n'
+    '</Project>\n',
+    encoding='utf-8')
+(fixture / 'Directory.Build.targets').write_text(
+    '<Project>\n'
+    '  <Import Project="' + str(repo / 'build/OpenModulePlatform.DeterministicStaticWebAssets.targets').replace('\\', '/') + '" />\n'
+    '</Project>\n',
+    encoding='utf-8')
+(fixture / 'Pages' / 'Index.cshtml').write_text(
+    '@page\n<h1>Determinism fixture</h1>\n<p>@(1 + 1)</p>\n',
+    encoding='utf-8')
+# Microsoft.NET.Sdk.Web sets OutputType=Exe, so the fixture needs an entry point
+# just like a real consumer module; Razor Pages render from the .cshtml above.
+(fixture / 'Program.cs').write_text(
+    'using Microsoft.AspNetCore.Builder;\n'
+    'using Microsoft.Extensions.DependencyInjection;\n'
+    'var builder = WebApplication.CreateBuilder(args);\n'
+    'builder.Services.AddRazorPages();\n'
+    'var app = builder.Build();\n'
+    'app.MapRazorPages();\n'
+    'app.Run();\n',
+    encoding='utf-8')
+
+
+def build_consumer(source, isolated):
+    subprocess.run([
+        'dotnet', 'build', str(source / 'consumer.csproj'),
+        '-c', 'Release', '--nologo',
+        '-p:OmpIsolatedBuildRoot=' + str(isolated),
+    ], check=True, capture_output=True, text=True, timeout=300, env=env)
+
+
+consumer_bytes = {}
+for leg in ['consumer-a', 'consumer with spaces and longer path']:
+    source = root / leg
+    shutil.copytree(fixture, source)
+    build_consumer(source, root / (leg + '-isolated'))
+    out = source / 'bin' / 'Release' / 'net10.0'
+    consumer_bytes[leg] = (
+        (out / 'consumer.dll').read_bytes(),
+        (out / 'consumer.pdb').read_bytes(),
+    )
+assert consumer_bytes['consumer-a'] == consumer_bytes['consumer with spaces and longer path'], \
+    'Consumer-like Razor build differs between two source paths'
+print('PASS: consumer-like Razor web build is byte-identical from two source paths.')

@@ -344,7 +344,10 @@ function Write-WidgetPackageFile {
     }
 
     $json = $document | ConvertTo-Json -Depth 50
-    [System.IO.File]::WriteAllText($DestinationPath, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    # The widget package file is published raw, so write LF (not the platform
+    # newline) so a Windows build matches a CI LF checkout, as bump-version.ps1 does.
+    $portableJson = ($json + "`n").Replace("`r`n", "`n")
+    [System.IO.File]::WriteAllText($DestinationPath, $portableJson, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Read-ConfigurationMappings {
