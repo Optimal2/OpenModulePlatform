@@ -5,6 +5,8 @@ Artifact identity must survive a fresh checkout or an isolated build directory.
 for local builds as well as CI, uses portable PDBs, and maps source paths to
 `/_/openmoduleplatform/`. Isolated `obj/<project>` and `bin/<project>` directories
 map to the equivalent virtual `<project>/obj` and `<project>/bin` paths.
+For nested projects this uses their actual repository-relative directory, not
+the project name (for example `examples/WebAppModule/WebApp/obj`).
 Caller-supplied PathMap entries are retained after the OMP mappings, including
 when the installer passes PathMap as a global MSBuild property.
 
@@ -137,6 +139,7 @@ Consumers must also sync these Check 15 files for their own web/Razor projects:
 - `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
 - `build/DeterministicRazor/DeterministicRazor.csproj`
 - `build/DeterministicRazor/DeterministicRazorGenerator.cs`
+- `scripts/omp/bump-version.ps1` (published definition JSON now uses LF immediately)
 
 Keep the root `Directory.Build.targets` import. Do not replace consumer props
 wholesale: preserve their own root and isolated-output PathMap policy. The
@@ -167,6 +170,10 @@ On Windows, Csc resolves a virtual `/_/` directive against the current drive.
 The target maps that drive-qualified virtual root back to `/_/` as well. The
 metadata probe rejects any physical PDB document and requires generated Razor
 documents, so two builds on the same drive cannot hide a cross-drive regression.
+Razor command-line builds use a fresh compiler process to avoid retained SDK
+parsing state across relocated builds with identical virtual paths. The bump
+helper writes LF JSON so a local post-bump publish and a fresh checkout publish
+use the same definition bytes, as declared by `.gitattributes`.
 
 The static-assets target now sorts Endpoints, Selectors, ResponseHeaders and
 EndpointProperties ordinally and pins Last-Modified. It preserves all other

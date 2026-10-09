@@ -116,8 +116,9 @@
   -->
   <PropertyGroup>
     <_OmpCallerPathMap>$(PathMap)</_OmpCallerPathMap>
+    <_OmpProjectRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').Replace('\', '/'))</_OmpProjectRelativePath>
     <PathMap>$(MSBuildThisFileDirectory)=/_/openmoduleplatform/</PathMap>
-    <PathMap Condition="'$(_OmpIsolatedBuildRootIsValid)' == 'true'">$([MSBuild]::EnsureTrailingSlash('$(BaseIntermediateOutputPath)'))=/_/openmoduleplatform/$(MSBuildProjectName)/obj/,$([MSBuild]::EnsureTrailingSlash('$(BaseOutputPath)'))=/_/openmoduleplatform/$(MSBuildProjectName)/bin/,$(PathMap)</PathMap>
+    <PathMap Condition="'$(_OmpIsolatedBuildRootIsValid)' == 'true'">$([MSBuild]::EnsureTrailingSlash('$(BaseIntermediateOutputPath)'))=/_/openmoduleplatform/$(_OmpProjectRelativePath)/obj/,$([MSBuild]::EnsureTrailingSlash('$(BaseOutputPath)'))=/_/openmoduleplatform/$(_OmpProjectRelativePath)/bin/,$(PathMap)</PathMap>
     <PathMap Condition="'$(_OmpCallerPathMap)' != ''">$(PathMap),$(_OmpCallerPathMap)</PathMap>
   </PropertyGroup>
 

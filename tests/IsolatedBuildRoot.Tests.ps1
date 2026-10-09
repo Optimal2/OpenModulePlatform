@@ -49,6 +49,15 @@ Describe 'OmpIsolatedBuildRoot validation' {
         $result.Text | Should -Match 'absolute path'
     }
 
+    It 'Maps nested example intermediates to their actual in-tree layout' {
+        $example = Join-Path $script:repositoryRoot 'examples/WebAppModule/WebApp/OpenModulePlatform.Web.ExampleWebAppModule.csproj'
+        # Evaluation only: the external root is not created or written to.
+        $map = (& dotnet msbuild $example -nologo -getProperty:PathMap ('-p:OmpIsolatedBuildRoot=' + $script:outsideRoot) | Out-String).Trim()
+        $LASTEXITCODE | Should -Be 0
+        $map | Should -Match '=/_/openmoduleplatform/examples/WebAppModule/WebApp/obj/'
+        $map | Should -Match '=/_/openmoduleplatform/examples/WebAppModule/WebApp/bin/'
+    }
+
     It 'Fails an absolute OmpIsolatedBuildRoot inside this repository' {
         $result = Invoke-Probe -IsolatedBuildRoot (Join-Path $script:repositoryRoot 'artifacts\omp-isolated-build')
         $result.ExitCode | Should -Not -Be 0

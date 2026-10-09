@@ -38,6 +38,11 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $moduleDefinition.compatibleArtifacts[0].maxVersion | Should -Be '1.0.1'
+            foreach ($path in @($moduleDefinitionPath, (Join-Path $repoRoot 'omp-components.json'))) {
+                $text = [IO.File]::ReadAllText($path)
+                $text.Contains("`r") | Should -Be $false
+                $text.EndsWith("`n") | Should -Be $true
+            }
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot

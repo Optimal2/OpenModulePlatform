@@ -25,6 +25,10 @@ root back to the virtual root when Csc resolves generated line directives.
 When an isolated build root is supplied, a stable hash of each helper copy's
 physical directory separates the consumer and platform copies' obj/bin. Those
 intermediates are mapped to the same virtual paths for compiler determinism.
+Command-line Razor compilation uses a fresh compiler process. Reusing the
+compiler server across relocated builds with identical virtual paths produced
+inconsistent Auth Razor parsing during the three-leg CI probe; the source files
+were identical. Design-time builds retain the SDK defaults.
 
 The adapter explicitly loads the SDK's Razor dependencies in its analyzer load
 context. Registering the SDK compiler as another analyzer would run the original

@@ -13,6 +13,10 @@
     <PathMap Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(PathMap),$([System.IO.Path]::GetPathRoot('$(MSBuildProjectDirectory)'))_\=/_/</PathMap>
     <OmpRazorCompilerDirectory>$(MSBuildToolsPath)/Sdks/Microsoft.NET.Sdk.Razor/source-generators</OmpRazorCompilerDirectory>
     <WarningsAsErrors>$(WarningsAsErrors);CS8784;CS8785</WarningsAsErrors>
+    <!-- The SDK Razor compiler retains state across server requests. Relocated
+         inputs deliberately share virtual paths; use a fresh compiler process
+         so repeated builds cannot reuse stale Razor parsing state. -->
+    <UseSharedCompilation>false</UseSharedCompilation>
   </PropertyGroup>
   <ItemGroup Condition="'$(UsingMicrosoftNETSdkRazor)' == 'true' and '$(UseRazorSourceGenerator)' != 'false' and '$(OmpDeterministicRazor)' != 'false' and '$(DesignTimeBuild)' != 'true'">
     <CompilerVisibleProperty Include="OmpRazorCompilerDirectory" />
