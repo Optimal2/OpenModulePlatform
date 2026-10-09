@@ -29,8 +29,13 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-      - name: Compare every web publish and package across source and intermediate paths
-        shell: ${{ matrix.shell }}
+      - name: Compare every web publish and package under PowerShell 7
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        run: '& "./scripts/omp/test-deterministic-publish.ps1" -Project WorkerProcessHost,Portal,Auth,Content,Iframe,Example,Blazor,ServiceWeb,WorkerWeb -UseIsolatedBuildRoots -OutputRoot "$env:RUNNER_TEMP/razor-determinism"'
+      - name: Compare every web publish and package under Windows PowerShell 5.1
+        if: matrix.shell == 'powershell'
+        shell: powershell
         run: '& "./scripts/omp/test-deterministic-publish.ps1" -Project WorkerProcessHost,Portal,Auth,Content,Iframe,Example,Blazor,ServiceWeb,WorkerWeb -UseIsolatedBuildRoots -OutputRoot "$env:RUNNER_TEMP/razor-determinism"'
       - name: Verify endpoint ordering and content sensitivity
         shell: pwsh
