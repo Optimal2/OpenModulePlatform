@@ -758,6 +758,27 @@
     let activeInfoBadge = null;
     let activeInfoCopy = null;
 
+    // Where the Popover API exists the popover and its copy box are shown as
+    // manual popovers: the browser's top layer puts them above everything,
+    // whatever z-index or overflow the page has around the badge. Manual, not
+    // auto, because the copy box stands beside the popover and an auto
+    // popover would take a click on it for a click outside; closing stays
+    // with the document listeners below. Older browsers get plain fixed
+    // elements, as before.
+    const supportsPopover = typeof HTMLElement.prototype.showPopover === 'function';
+
+    function markForLayer(element) {
+        if (supportsPopover) {
+            element.setAttribute('popover', 'manual');
+        }
+    }
+
+    function revealInLayer(element) {
+        if (supportsPopover) {
+            element.showPopover();
+        }
+    }
+
     function closeInfoPopover() {
         activeInfoPopover?.remove();
         activeInfoCopy?.remove();
@@ -805,9 +826,15 @@
         body.className = 'info-popover__body';
         body.textContent = text;
         popover.appendChild(body);
-        // Inside a modal <dialog> the popover must live in the dialog's
-        // top layer - a body-appended element would render beneath it.
+        markForLayer(popover);
+        markForLayer(copy);
+        // Inside a modal <dialog> the popover must live in the dialog: a
+        // body-appended element renders beneath it without the Popover API,
+        // and with it is inert (a modal dialog blocks everything outside
+        // itself, top layer or not), so the copy box would not take a click.
         (badge.closest('dialog') || document.body).appendChild(popover);
+        // Shown before it is measured: a popover not yet shown has no size.
+        revealInLayer(popover);
 
         const rect = badge.getBoundingClientRect();
         const maxLeft = window.innerWidth - popover.offsetWidth - 8;
@@ -816,6 +843,7 @@
         popover.style.left = `${popoverLeft}px`;
 
         popover.parentNode.appendChild(copy);
+        revealInLayer(copy);
         // The copy box's OUTER height equals what the popover's outer height
         // is with exactly one line of text (padding + line + borders), and
         // the two boxes share their top edge. Width follows the content.

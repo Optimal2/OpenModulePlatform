@@ -8,6 +8,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **List info popovers in the browser's top layer.** Where the browser has
+  the Popover API, the info popover of `.info-badge` and `.list-message`
+  and its copy box are shown as manual popovers, so they lie above every
+  element on the page whatever its z-index, and a box with
+  `overflow: hidden` around the badge no longer covers them. Placement,
+  closing (a click outside, Escape, the opener again) and the copy box are
+  unchanged, and inside a modal dialog both still live in the dialog so
+  the copy box takes a click. Older browsers get the fixed boxes as before.
+
 - **Maintenance scan: a paused instance still owns its directory.** The
   orphan scan judged ownership from the set the HostAgent deploys right now
   (instances that are enabled, allowed, desired and provisioned), so the

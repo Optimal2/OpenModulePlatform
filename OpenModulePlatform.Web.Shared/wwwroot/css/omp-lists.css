@@ -294,6 +294,19 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     z-index: 100;
 }
 
+/* Shown as a popover (omp-lists.js, where the browser has the Popover API):
+   the browser's own popover rules centre the box (inset: 0, margin: auto)
+   and size it by its content; the script places both boxes by top/left. */
+.info-popover[popover],
+.info-popover__copy[popover] {
+    inset: auto;
+    margin: 0;
+}
+
+.info-popover__copy[popover] {
+    overflow: visible;
+}
+
 .info-popover__body {
     max-height: min(60vh, 420px);
     overflow-y: auto;
