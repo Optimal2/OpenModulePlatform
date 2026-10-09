@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser()
@@ -122,11 +123,17 @@ assert len(set(paths)) == 4, 'Consumer/platform helper copies share obj/bin'
 print('PASS: consumer and platform Razor helper copies have distinct isolated outputs.')
 
 # A consumer does not live inside the OMP repository: it imports the shared build
-# files from its own Directory.Build.targets. Build a tiny Razor web project from
-# two different source paths (one with spaces and a longer name) and require
-# identical assembly and PDB bytes, proving the determinism wrapper maps the
-# consumer's project directory to a virtual path at both locations.
-fixture = root / 'consumer-fixture'
+# files from its own Directory.Build.targets. The fixture is therefore built in
+# the real system temp, OUTSIDE this repository. Under --output it would sit
+# inside the repo and inherit this repository's Directory.Build.props, whose
+# repo-root PathMap maps the two source paths below to different virtual paths
+# and makes the two builds differ (reproduced when local-ci.ps1 passed --output
+# under artifacts/). Build a tiny Razor web project from two different source
+# paths (one with spaces and a longer name) and require identical assembly and
+# PDB bytes, proving the determinism wrapper maps the consumer's project
+# directory to a virtual path at both locations.
+consumer_root = Path(tempfile.mkdtemp(prefix='omp-consumer-fixture-')).resolve()
+fixture = consumer_root / 'template'
 (fixture / 'Pages').mkdir(parents=True)
 (fixture / 'consumer.csproj').write_text(
     '<Project Sdk="Microsoft.NET.Sdk.Web">\n'
@@ -170,15 +177,18 @@ def build_consumer(source, isolated):
 
 
 consumer_bytes = {}
-for leg in ['consumer-a', 'consumer with spaces and longer path']:
-    source = root / leg
-    shutil.copytree(fixture, source)
-    build_consumer(source, root / (leg + '-isolated'))
-    out = source / 'bin' / 'Release' / 'net10.0'
-    consumer_bytes[leg] = (
-        (out / 'consumer.dll').read_bytes(),
-        (out / 'consumer.pdb').read_bytes(),
-    )
-assert consumer_bytes['consumer-a'] == consumer_bytes['consumer with spaces and longer path'], \
-    'Consumer-like Razor build differs between two source paths'
-print('PASS: consumer-like Razor web build is byte-identical from two source paths.')
+try:
+    for leg in ['consumer-a', 'consumer with spaces and longer path']:
+        source = consumer_root / leg
+        shutil.copytree(fixture, source)
+        build_consumer(source, consumer_root / (leg + '-isolated'))
+        out = source / 'bin' / 'Release' / 'net10.0'
+        consumer_bytes[leg] = (
+            (out / 'consumer.dll').read_bytes(),
+            (out / 'consumer.pdb').read_bytes(),
+        )
+    assert consumer_bytes['consumer-a'] == consumer_bytes['consumer with spaces and longer path'], \
+        'Consumer-like Razor build differs between two source paths'
+    print('PASS: consumer-like Razor web build is byte-identical from two source paths.')
+finally:
+    shutil.rmtree(consumer_root, ignore_errors=True)
