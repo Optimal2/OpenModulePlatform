@@ -8,6 +8,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Dashboard refresh submenu placed by CSS anchor positioning.** Where the
+  browser has it (Chromium 129), the submenu is a popover in the top layer
+  anchored to its tile; CSS opens it above the tile and flips it below or
+  leftward when the viewport leaves no room, sized to the room on that side.
+  The script still measures the placed list and corrects it where CSS cannot
+  (under the fixed header, and on Chromium 129-143 whose spanning areas may
+  overflow). Older browsers keep the script's own positioning, untouched,
+  behind `@supports`.
+
 - **List info popovers in the browser's top layer.** Where the browser has
   the Popover API, the info popover of `.info-badge` and `.list-message`
   and its copy box are shown as manual popovers, so they lie above every

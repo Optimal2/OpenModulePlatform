@@ -8382,6 +8382,61 @@ tr.linkbox-editor-row--dragging {
     right: 0;
 }
 
+/* With CSS anchor positioning (Chromium 129) the list is a manual popover in
+   the top layer, anchored to its tile: it opens above the tile along its left
+   edge, and the browser flips it below or leftward when the viewport leaves
+   no room, sized to the room on that side. The tile's tuck transform is not
+   part of layout, so the list anchors to the tile's fanned-out place, as the
+   script's measurement did. The script still measures the placed list and
+   corrects it through the same is-below / is-right classes (below the fixed
+   header, which CSS cannot see; and in Chromium 129-143, where a spanning
+   position-area could still let the box overflow the viewport): on a browser
+   whose CSS already placed it right the measurement agrees and changes
+   nothing. Behind @supports with the script's own positioning as the reserve
+   until the fleet's Edge version is known; the popover attribute is set by
+   the script only when both hold. */
+@supports (position-area: top) and (anchor-name: --dashboard-refresh-trigger) {
+    .dashboard-refresh-menu__trigger {
+        anchor-name: --dashboard-refresh-trigger;
+    }
+
+    .dashboard-refresh-menu__list[popover] {
+        position: fixed;
+        position-anchor: --dashboard-refresh-trigger;
+        position-area: top span-right;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+        inset: auto;
+        /* The gap toward the tile; a block flip mirrors it to the other side. */
+        margin: 0 0 8px;
+        max-height: calc(100% - 8px);
+        z-index: auto;
+    }
+
+    .dashboard-refresh-menu__list[popover]:not(:popover-open) {
+        display: none;
+    }
+
+    .dashboard-refresh-menu.is-below .dashboard-refresh-menu__list[popover] {
+        position-area: bottom span-right;
+        position-try-fallbacks: flip-inline;
+        /* The script's base is-below/is-right rules set top/right insets for
+           the absolute list; a popover is placed by its area alone. */
+        inset: auto;
+        margin: 8px 0 0;
+    }
+
+    .dashboard-refresh-menu.is-right .dashboard-refresh-menu__list[popover] {
+        position-area: top span-left;
+        position-try-fallbacks: flip-block;
+        inset: auto;
+    }
+
+    .dashboard-refresh-menu.is-below.is-right .dashboard-refresh-menu__list[popover] {
+        position-area: bottom span-left;
+        position-try-fallbacks: none;
+    }
+}
+
 .dashboard-refresh-menu__option {
     display: flex;
     align-items: center;

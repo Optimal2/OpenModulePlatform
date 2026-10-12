@@ -4525,13 +4525,53 @@
         // click elsewhere, Escape or focus leaving folds it. Unpinned: opened by
         // a hover, folded by a hover away.
         let pinned = false;
+        // CSS anchor positioning (Chromium 129) places the list when the
+        // browser has it (and the Popover API, which puts the list in the top
+        // layer where its containing block is the viewport rather than the
+        // transformed tile); otherwise the script positions it as before. The
+        // script measures the placed list either way and corrects through the
+        // same classes, so a browser whose anchor positioning is incomplete
+        // still ends up with the list in view. See site.css,
+        // .dashboard-refresh-menu__list[popover].
+        let anchored = typeof HTMLElement.prototype.showPopover === 'function'
+            && typeof CSS !== 'undefined'
+            && CSS.supports('position-area: top')
+            && CSS.supports('anchor-name: --dashboard-refresh-trigger');
+        if (anchored) {
+            list.setAttribute('popover', 'manual');
+        }
+        const showList = (open) => {
+            if (!anchored) {
+                return;
+            }
+
+            try {
+                if (open) {
+                    if (!list.matches(':popover-open')) {
+                        list.showPopover();
+                    }
+                } else if (list.matches(':popover-open')) {
+                    list.hidePopover();
+                }
+            } catch {
+                // The top layer refused (the list is not in the document, or is
+                // inside an inert ancestor): fall back to script positioning
+                // for the rest of the page's life.
+                anchored = false;
+                list.removeAttribute('popover');
+            }
+        };
         const setOpen = (open, pin = false) => {
             window.clearTimeout(closeTimer);
             closeTimer = 0;
+            if (!open) {
+                showList(false);
+            }
             list.hidden = !open;
             pinned = open && pin;
             trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
             if (open) {
+                showList(true);
                 positionList();
             }
         };
@@ -4546,7 +4586,9 @@
         const positionList = () => {
             menu.classList.remove('is-below', 'is-right');
             list.style.maxHeight = '';
-            const shift = (() => {
+            // In the top layer the list is not inside the tile's transform, so
+            // there is nothing to take out of the measurement.
+            const shift = anchored ? 0 : (() => {
                 try { return new DOMMatrixReadOnly(window.getComputedStyle(menu).transform).e || 0; } catch { return 0; }
             })();
             const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
