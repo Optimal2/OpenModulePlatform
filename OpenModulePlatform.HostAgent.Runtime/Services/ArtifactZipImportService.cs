@@ -1430,14 +1430,36 @@ public sealed class ArtifactZipImportService
             }
         }
 
-        // The missing-object repair above already executed the required scripts, so skip
-        // the broad post-apply repair pass for this non-core module to avoid duplicating work.
-        if (context.Applied && !context.RequiresPreApplySqlRepairs && healedScripts.Count == 0)
+        // On HostAgent the apply step always marks the document applied when the
+        // version gate passes, so context.Applied covers both a newer package
+        // version and an equal-version re-import. The strictly-newer-installed
+        // gate stays: an older package version never runs its scripts here.
+        if (context.Applied && !context.RequiresPreApplySqlRepairs)
         {
-            repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
-                context.ModuleDefinitionDocumentId,
-                cancellationToken);
+            // Row-only initialization is invisible to the object witness. Run
+            // the remaining current hashes without repeating the schema heal.
+            var healed = healedScripts.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var pending = (await _repository.GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+                    context.ModuleDefinitionDocumentId,
+                    cancellationToken))
+                .Where(key => !healed.Contains(key))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (pending.Count > 0)
+            {
+                repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                    context.ModuleDefinitionDocumentId,
+                    pending,
+                    cancellationToken);
+            }
         }
+
+        // An applied document must never leave a declared script without a
+        // successful execution for its current content. Failing the import
+        // here keeps a future skip path from repeating that silence.
+        await VerifyAppliedDefinitionScriptsExecutedAsync(
+            context.ModuleDefinitionDocumentId,
+            definition,
+            cancellationToken);
 
         // Initialization SQL can create app instances after the last Portal definition
         // import. Reconcile here for every module, including skipped older definitions,
@@ -1473,6 +1495,44 @@ public sealed class ArtifactZipImportService
         {
             HealedScripts = healedScripts
         };
+    }
+
+    /// <summary>
+    /// Fails when the given module definition document is marked applied while
+    /// any of its declared non-validation scripts lacks a successful execution
+    /// for its current content hash. Internal so the witness tests can drive a
+    /// stuck document directly instead of locating this method by reflection.
+    /// </summary>
+    internal async Task VerifyAppliedDefinitionScriptsExecutedAsync(
+        int moduleDefinitionDocumentId,
+        ModuleDefinitionImportDocument definition,
+        CancellationToken cancellationToken)
+    {
+        var unexecuted = await _repository.GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+            moduleDefinitionDocumentId,
+            cancellationToken);
+        if (unexecuted.Count == 0)
+        {
+            return;
+        }
+
+        if (!await _repository.IsModuleDefinitionDocumentAppliedAsync(
+                moduleDefinitionDocumentId,
+                cancellationToken))
+        {
+            return;
+        }
+
+        _logger.LogError(
+            "Module definition '{ModuleKey}' {DefinitionVersion} is marked applied, but {Count} declared script(s) have no successful execution for their current content: {Scripts}. Treat this import as failed until those scripts have run.",
+            definition.ModuleKey,
+            definition.DefinitionVersion,
+            unexecuted.Count,
+            string.Join(", ", unexecuted));
+        throw new InvalidOperationException(
+            $"Module definition '{definition.ModuleKey}' {definition.DefinitionVersion} is marked applied, "
+            + $"but {unexecuted.Count} declared script(s) have no successful execution for their current content: {string.Join(", ", unexecuted)}. "
+            + "The import is marked failed; re-import once the scripts can run.");
     }
 
     private static bool RequiresPreApplySqlRepairs(ModuleDefinitionImportDocument definition)

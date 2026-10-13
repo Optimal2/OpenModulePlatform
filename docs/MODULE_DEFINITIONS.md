@@ -1120,13 +1120,13 @@ schema, Portal, and HostAgent. Remaining modules can then be added from Portal,
 from a controlled installer, or from an import folder without coupling every
 module to the base installer.
 
-### Import is version-gated, not schema-gated
+### Definition versions and SQL repair passes
 
 A common operator mistake is to assume that importing the latest artifact zip
 automatically brings the database schema up to date. It does not. Artifact
 import only creates or updates `omp.Artifacts` rows; it never executes
-module-definition SQL. Schema changes are applied only when a module
-definition with a **newer** `definitionVersion` is applied.
+module-definition SQL. Module-definition imports apply the version contract
+and perform the SQL repair passes described below.
 
 The version gate works like this:
 
@@ -1135,16 +1135,31 @@ The version gate works like this:
 - When an artifact zip is imported, the import validates the artifact against
   the already-applied definition. It does not re-evaluate the module SQL
   scripts.
-- If the SQL in the source repository has changed but `definitionVersion` was
-  not bumped, the new SQL is present in the package but ignored, because the
-  applied definition version is already equal or newer.
+- Changed definition content must have a new `definitionVersion`. Re-importing
+  an unchanged version can complete its missing SQL executions; it does not
+  replace the stored definition with different content under the same version.
+
+Two repair passes run beyond that gate, for the imported definition version:
+
+- Scripts whose declared objects (schemas, tables, columns, indexes,
+  constraints, triggers, validation probe) are missing are re-executed, even
+  when the installed version is newer than or equal to the package.
+- Scripts with no successful execution recorded for their current content hash
+  are executed when the package version is newer than or equal to the applied
+  one, even if another script already healed in the same import. An older
+  package version never runs its scripts here.
+
+An applied document must never leave a declared non-validation script without
+a successful execution for its current content; HostAgent logs an error and
+fails the import if that state is reached.
 
 This means uploading a package with "all latest code" can still leave the
 database schema behind if the definition version was already bumped in a
 previous import. The safe operator mental model is:
 
-> Uploading a package does NOT guarantee schema migration; it only runs SQL if
-> the package's `definitionVersion` is newer than what is registered.
+> Import the module definition as well as the artifacts. An equal-version
+> re-import repairs missing objects and missing script executions, but changing
+> the definition content still requires a version bump.
 
 When schema is behind:
 

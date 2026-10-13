@@ -476,9 +476,16 @@ public sealed class PortableModulePackageService
                         ? await _repo.GetMissingRequiredObjectsByScriptKeyAsync(definition.DefinitionJson, ct)
                         : null;
                     var hasMissingRequiredObjects = missingObjectsByScriptKey is { Count: > 0 };
+                    // An equal-version re-import must NOT skip here: the installed
+                    // scripts may never have run, and only
+                    // the full import below runs scripts that lack a successful
+                    // execution for their current content. Skipping stays for a
+                    // strictly newer installed version, whose scripts belong to
+                    // that version.
                     if (quickImportState?.TryGetModuleDefinitionSkipMessage(definition, out var skipMessage) == true
                         && !RequiresPreApplySqlRepairs(definition)
-                        && !hasMissingRequiredObjects)
+                        && !hasMissingRequiredObjects
+                        && quickImportState.IsInstalledModuleDefinitionVersionStrictlyNewer(definition))
                     {
                         results.Add(new UniversalPackageImportItemResult(
                             "module-definition",
@@ -1311,6 +1318,7 @@ public sealed class PortableModulePackageService
                     var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
                         definition.DefinitionJson,
                         ct);
+                    var healedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     if (missingByScript.Count > 0)
                     {
                         var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -1319,6 +1327,7 @@ public sealed class PortableModulePackageService
                             scriptKeys,
                             ct);
                         repairCount += repairResult.ExecutedCount;
+                        healedKeys.UnionWith(scriptKeys);
                         var missingBefore = missingByScript.SelectMany(static item => item.Value).ToList();
 
                         // Measure again. Saying "healed" without re-checking is how R4-B1's unique
@@ -1345,16 +1354,38 @@ public sealed class PortableModulePackageService
                                 + "The import is recorded, but this module's storage is not in the state its definition declares.");
                         }
                     }
-                }
 
-                // Non-platform-core modules keep the existing post-apply repair behavior,
-                // but only when the missing-object heal above did not already run.
-                if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && warnings.Count == 0)
-                {
-                    var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
-                        saveResult.ModuleDefinitionDocumentId,
-                        ct);
-                    repairCount += repairResult.ExecutedCount;
+                    // The heal above ran only the scripts with missing declared
+                    // objects. Row-only initialization is invisible to that
+                    // witness, so run every script that the
+                    // script gate still marks as needing execution -- minus the
+                    // healed ones, which just ran. This also covers an
+                    // equal-version re-import whose scripts never ran: the
+                    // strictly-newer-installed gate stays (an older package
+                    // version never runs its scripts here).
+                    var definitionVersionEqualsApplied = appliedDefinition is not null
+                        && ArtifactVersionComparer.Compare(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) == 0;
+                    if (!keepNewerAppliedDefinition && (applied || definitionVersionEqualsApplied))
+                    {
+                        var checks = await _repo.GetModuleDefinitionSqlChecksAsync(
+                            saveResult.ModuleDefinitionDocumentId,
+                            ct);
+                        var pendingKeys = checks
+                            .Where(static check => !check.IsValidation && check.NeedsExecution && check.CanExecute)
+                            .Select(static check => check.Key)
+                            .Where(key => !healedKeys.Contains(key))
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        if (pendingKeys.Count > 0)
+                        {
+                            var pendingResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                                saveResult.ModuleDefinitionDocumentId,
+                                pendingKeys,
+                                ct);
+                            repairCount += pendingResult.ExecutedCount;
+                            warnings.Add(
+                                $"Executed {pendingResult.ExecutedCount} additional definition script(s) with no successful execution for their current content for module '{definition.ModuleKey}': {string.Join(", ", pendingKeys)}.");
+                        }
+                    }
                 }
             }
             catch (Exception ex) when (!throwOnDefinitionSqlFailure && IsExpectedUniversalImportFailure(ex))
@@ -3010,6 +3041,17 @@ public sealed class PortableModulePackageService
                 definition.DefinitionVersion,
                 $"module definition {definition.ModuleKey}",
                 out message);
+
+        /// <summary>
+        /// Whether the installed module definition version is strictly newer
+        /// than the package version. Only then may a quick import skip the
+        /// definition: an equal version falls through to the full import so
+        /// scripts without a successful execution for their current content
+        /// still run.
+        /// </summary>
+        public bool IsInstalledModuleDefinitionVersionStrictlyNewer(ModuleDefinitionDocumentEditData definition)
+            => _moduleDefinitionVersions.TryGetValue(BuildKey(definition.ModuleKey), out var installedVersion)
+                && ArtifactVersionComparer.Compare(installedVersion, definition.DefinitionVersion) > 0;
 
         public bool TryGetArtifactSkipMessage(ArtifactPackageFile artifact, out string message)
             => TryGetSkipMessage(

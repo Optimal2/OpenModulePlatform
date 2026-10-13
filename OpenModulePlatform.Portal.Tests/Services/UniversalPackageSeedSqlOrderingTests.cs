@@ -176,6 +176,124 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
     }
 
     /// <summary>
+    /// A partial schema repair through the Portal: the setup
+    /// script owns the declared objects (a missing table triggers the targeted
+    /// heal), while the initialize script only inserts rows and declares
+    /// nothing. The broad pass used to be skipped whenever any heal ran, so the
+    /// definition was Applied with the initialize script never executed.
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenSetupHealRuns_ChangedInitializeScriptStillRuns()
+    {
+        const string moduleKey = "seedorderhealpo";
+        const string schemaName = "omp_seedorderhealpo";
+        const string definitionVersion = "1.0.1";
+        var moduleId = await _fixture.InsertModuleAsync(moduleKey, schemaName);
+        var appId = await _fixture.InsertAppAsync(moduleId, AppKey);
+        await _fixture.InsertArtifactAsync(
+            appId,
+            PreviousArtifactVersion,
+            PackageType,
+            TargetName,
+            $"{moduleKey}/{PackageType}/{PreviousArtifactVersion}",
+            new string('a', 64));
+        // No schema objects on purpose: the setup script declares them missing,
+        // so the targeted heal runs for the setup script only.
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, splitSetupAndInitialize: true);
+            var service = CreatePortalService(storeRoot);
+
+            var result = await ImportPortalPackageAsync(service, packagePath);
+
+            var failed = result.Items.Where(static item => item.Status == "Failed").ToList();
+            Assert.True(
+                failed.Count == 0,
+                "Import items failed: " + string.Join("; ", failed.Select(static item => $"{item.Kind} {item.Path}: {item.Message}")));
+            var definitionItem = Assert.Single(
+                result.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", definitionItem.Status);
+            var seeded = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.Contains(PackageArtifactVersion, seeded);
+            Assert.Equal(
+                2,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
+    /// The stuck-installation shape: the first import leaves the definition
+    /// Applied with only the setup script executed, and the same package is
+    /// re-imported with quick import (the Portal UI default). The quick skip
+    /// used to treat an equal installed version as "nothing to do" without
+    /// checking unexecuted scripts, so the re-import never healed. An equal
+    /// version must fall through to the full import; only a strictly newer
+    /// installed version may skip.
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenQuickReimportFollowsStuckImport_InitializeRuns()
+    {
+        const string moduleKey = "seedorderquickre";
+        const string schemaName = "omp_seedorderquickre";
+        const string definitionVersion = "1.0.1";
+        var moduleId = await _fixture.InsertModuleAsync(moduleKey, schemaName);
+        var appId = await _fixture.InsertAppAsync(moduleId, AppKey);
+        await _fixture.InsertArtifactAsync(
+            appId,
+            PreviousArtifactVersion,
+            PackageType,
+            TargetName,
+            $"{moduleKey}/{PackageType}/{PreviousArtifactVersion}",
+            new string('a', 64));
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, splitSetupAndInitialize: true);
+            var service = CreatePortalService(storeRoot);
+
+            var first = await ImportPortalPackageAsync(service, packagePath, quickImport: true);
+            var firstDefinition = Assert.Single(
+                first.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", firstDefinition.Status);
+
+            // Reconstruct the broken installation, rather than re-importing an
+            // already healthy definition: setup succeeded, initialize never ran.
+            await _fixture.ExecuteAsync(
+                $"DELETE FROM [{schemaName}].[SeededVersions];",
+                $"DELETE e FROM omp.ModuleDefinitionSqlExecutions e INNER JOIN omp.ModuleDefinitionDocuments d ON d.ModuleDefinitionDocumentId = e.ModuleDefinitionDocumentId WHERE d.ModuleKey = N'{moduleKey}' AND e.ScriptKey = N'initialize-seedorder-rows';");
+            Assert.Equal(1, await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+
+            var second = await ImportPortalPackageAsync(service, packagePath, quickImport: true);
+            var secondDefinition = Assert.Single(
+                second.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", secondDefinition.Status);
+            var seeded = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.Contains(PackageArtifactVersion, seeded);
+            Assert.Equal(
+                2,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
     /// The other half of the version gate: an unchanged definition re-imported after a
     /// successful run must NOT re-execute its scripts (executions are recorded per
     /// document + script + content hash), and the outcome line must say the skip is
@@ -555,7 +673,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
     private static async Task<UniversalPackageImportResult> ImportPortalPackageAsync(
         PortableModulePackageService service,
         string packagePath,
-        bool executeSqlRepairs = true)
+        bool executeSqlRepairs = true,
+        bool quickImport = false)
     {
         await using var stream = File.OpenRead(packagePath);
         var upload = new FormFile(stream, 0, stream.Length, "packageFile", Path.GetFileName(packagePath));
@@ -569,7 +688,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
                 ReplaceExistingArtifacts: false,
                 ReplaceExistingDashboardWidgets: false,
                 CopyConfigurationFilesFromPreviousVersion: true,
-                UseArtifactsImmediately: true),
+                UseArtifactsImmediately: true,
+                QuickImport: quickImport),
             replaceExistingConfigObjects: false,
             CancellationToken.None);
     }
@@ -595,7 +715,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
         string artifactVersion = PackageArtifactVersion,
         bool includeValidationProbe = false,
         string? seedSqlOverride = null,
-        string seedExecution = "idempotent")
+        string seedExecution = "idempotent",
+        bool splitSetupAndInitialize = false)
     {
         var packagePath = Path.Join(workRoot, $"omp-universal__{moduleKey}__{artifactVersion}.zip");
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
@@ -606,7 +727,7 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
         WriteTextEntry(
             archive,
             $"module-definitions/{moduleKey}.module-definition.json",
-            BuildDefinitionJson(moduleKey, schemaName, includeValidationProbe, seedSqlOverride, seedExecution));
+            BuildDefinitionJson(moduleKey, schemaName, includeValidationProbe, seedSqlOverride, seedExecution, splitSetupAndInitialize));
         WriteArtifactZipEntry(
             archive,
             $"artifacts/{moduleKey}__{AppKey}__{PackageType}__{TargetName}__{artifactVersion}.zip",
@@ -621,7 +742,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
         string schemaName,
         bool includeValidationProbe,
         string? seedSqlOverride,
-        string seedExecution = "idempotent")
+        string seedExecution = "idempotent",
+        bool splitSetupAndInitialize = false)
     {
         var seedSql = seedSqlOverride ?? (
             "DECLARE @Version nvarchar(50); " +
@@ -636,14 +758,49 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
             $"IF @Version IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [{schemaName}].[SeededVersions] WHERE [Version] = @Version) " +
             $"INSERT INTO [{schemaName}].[SeededVersions] ([Version]) VALUES (@Version);");
 
-        var sqlScripts = new JsonArray(new JsonObject
+        var sqlScripts = new JsonArray();
+        if (splitSetupAndInitialize && seedSqlOverride is null)
         {
-            ["key"] = "initialize-seed-order",
-            ["phase"] = "setup",
-            ["order"] = 10,
-            ["execution"] = seedExecution,
-            ["inlineSql"] = seedSql
-        });
+            // The setup script owns the declared
+            // objects (so a missing table triggers the targeted heal), while
+            // the initialize script only inserts rows and declares nothing.
+            sqlScripts.Add(new JsonObject
+            {
+                ["key"] = "setup-seedorder-schema",
+                ["phase"] = "setup",
+                ["order"] = 10,
+                ["execution"] = "idempotent",
+                ["inlineSql"] = $"IF SCHEMA_ID(N'{schemaName}') IS NULL EXEC(N'CREATE SCHEMA [{schemaName}]'); "
+                    + $"IF OBJECT_ID(N'{schemaName}.SeededVersions', N'U') IS NULL CREATE TABLE [{schemaName}].[SeededVersions] ([Version] nvarchar(50) NOT NULL PRIMARY KEY);"
+            });
+            sqlScripts.Add(new JsonObject
+            {
+                ["key"] = "initialize-seedorder-rows",
+                ["phase"] = "initialize",
+                ["order"] = 20,
+                ["execution"] = seedExecution,
+                ["inlineSql"] = "DECLARE @Version nvarchar(50); "
+                    + "SELECT TOP (1) @Version = a.[Version] "
+                    + "FROM omp.Artifacts a "
+                    + "INNER JOIN omp.Apps ap ON ap.AppId = a.AppId "
+                    + "INNER JOIN omp.Modules m ON m.ModuleId = ap.ModuleId "
+                    + $"WHERE m.ModuleKey = N'{moduleKey}' AND a.PackageType = N'{PackageType}' AND a.IsEnabled = 1 "
+                    + "ORDER BY a.ArtifactId DESC; "
+                    + $"IF @Version IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [{schemaName}].[SeededVersions] WHERE [Version] = @Version) "
+                    + $"INSERT INTO [{schemaName}].[SeededVersions] ([Version]) VALUES (@Version);"
+            });
+        }
+        else
+        {
+            sqlScripts.Add(new JsonObject
+            {
+                ["key"] = "initialize-seed-order",
+                ["phase"] = "setup",
+                ["order"] = 10,
+                ["execution"] = seedExecution,
+                ["inlineSql"] = seedSql
+            });
+        }
         if (includeValidationProbe)
         {
             // Shaped like a module's 0-validate script: a healthy probe makes the
@@ -670,7 +827,7 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
                 {
                     ["schema"] = schemaName,
                     ["name"] = "SeededVersions",
-                    ["source"] = "initialize-seed-order"
+                    ["source"] = splitSetupAndInitialize ? "setup-seedorder-schema" : "initialize-seed-order"
                 })
             }
             : new JsonObject();

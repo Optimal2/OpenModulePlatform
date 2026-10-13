@@ -1230,6 +1230,49 @@ WHERE ModuleKey = @ModuleKey;";
         int moduleDefinitionDocumentId,
         IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
         CancellationToken ct)
+        => (await GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+            conn,
+            scripts,
+            moduleDefinitionDocumentId,
+            ct)).Count > 0;
+
+    /// <summary>
+    /// Keys of the definition's declared non-validation scripts that have no
+    /// successful execution recorded for their current content hash. A changed
+    /// script that declares no missing database object (for example a seed
+    /// script that only inserts rows) is invisible to the missing-object
+    /// witness, so this is the signal that still requires it to run.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        var definitionJson = await GetModuleDefinitionJsonAsync(moduleDefinitionDocumentId, ct);
+        if (string.IsNullOrWhiteSpace(definitionJson))
+        {
+            return [];
+        }
+
+        var scripts = ReadPortableSqlScripts(definitionJson);
+        if (scripts.Count == 0)
+        {
+            return [];
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        return await GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+            conn,
+            scripts,
+            moduleDefinitionDocumentId,
+            ct);
+    }
+
+    private async Task<IReadOnlyList<string>> GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+        SqlConnection conn,
+        IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
     {
         const string sql = @"
 SELECT COUNT(1)
@@ -1239,6 +1282,7 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId
   AND ScriptSha256 = @scriptSha256
   AND ExecutionStatus = N'Succeeded';";
 
+        var withoutExecution = new List<string>();
         foreach (var script in scripts)
         {
             if (IsValidationScript(script))
@@ -1249,6 +1293,7 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId
             var sqlText = ResolvePortableSqlText(script);
             if (string.IsNullOrWhiteSpace(sqlText))
             {
+                withoutExecution.Add(script.Key);
                 continue;
             }
 
@@ -1258,11 +1303,33 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId
             Add(cmd, "@scriptSha256", ComputeTextSha256(sqlText));
             if (Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture) == 0)
             {
-                return true;
+                withoutExecution.Add(script.Key);
             }
         }
 
-        return false;
+        return withoutExecution;
+    }
+
+    /// <summary>
+    /// Whether the given module definition document is the currently applied
+    /// one. An applied document must never leave a declared script without a
+    /// successful execution for its current content.
+    /// </summary>
+    public async Task<bool> IsModuleDefinitionDocumentAppliedAsync(
+        int moduleDefinitionDocumentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT IsApplied
+FROM omp.ModuleDefinitionDocuments
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value is bool applied && applied;
     }
 
     public async Task<ArtifactZipImportAppDescriptor?> ResolveArtifactZipImportAppAsync(
