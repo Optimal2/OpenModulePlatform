@@ -13,9 +13,23 @@ using OpenModulePlatform.WorkerProcessHost.Services;
 // Artifact payloads deliberately strip appsettings.json (configuration must
 // never change the artifact hash), which silently removed the NLog config -
 // worker plugin logs went nowhere, making worker-side failures invisible.
-// The file logging is therefore configured in code as the always-on default;
-// an NLog section in configuration (config overlay) still takes precedence
-// through UseNLog() below.
+// The file logging is therefore configured in code, and this configuration is
+// the one that runs: it is set before the host is built, and UseNLog() below
+// does not replace a configuration that is already set. Measured 2026-10-13:
+// started from a build output that HAS appsettings.json, with the NLog
+// variable appName overridden through the environment, every line (before and
+// after the host was built) went to the file named here and none to the
+// appsettings name. The NLog section in appsettings.json is kept in step with
+// this file name but is not what a running host uses.
+//
+// Every worker process writes its OWN file: ${processid} is part of the name.
+// WorkerManager starts one host process per worker instance, all from the same
+// provisioned folder, so they share the log directory. With one shared file
+// per day only the process that opened it first wrote anything; every other
+// process lost its lines silently (measured 2026-10-13 on one installation:
+// 36 worker process starts, 2 "Worker process host starting" lines, and no
+// line from any worker of one module in four days of files). The first line
+// of each file names the worker instance it belongs to.
 //
 // The default log directory has to satisfy two rules at once.
 //
@@ -77,11 +91,12 @@ static void ConfigureDefaultNLog()
     var logDirectory = EnsureDefaultLogDirectory();
     if (logDirectory is not null)
     {
+        WorkerHostLogFile.DeleteExpiredFiles(logDirectory, DateTime.UtcNow, TimeSpan.FromDays(WorkerHostLogFile.RetentionDays));
         var logfile = new NLog.Targets.FileTarget("logfile")
         {
-            FileName = Path.Combine(logDirectory, "OpenModulePlatform.WorkerProcessHost-${shortdate}.log"),
+            FileName = Path.Combine(logDirectory, WorkerHostLogFile.DefaultFileName),
             Layout = layout,
-            MaxArchiveDays = 14
+            MaxArchiveDays = WorkerHostLogFile.RetentionDays
         };
         config.AddRule(NLog.LogLevel.Info, NLog.LogLevel.Fatal, logfile);
     }
@@ -103,7 +118,8 @@ ConfigureDefaultNLog();
 // from. The provisioned directory is versioned, so this one line answers both
 // "which build" and "which copy".
 LogManager.GetCurrentClassLogger().Info(
-    "Worker process host starting. BaseDirectory={0}", AppContext.BaseDirectory);
+    "Worker process host starting. BaseDirectory={0}, WorkerInstanceKey={1}",
+    AppContext.BaseDirectory, WorkerHostLogFile.WorkerInstanceKeyFromArgs(args));
 
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
