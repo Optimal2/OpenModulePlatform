@@ -389,7 +389,9 @@ Describe 'package build provenance gate' {
                 '-OutputPath', $outputPath
             )
             ($result.ExitCode -ne 0) | Should -Be $true
-            ($result.Output -match 'already exists and was not replaced') | Should -Be $true
+            # Windows PowerShell can wrap stderr inside a word when paths are long.
+            # Compare the refusal text independently of console whitespace.
+            ($result.Output -replace '\s', '') | Should -Match 'alreadyexistsandwasnotreplaced'
             [System.IO.File]::ReadAllText($outputPath) | Should -Be 'existing package'
         }
         finally {
