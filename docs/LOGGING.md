@@ -45,7 +45,12 @@ no process loses its lines to another, whichever starts first. Files are kept 14
 days: every host process deletes this host's files (`OpenModulePlatform.WorkerProcessHost-*.log`,
 the old single-file name included) older than 14 days by last write when it
 starts, and NLog's `MaxArchiveDays` cleans a running process's own files when it
-rolls over to a new day. What it does not guarantee: one file per worker per day
+rolls over to a new day. The startup cleanup keeps a file whose process id
+belongs to a running process whatever its age: NLog shares the file for delete,
+so without that check a host that has been silent for 14 days would lose its file
+and every line it writes until its next day roll-over. A process id that Windows
+has reused keeps an expired file until a later start finds the id free. What it
+does not guarantee: one file per worker per day
 (a worker that is restarted starts a new file, so a day can hold several files
 for one worker; find them by the `WorkerInstanceKey` on the first line), and it
 does not change the WorkerManager service's own log, which is one process.

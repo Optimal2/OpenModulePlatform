@@ -1,4 +1,8 @@
 // File: OpenModulePlatform.WorkerProcessHost/Runtime/WorkerHostLogFile.cs
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 namespace OpenModulePlatform.WorkerProcessHost.Runtime;
 
 /// <summary>
@@ -28,8 +32,12 @@ public static class WorkerHostLogFile
     /// for ever; it did not clean at startup with the old single-file name
     /// either (measured 2026-10-13). Every host process therefore cleans the
     /// shared directory when it starts. Only files matching this host's own
-    /// name pattern are touched, never anything else in the directory; a file
-    /// another process still writes, or one that cannot be deleted, is skipped.
+    /// name pattern are touched, never anything else in the directory. A file
+    /// whose name carries the id of a process that is running is kept whatever
+    /// its age: NLog opens the file with FileShare.Delete, so a lock does not
+    /// protect the file of a live host that has written nothing for the whole
+    /// retention, and deleting it would lose every line that host writes until
+    /// its next day roll-over. A file that cannot be deleted is skipped.
     /// </summary>
     public static int DeleteExpiredFiles(string directory, DateTime utcNow, TimeSpan retention)
     {
@@ -48,7 +56,8 @@ public static class WorkerHostLogFile
         {
             try
             {
-                if (utcNow - File.GetLastWriteTimeUtc(file) > retention)
+                if (utcNow - File.GetLastWriteTimeUtc(file) > retention
+                    && !(ProcessIdFromFileName(file) is { } processId && IsProcessRunning(processId)))
                 {
                     File.Delete(file);
                     deleted++;
@@ -61,6 +70,43 @@ public static class WorkerHostLogFile
         }
 
         return deleted;
+    }
+
+    /// <summary>
+    /// The process id in a file named by <see cref="DefaultFileName"/>
+    /// (<c>...-yyyy-MM-dd-&lt;process id&gt;.log</c>); null for any other name,
+    /// such as the single-file name used before 0.3.75, which has no process.
+    /// </summary>
+    private static int? ProcessIdFromFileName(string path)
+    {
+        var match = ProcessFileName.Match(Path.GetFileName(path));
+        return match.Success && int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var processId) && processId > 0
+            ? processId
+            : null;
+    }
+
+    private static readonly Regex ProcessFileName = new(
+        @"^OpenModulePlatform\.WorkerProcessHost-\d{4}-\d{2}-\d{2}-(\d+)\.log$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    // A reused process id keeps an expired file until a later start finds the
+    // id free again: keeping a file too long is harmless, deleting a live one is not.
+    private static bool IsProcessRunning(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // It exists but cannot be inspected: treat it as running.
+            return true;
+        }
     }
 
     /// <summary>

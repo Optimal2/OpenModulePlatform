@@ -72,7 +72,11 @@ public sealed class WorkerHostLogFileTests : IDisposable
     {
         CopyHostTo(AppDirectory);
         Directory.CreateDirectory(LogDirectory);
-        var expiredOtherProcess = Seed("OpenModulePlatform.WorkerProcessHost-2026-09-01-1111.log", days: 30);
+        var expiredOtherProcess = Seed($"OpenModulePlatform.WorkerProcessHost-2026-09-01-{ExitedProcessId()}.log", days: 30);
+        // A host that is still running but has written nothing for the whole
+        // retention: NLog shares the file for delete, so only the process check
+        // keeps it (this test process stands in for that live host).
+        var expiredLiveProcess = Seed($"OpenModulePlatform.WorkerProcessHost-2026-09-01-{Environment.ProcessId}.log", days: 30);
         var expiredOldSingleFileName = Seed("OpenModulePlatform.WorkerProcessHost-2026-09-02.log", days: 30);
         var recent = Seed("OpenModulePlatform.WorkerProcessHost-2026-10-10-2222.log", days: 3);
         var unrelated = Seed("SomethingElse-2026-09-01.log", days: 30);
@@ -84,6 +88,7 @@ public sealed class WorkerHostLogFileTests : IDisposable
         }
 
         Assert.False(File.Exists(expiredOtherProcess), "an expired file of another process must be deleted");
+        Assert.True(File.Exists(expiredLiveProcess), "the file of a process that is still running must be kept whatever its age");
         Assert.False(File.Exists(expiredOldSingleFileName), "an expired file with the old single-file name must be deleted");
         Assert.True(File.Exists(recent), "a file inside the retention must be kept");
         Assert.True(File.Exists(unrelated), "a file that is not this host's log must never be touched");
@@ -127,6 +132,30 @@ public sealed class WorkerHostLogFileTests : IDisposable
     [InlineData(new string[0], "")]
     public void TheWorkerInstanceKeyIsReadFromTheCommandLine(string[] args, string expected)
         => Assert.Equal(expected, WorkerHostLogFile.WorkerInstanceKeyFromArgs(args));
+
+    [Fact]
+    public void DeleteExpiredFilesKeepsTheFileOfARunningProcessOnly()
+    {
+        var exited = Seed($"OpenModulePlatform.WorkerProcessHost-2026-09-01-{ExitedProcessId()}.log", days: 30);
+        var running = Seed($"OpenModulePlatform.WorkerProcessHost-2026-09-01-{Environment.ProcessId}.log", days: 30);
+        // A trailing number that is not a process (the old single-file name ends
+        // in the day) gives no protection.
+        var oldName = Seed($"OpenModulePlatform.WorkerProcessHost-2026-09-{Environment.ProcessId % 28 + 1:00}.log", days: 30);
+
+        Assert.Equal(2, WorkerHostLogFile.DeleteExpiredFiles(LogDirectory, DateTime.UtcNow, TimeSpan.FromDays(WorkerHostLogFile.RetentionDays)));
+        Assert.False(File.Exists(exited));
+        Assert.True(File.Exists(running));
+        Assert.False(File.Exists(oldName));
+    }
+
+    // The id of a process that has exited (reuse within the test is unlikely, and
+    // would only make a deletion assertion fail, never pass wrongly).
+    private static int ExitedProcessId()
+    {
+        using var process = Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 0") { UseShellExecute = false, CreateNoWindow = true })!;
+        process.WaitForExit();
+        return process.Id;
+    }
 
     private string HostExecutable => Path.Combine(AppDirectory, "OpenModulePlatform.WorkerProcessHost.exe");
 
