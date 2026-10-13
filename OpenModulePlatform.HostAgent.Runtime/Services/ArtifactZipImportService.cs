@@ -1,3 +1,4 @@
+using OpenModulePlatform.ModuleDefinitions;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -1376,90 +1377,93 @@ public sealed class ArtifactZipImportService
         var repairs = context.PreApplySqlRepairCount;
         var healedScripts = new List<string>();
 
-        // For non-core modules, verify the physical schema against everything the definition
-        // declares -- schemas, tables, columns, indexes, constraints and triggers -- plus the
-        // module's own embedded validation probe, and re-run only the idempotent scripts whose
-        // declared objects are missing. This heals stale schema even when the version gate
-        // would otherwise skip or ignore the definition.
-        //
-        // R12-G3. Until 2026-08-16 the witness could see schemas and TABLES only, and answered
-        // "present" for any declaration kind it did not recognise. A migration that added a
-        // column, an index or a unique constraint to an existing table was therefore invisible
-        // to it: the import reported a green "skipped, package version is not newer", and the
-        // gap surfaced later as a raw SqlException in a worker. That is how R4-B1's unique
-        // index sat in the repository for four days, booked as fixed, while no database had it.
-        if (!context.RequiresPreApplySqlRepairs)
+        await using (var repairScope = await _repository.BeginModuleDefinitionSqlRepairAsync(cancellationToken))
         {
-            var missingByScript = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
-                definition.DefinitionJson,
-                cancellationToken);
-            if (missingByScript.Count > 0)
+            // For non-core modules, verify the physical schema against everything the definition
+            // declares -- schemas, tables, columns, indexes, constraints and triggers -- plus the
+            // module's own embedded validation probe, and re-run only the idempotent scripts whose
+            // declared objects are missing. This heals stale schema even when the version gate
+            // would otherwise skip or ignore the definition.
+            //
+            // R12-G3. Until 2026-08-16 the witness could see schemas and TABLES only, and answered
+            // "present" for any declaration kind it did not recognise. A migration that added a
+            // column, an index or a unique constraint to an existing table was therefore invisible
+            // to it: the import reported a green "skipped, package version is not newer", and the
+            // gap surfaced later as a raw SqlException in a worker. That is how R4-B1's unique
+            // index sat in the repository for four days, booked as fixed, while no database had it.
+            if (!context.RequiresPreApplySqlRepairs)
             {
-                var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var healedCount = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
-                    context.ModuleDefinitionDocumentId,
-                    scriptKeys,
-                    cancellationToken);
-                repairs += healedCount;
-                healedScripts.AddRange(missingByScript.Keys);
-
-                // Measure again before claiming it healed. The comment above describes
-                // exactly this failure - an object booked as fixed while no database had
-                // it - and the code then reported success without checking.
-                var missingAfter = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
+                var missingByScript = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
                     definition.DefinitionJson,
                     cancellationToken);
+                if (missingByScript.Count > 0)
+                {
+                    var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var healedCount = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                        context.ModuleDefinitionDocumentId,
+                        scriptKeys,
+                        cancellationToken, repairScope.Connection);
+                    repairs += healedCount;
+                    healedScripts.AddRange(missingByScript.Keys);
 
-                if (missingAfter.Count == 0)
-                {
-                    _logger.LogWarning(
-                        "Schema drift healed for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s). Objects that were missing and are now present: {MissingObjects}.",
-                        definition.ModuleKey,
-                        healedCount,
-                        string.Join(", ", missingByScript.SelectMany(static item => item.Value)));
-                }
-                else
-                {
-                    _logger.LogError(
-                        "Schema repair INCOMPLETE for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s), but {StillMissingCount} required object(s) are STILL missing: {StillMissing}. The import is recorded, but this module's storage is not in the state its definition declares.",
-                        definition.ModuleKey,
-                        healedCount,
-                        missingAfter.SelectMany(static item => item.Value).Count(),
-                        string.Join(", ", missingAfter.SelectMany(static item => item.Value)));
+                    // Measure again before claiming it healed. The comment above describes
+                    // exactly this failure - an object booked as fixed while no database had
+                    // it - and the code then reported success without checking.
+                    var missingAfter = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
+                        definition.DefinitionJson,
+                        cancellationToken);
+
+                    if (missingAfter.Count == 0)
+                    {
+                        _logger.LogWarning(
+                            "Schema drift healed for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s). Objects that were missing and are now present: {MissingObjects}.",
+                            definition.ModuleKey,
+                            healedCount,
+                            string.Join(", ", missingByScript.SelectMany(static item => item.Value)));
+                    }
+                    else
+                    {
+                        _logger.LogError(
+                            "Schema repair INCOMPLETE for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s), but {StillMissingCount} required object(s) are STILL missing: {StillMissing}. The import is recorded, but this module's storage is not in the state its definition declares.",
+                            definition.ModuleKey,
+                            healedCount,
+                            missingAfter.SelectMany(static item => item.Value).Count(),
+                            string.Join(", ", missingAfter.SelectMany(static item => item.Value)));
+                    }
                 }
             }
-        }
 
-        // On HostAgent the apply step always marks the document applied when the
-        // version gate passes, so context.Applied covers both a newer package
-        // version and an equal-version re-import. The strictly-newer-installed
-        // gate stays: an older package version never runs its scripts here.
-        if (context.Applied && !context.RequiresPreApplySqlRepairs)
-        {
-            // Row-only initialization is invisible to the object witness. Run
-            // the remaining current hashes without repeating the schema heal.
-            var healed = healedScripts.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var pending = (await _repository.GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
-                    context.ModuleDefinitionDocumentId,
-                    cancellationToken))
-                .Where(key => !healed.Contains(key))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (pending.Count > 0)
+            // On HostAgent the apply step always marks the document applied when the
+            // version gate passes, so context.Applied covers both a newer package
+            // version and an equal-version re-import. The strictly-newer-installed
+            // gate stays: an older package version never runs its scripts here.
+            if (context.Applied && !context.RequiresPreApplySqlRepairs)
             {
-                repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
-                    context.ModuleDefinitionDocumentId,
-                    pending,
-                    cancellationToken);
+                // Row-only initialization is invisible to the object witness. Run
+                // the remaining current hashes without repeating the schema heal.
+                var healed = healedScripts.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var pending = (await _repository.GetPendingDefinitionScriptsAsync(
+                        context.ModuleDefinitionDocumentId, repairScope.Connection,
+                        cancellationToken))
+                    .Where(key => !healed.Contains(key))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (pending.Count > 0)
+                {
+                    repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                        context.ModuleDefinitionDocumentId,
+                        pending,
+                        cancellationToken, repairScope.Connection);
+                }
             }
-        }
 
-        // An applied document must never leave a declared script without a
-        // successful execution for its current content. Failing the import
-        // here keeps a future skip path from repeating that silence.
-        await VerifyAppliedDefinitionScriptsExecutedAsync(
-            context.ModuleDefinitionDocumentId,
-            definition,
-            cancellationToken);
+            // An applied document must never leave a declared script without a
+            // successful execution for its current content. Failing the import
+            // here keeps a future skip path from repeating that silence.
+            await ModuleDefinitionSqlCompletion.VerifyAsync(repairScope.Connection,
+                context.ModuleDefinitionDocumentId, definition.ModuleKey, definition.DefinitionVersion,
+                await _repository.GetPendingDefinitionScriptsAsync(context.ModuleDefinitionDocumentId, repairScope.Connection, cancellationToken),
+                _logger, cancellationToken);
+        }
 
         // Initialization SQL can create app instances after the last Portal definition
         // import. Reconcile here for every module, including skipped older definitions,
@@ -1508,31 +1512,11 @@ public sealed class ArtifactZipImportService
         ModuleDefinitionImportDocument definition,
         CancellationToken cancellationToken)
     {
-        var unexecuted = await _repository.GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
-            moduleDefinitionDocumentId,
-            cancellationToken);
-        if (unexecuted.Count == 0)
-        {
-            return;
-        }
-
-        if (!await _repository.IsModuleDefinitionDocumentAppliedAsync(
-                moduleDefinitionDocumentId,
-                cancellationToken))
-        {
-            return;
-        }
-
-        _logger.LogError(
-            "Module definition '{ModuleKey}' {DefinitionVersion} is marked applied, but {Count} declared script(s) have no successful execution for their current content: {Scripts}. Treat this import as failed until those scripts have run.",
-            definition.ModuleKey,
-            definition.DefinitionVersion,
-            unexecuted.Count,
-            string.Join(", ", unexecuted));
-        throw new InvalidOperationException(
-            $"Module definition '{definition.ModuleKey}' {definition.DefinitionVersion} is marked applied, "
-            + $"but {unexecuted.Count} declared script(s) have no successful execution for their current content: {string.Join(", ", unexecuted)}. "
-            + "The import is marked failed; re-import once the scripts can run.");
+        await using var scope = await _repository.BeginModuleDefinitionSqlRepairAsync(cancellationToken);
+        await ModuleDefinitionSqlCompletion.VerifyAsync(scope.Connection, moduleDefinitionDocumentId,
+            definition.ModuleKey, definition.DefinitionVersion,
+            await _repository.GetPendingDefinitionScriptsAsync(moduleDefinitionDocumentId, scope.Connection, cancellationToken),
+            _logger, cancellationToken);
     }
 
     private static bool RequiresPreApplySqlRepairs(ModuleDefinitionImportDocument definition)

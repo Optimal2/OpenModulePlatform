@@ -1,3 +1,4 @@
+using OpenModulePlatform.ModuleDefinitions;
 // File: OpenModulePlatform.Portal/Services/PortableModulePackageService.cs
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -1308,84 +1309,88 @@ public sealed class PortableModulePackageService
             // second time and report the fresh import as an identical skip.
             try
             {
-                // For non-core modules, verify the declared required objects (schemas, tables,
-                // columns, indexes, constraints, triggers) plus the definition's own validation
-                // probe, and re-run only the idempotent scripts whose objects are missing. This
-                // heals stale schema even when the installed definition version is newer than or
-                // equal to the package (R12-G3).
-                if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
+                if (options.ExecuteSqlRepairs)
                 {
-                    var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
-                        definition.DefinitionJson,
-                        ct);
-                    var healedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    if (missingByScript.Count > 0)
+                    await using var repairScope = await _repo.BeginModuleDefinitionSqlRepairAsync(ct);
+                    // For non-core modules, verify the declared required objects (schemas, tables,
+                    // columns, indexes, constraints, triggers) plus the definition's own validation
+                    // probe, and re-run only the idempotent scripts whose objects are missing. This
+                    // heals stale schema even when the installed definition version is newer than or
+                    // equal to the package (R12-G3).
+                    if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
                     {
-                        var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                        var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
-                            saveResult.ModuleDefinitionDocumentId,
-                            scriptKeys,
-                            ct);
-                        repairCount += repairResult.ExecutedCount;
-                        healedKeys.UnionWith(scriptKeys);
-                        var missingBefore = missingByScript.SelectMany(static item => item.Value).ToList();
-
-                        // Measure again. Saying "healed" without re-checking is how R4-B1's unique
-                        // index sat booked as fixed for four days while no database had it - the
-                        // comment on the sibling path in ArtifactZipImportService says exactly that,
-                        // and then neither path re-checked. A repair that silently failed produced a
-                        // message identical to one that worked.
-                        var missingAfter = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
+                        var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
                             definition.DefinitionJson,
                             ct);
-
-                        if (missingAfter.Count == 0)
+                        var healedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        if (missingByScript.Count > 0)
                         {
-                            warnings.Add(
-                                $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
-                                + $"Objects that were missing and are now present: {string.Join(", ", missingBefore)}.");
-                        }
-                        else
-                        {
-                            var stillMissing = missingAfter.SelectMany(static item => item.Value).ToList();
-                            warnings.Add(
-                                $"Schema repair INCOMPLETE for module '{definition.ModuleKey}': re-executed {repairResult.ExecutedCount} script(s), "
-                                + $"but {stillMissing.Count} required object(s) are STILL missing: {string.Join(", ", stillMissing)}. "
-                                + "The import is recorded, but this module's storage is not in the state its definition declares.");
-                        }
-                    }
-
-                    // The heal above ran only the scripts with missing declared
-                    // objects. Row-only initialization is invisible to that
-                    // witness, so run every script that the
-                    // script gate still marks as needing execution -- minus the
-                    // healed ones, which just ran. This also covers an
-                    // equal-version re-import whose scripts never ran: the
-                    // strictly-newer-installed gate stays (an older package
-                    // version never runs its scripts here).
-                    var definitionVersionEqualsApplied = appliedDefinition is not null
-                        && ArtifactVersionComparer.Compare(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) == 0;
-                    if (!keepNewerAppliedDefinition && (applied || definitionVersionEqualsApplied))
-                    {
-                        var checks = await _repo.GetModuleDefinitionSqlChecksAsync(
-                            saveResult.ModuleDefinitionDocumentId,
-                            ct);
-                        var pendingKeys = checks
-                            .Where(static check => !check.IsValidation && check.NeedsExecution && check.CanExecute)
-                            .Select(static check => check.Key)
-                            .Where(key => !healedKeys.Contains(key))
-                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                        if (pendingKeys.Count > 0)
-                        {
-                            var pendingResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                            var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                            var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
                                 saveResult.ModuleDefinitionDocumentId,
-                                pendingKeys,
+                                scriptKeys,
+                                ct, repairScope.Connection);
+                            repairCount += repairResult.ExecutedCount;
+                            healedKeys.UnionWith(scriptKeys);
+                            var missingBefore = missingByScript.SelectMany(static item => item.Value).ToList();
+
+                            // Measure again. Saying "healed" without re-checking is how R4-B1's unique
+                            // index sat booked as fixed for four days while no database had it - the
+                            // comment on the sibling path in ArtifactZipImportService says exactly that,
+                            // and then neither path re-checked. A repair that silently failed produced a
+                            // message identical to one that worked.
+                            var missingAfter = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
+                                definition.DefinitionJson,
                                 ct);
-                            repairCount += pendingResult.ExecutedCount;
-                            warnings.Add(
-                                $"Executed {pendingResult.ExecutedCount} additional definition script(s) with no successful execution for their current content for module '{definition.ModuleKey}': {string.Join(", ", pendingKeys)}.");
+
+                            if (missingAfter.Count == 0)
+                            {
+                                warnings.Add(
+                                    $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
+                                    + $"Objects that were missing and are now present: {string.Join(", ", missingBefore)}.");
+                            }
+                            else
+                            {
+                                var stillMissing = missingAfter.SelectMany(static item => item.Value).ToList();
+                                warnings.Add(
+                                    $"Schema repair INCOMPLETE for module '{definition.ModuleKey}': re-executed {repairResult.ExecutedCount} script(s), "
+                                    + $"but {stillMissing.Count} required object(s) are STILL missing: {string.Join(", ", stillMissing)}. "
+                                    + "The import is recorded, but this module's storage is not in the state its definition declares.");
+                            }
+                        }
+
+                        // The heal above ran only the scripts with missing declared
+                        // objects. Row-only initialization is invisible to that
+                        // witness, so run every script that the
+                        // script gate still marks as needing execution -- minus the
+                        // healed ones, which just ran. This also covers an
+                        // equal-version re-import whose scripts never ran: the
+                        // strictly-newer-installed gate stays (an older package
+                        // version never runs its scripts here).
+                        var definitionVersionEqualsApplied = appliedDefinition is not null
+                            && ArtifactVersionComparer.Compare(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) == 0;
+                        if (!keepNewerAppliedDefinition && (applied || definitionVersionEqualsApplied))
+                        {
+                            var pendingKeys = (await _repo.GetPendingDefinitionScriptsAsync(
+                                saveResult.ModuleDefinitionDocumentId, repairScope.Connection, ct))
+                                .Where(key => !healedKeys.Contains(key))
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                            if (pendingKeys.Count > 0)
+                            {
+                                var pendingResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                                    saveResult.ModuleDefinitionDocumentId,
+                                    pendingKeys,
+                                    ct, repairScope.Connection);
+                                repairCount += pendingResult.ExecutedCount;
+                                warnings.Add(
+                                    $"Executed {pendingResult.ExecutedCount} additional definition script(s) with no successful execution for their current content for module '{definition.ModuleKey}': {string.Join(", ", pendingKeys)}.");
+                            }
                         }
                     }
+                    await ModuleDefinitionSqlCompletion.VerifyAsync(repairScope.Connection,
+                        saveResult.ModuleDefinitionDocumentId, definition.ModuleKey, definition.DefinitionVersion,
+                        await _repo.GetPendingDefinitionScriptsAsync(saveResult.ModuleDefinitionDocumentId, repairScope.Connection, ct),
+                        _logger, ct);
                 }
             }
             catch (Exception ex) when (!throwOnDefinitionSqlFailure && IsExpectedUniversalImportFailure(ex))

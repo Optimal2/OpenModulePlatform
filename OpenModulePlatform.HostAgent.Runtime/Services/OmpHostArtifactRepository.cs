@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
+using OpenModulePlatform.ModuleDefinitions;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -1083,6 +1084,19 @@ WHERE ModuleKey = @ModuleKey;";
         IReadOnlySet<string>? scriptKeysToRepair,
         CancellationToken ct)
     {
+        await using var scope = await BeginModuleDefinitionSqlRepairAsync(ct);
+        return await ExecuteImportedModuleDefinitionSqlRepairsAsync(moduleDefinitionDocumentId, scriptKeysToRepair, ct, scope.Connection);
+    }
+
+    internal Task<ModuleDefinitionSqlRepairScope> BeginModuleDefinitionSqlRepairAsync(CancellationToken ct)
+        => ModuleDefinitionSqlRepairScope.AcquireAsync(_db.Create(), ct);
+
+    internal async Task<int> ExecuteImportedModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        IReadOnlySet<string>? scriptKeysToRepair,
+        CancellationToken ct,
+        SqlConnection conn)
+    {
         var definitionJson = await GetModuleDefinitionJsonAsync(moduleDefinitionDocumentId, ct);
         if (string.IsNullOrWhiteSpace(definitionJson))
         {
@@ -1100,9 +1114,6 @@ WHERE ModuleKey = @ModuleKey;";
 
         // HostAgent may receive platform-core repairs through universal-package imports.
         // Keep the same embedded SQL, hash, idempotency, and safety checks for those scripts.
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var repairLock = await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
 
         List<PortableModuleDefinitionSqlScript> repairScripts;
         if (scriptKeysToRepair is { Count: > 0 })
@@ -1268,68 +1279,21 @@ WHERE ModuleKey = @ModuleKey;";
             ct);
     }
 
+    internal async Task<IReadOnlyList<string>> GetPendingDefinitionScriptsAsync(int documentId, SqlConnection conn, CancellationToken ct)
+    {
+        var json = await GetModuleDefinitionJsonAsync(documentId, ct);
+        return string.IsNullOrWhiteSpace(json) ? [] : await GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
+            conn, ReadPortableSqlScripts(json), documentId, ct);
+    }
+
     private async Task<IReadOnlyList<string>> GetModuleDefinitionScriptsWithoutSucceededExecutionAsync(
         SqlConnection conn,
         IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
         int moduleDefinitionDocumentId,
         CancellationToken ct)
     {
-        const string sql = @"
-SELECT COUNT(1)
-FROM omp.ModuleDefinitionSqlExecutions
-WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId
-  AND ScriptKey = @scriptKey
-  AND ScriptSha256 = @scriptSha256
-  AND ExecutionStatus = N'Succeeded';";
-
-        var withoutExecution = new List<string>();
-        foreach (var script in scripts)
-        {
-            if (IsValidationScript(script))
-            {
-                continue;
-            }
-
-            var sqlText = ResolvePortableSqlText(script);
-            if (string.IsNullOrWhiteSpace(sqlText))
-            {
-                withoutExecution.Add(script.Key);
-                continue;
-            }
-
-            await using var cmd = new SqlCommand(sql, conn);
-            Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
-            Add(cmd, "@scriptKey", script.Key);
-            Add(cmd, "@scriptSha256", ComputeTextSha256(sqlText));
-            if (Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture) == 0)
-            {
-                withoutExecution.Add(script.Key);
-            }
-        }
-
-        return withoutExecution;
-    }
-
-    /// <summary>
-    /// Whether the given module definition document is the currently applied
-    /// one. An applied document must never leave a declared script without a
-    /// successful execution for its current content.
-    /// </summary>
-    public async Task<bool> IsModuleDefinitionDocumentAppliedAsync(
-        int moduleDefinitionDocumentId,
-        CancellationToken ct)
-    {
-        const string sql = @"
-SELECT IsApplied
-FROM omp.ModuleDefinitionDocuments
-WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
-        var value = await cmd.ExecuteScalarAsync(ct);
-        return value is bool applied && applied;
+        return await ModuleDefinitionSqlCompletion.GetPendingAsync(conn, moduleDefinitionDocumentId,
+            scripts.Where(script => !IsValidationScript(script)).Select(script => (script.Key, ResolvePortableSqlText(script))), ct);
     }
 
     public async Task<ArtifactZipImportAppDescriptor?> ResolveArtifactZipImportAppAsync(
@@ -6228,89 +6192,6 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
 
     private static string ToSqlUnicodeLiteral(string value)
         => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
-
-    private const string ModuleDefinitionSqlRepairLockResource = "omp.module-definition-sql-repair";
-
-    /// <summary>
-    /// Takes the exclusive repair lock and releases it when disposed.
-    /// </summary>
-    /// <remarks>
-    /// R12-G3b. The lock was taken with <c>@LockOwner = N'Session'</c> and never released --
-    /// there was no <c>sp_releaseapplock</c> anywhere in this repository. A session-scoped
-    /// application lock lives as long as the SQL SESSION, and ADO.NET connection pooling means
-    /// closing the <see cref="SqlConnection"/> does NOT end the session: it goes back to the
-    /// pool with the lock still held. The first repair in a process therefore poisoned a pooled
-    /// connection permanently, and every later repair drawn from a different pooled session
-    /// failed with "Another module definition SQL repair is already running" -- a schema repair
-    /// path that silently stops working after its first use, which is the opposite of what a
-    /// self-healing gate is for.
-    ///
-    /// Session scope is kept rather than switched to Transaction: the repair runs several
-    /// batches of DDL, and wrapping all of them in one transaction would change what a partial
-    /// failure leaves behind. The defect was the missing release, not the scope. Releasing in
-    /// a finally covers the normal and the exception path; a hard process kill is covered by
-    /// the session ending with the process.
-    /// </remarks>
-    private sealed class ModuleDefinitionSqlExecutionLock(SqlConnection conn) : IAsyncDisposable
-    {
-        public async ValueTask DisposeAsync()
-        {
-            if (conn.State != System.Data.ConnectionState.Open)
-            {
-                // Nothing to release on: the session is gone, and so is the lock.
-                return;
-            }
-
-            const string sql = @"
-IF APPLOCK_MODE('public', @Resource, 'Session') <> 'NoLock'
-BEGIN
-    EXEC sys.sp_releaseapplock @Resource = @Resource, @LockOwner = N'Session';
-END";
-
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
-                ModuleDefinitionSqlRepairLockResource;
-
-            // A failed release would leave the pooled session holding the lock forever, which
-            // is exactly the defect above. Destroy the connection instead of returning it to
-            // the pool: a session that ends releases its own locks.
-            try
-            {
-                await cmd.ExecuteNonQueryAsync();
-            }
-            catch (SqlException)
-            {
-                SqlConnection.ClearPool(conn);
-                throw;
-            }
-        }
-    }
-
-    private static async Task<ModuleDefinitionSqlExecutionLock> AcquireModuleDefinitionSqlExecutionLockAsync(
-        SqlConnection conn,
-        CancellationToken ct)
-    {
-        const string sql = @"
-DECLARE @Result int;
-EXEC @Result = sys.sp_getapplock
-    @Resource = @Resource,
-    @LockMode = N'Exclusive',
-    @LockOwner = N'Session',
-    @LockTimeout = 0;
-SELECT @Result;";
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
-            ModuleDefinitionSqlRepairLockResource;
-
-        var result = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
-        if (result < 0)
-        {
-            throw new InvalidOperationException("Another module definition SQL repair is already running.");
-        }
-
-        return new ModuleDefinitionSqlExecutionLock(conn);
-    }
 
     private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(
         SqlConnection conn,

@@ -37,6 +37,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />
     <Compile Include="..\shared\ModuleDefinitionSqlOwnership.cs" Link="ModuleDefinitions\ModuleDefinitionSqlOwnership.cs" />
+    <Compile Include="..\shared\ModuleDefinitionSqlCompletion.cs" Link="ModuleDefinitions\ModuleDefinitionSqlCompletion.cs" />
     <Compile Include="..\shared\ModuleDefinitionSqlText.cs" Link="ModuleDefinitions\ModuleDefinitionSqlText.cs" />
     <Compile Include="..\shared\ModuleRuntimeMaintenance.cs" Link="ModuleDefinitions\ModuleRuntimeMaintenance.cs" />
     <Compile Include="..\shared\ModuleRuntimeMaintenanceExecutor.cs" Link="ModuleDefinitions\ModuleRuntimeMaintenanceExecutor.cs" />

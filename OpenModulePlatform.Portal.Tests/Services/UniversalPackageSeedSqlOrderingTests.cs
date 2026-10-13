@@ -382,11 +382,10 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
     /// <summary>
     /// The remaining zero-execution shape: the definition is applied and the SQL phase
     /// is enabled, but the declared script can never run through Portal (execution mode
-    /// "once" is Blocked by the script gate). The result line must list the script and
-    /// its state instead of rendering a silent "Applied".
+    /// "once" is blocked by the script gate). The import must fail and log the missing evidence.
     /// </summary>
     [Fact]
-    public async Task PortalImport_WhenDeclaredScriptIsBlocked_MessageListsTheScriptState()
+    public async Task PortalImport_WhenDeclaredScriptIsBlocked_FailsAndLogsMissingEvidence()
     {
         const string moduleKey = "seedorderblocked";
         const string schemaName = "omp_seedorderblocked";
@@ -399,22 +398,25 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
             var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
             var packagePath = BuildUniversalPackageZip(
                 workRoot, moduleKey, schemaName, seedExecution: "once");
-            var service = CreatePortalService(storeRoot);
+            var logger = new EntrySyncTestLogger<PortableModulePackageService>();
+            var service = CreatePortalService(storeRoot, logger);
 
             var result = await ImportPortalPackageAsync(service, packagePath);
 
             var definitionItem = Assert.Single(
                 result.Items,
                 static item => item.Kind == "module-definition");
-            Assert.Equal("Applied", definitionItem.Status);
+            Assert.Equal("Failed", definitionItem.Status);
             Assert.Contains(
-                "NONE were executed",
+                "is marked applied",
                 definitionItem.Message,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "initialize-seed-order: Blocked",
+                "initialize-seed-order",
                 definitionItem.Message,
                 StringComparison.Ordinal);
+            Assert.Contains(logger.Messages, entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Error
+                && entry.Text.Contains("initialize-seed-order", StringComparison.Ordinal));
             Assert.Equal(
                 0,
                 await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));

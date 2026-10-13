@@ -132,6 +132,27 @@ public sealed class ModuleDefinitionScriptCompletionTests : IAsyncLifetime
         await Assert.ThrowsAsync<InvalidOperationException>(() => Service().VerifyAppliedDefinitionScriptsExecutedAsync(saved.ModuleDefinitionDocumentId, definition, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \r\n\t ")]
+    public async Task Evidence_EmptyResolvedScript_IsNeitherPendingNorRequiredByGuard(string? sql)
+    {
+        // The ownership parser currently rejects missing payloads. Exercise the
+        // resolved-text boundary directly without weakening that import validation.
+        var definition = Definition();
+        var saved = await _repository.SaveImportedModuleDefinitionAsync(definition, false, CancellationToken.None);
+        await _repository.ApplyImportedModuleDefinitionAsync(saved.ModuleDefinitionDocumentId, CancellationToken.None);
+        await using var scope = await _repository.BeginModuleDefinitionSqlRepairAsync(CancellationToken.None);
+        var pending = await OpenModulePlatform.ModuleDefinitions.ModuleDefinitionSqlCompletion.GetPendingAsync(
+            scope.Connection, saved.ModuleDefinitionDocumentId, [("empty", sql)], CancellationToken.None);
+        Assert.Empty(pending);
+        await OpenModulePlatform.ModuleDefinitions.ModuleDefinitionSqlCompletion.VerifyAsync(
+            scope.Connection, saved.ModuleDefinitionDocumentId, definition.ModuleKey, definition.DefinitionVersion,
+            pending, _logger, CancellationToken.None);
+        Assert.DoesNotContain(_logger.Entries, entry => entry.Level == LogLevel.Error);
+    }
+
     private ArtifactZipImportService Service() => new(new SettingsMonitor(), _repository, _logger);
 
     private static ModuleDefinitionImportDocument Definition(string version = "1.0.1", string? setup = null, string? initialize = null, bool declareColumn = true)

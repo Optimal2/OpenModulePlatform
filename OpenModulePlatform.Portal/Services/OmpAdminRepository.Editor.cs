@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
+using OpenModulePlatform.ModuleDefinitions;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Configuration;
 
@@ -2824,6 +2825,18 @@ WHERE ModuleKey = @ModuleKey;";
         return rows;
     }
 
+    internal async Task<IReadOnlyList<string>> GetPendingDefinitionScriptsAsync(int documentId, SqlConnection conn, CancellationToken ct)
+    {
+        var definition = await GetModuleDefinitionDocumentAsync(documentId, ct)
+            ?? throw new InvalidOperationException("Module definition document was not found.");
+        if (string.IsNullOrWhiteSpace(definition.DefinitionJson))
+            return [];
+        return await ModuleDefinitionSqlCompletion.GetPendingAsync(conn, documentId,
+            ReadPortableSqlScripts(definition.DefinitionJson)
+                .Where(script => !IsValidationScript(script))
+                .Select(script => (script.Key, ResolvePortableSqlText(script))), ct);
+    }
+
     public async Task<ModuleDefinitionSqlRepairResult> ExecuteModuleDefinitionSqlRepairsAsync(
         int moduleDefinitionDocumentId,
         CancellationToken ct)
@@ -2837,6 +2850,19 @@ WHERE ModuleKey = @ModuleKey;";
         int moduleDefinitionDocumentId,
         IReadOnlySet<string>? scriptKeysToRepair,
         CancellationToken ct)
+    {
+        await using var scope = await BeginModuleDefinitionSqlRepairAsync(ct);
+        return await ExecuteModuleDefinitionSqlRepairsAsync(moduleDefinitionDocumentId, scriptKeysToRepair, ct, scope.Connection);
+    }
+
+    internal Task<ModuleDefinitionSqlRepairScope> BeginModuleDefinitionSqlRepairAsync(CancellationToken ct)
+        => ModuleDefinitionSqlRepairScope.AcquireAsync(_db.Create(), ct);
+
+    internal async Task<ModuleDefinitionSqlRepairResult> ExecuteModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        IReadOnlySet<string>? scriptKeysToRepair,
+        CancellationToken ct,
+        SqlConnection conn)
     {
         var definition = await GetModuleDefinitionDocumentAsync(moduleDefinitionDocumentId, ct)
             ?? throw new InvalidOperationException("Module definition document was not found.");
@@ -2866,11 +2892,6 @@ WHERE ModuleKey = @ModuleKey;";
                 RemainingProblems = checks.Where(static item => item.NeedsExecution).ToList()
             };
         }
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var repairLock = await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
-
         var executed = 0;
         foreach (var script in scripts.Where(script => !IsValidationScript(script) && repairableKeys.Contains(script.Key)))
         {
@@ -6347,85 +6368,6 @@ WHERE RowNumber = 1;";
         }
 
         return executions;
-    }
-
-    private const string ModuleDefinitionSqlRepairLockResource = "omp.module-definition-sql-repair";
-
-    /// <summary>
-    /// Takes the exclusive repair lock and releases it when disposed.
-    /// </summary>
-    /// <remarks>
-    /// R12-G3b. Byte-for-byte the same method existed in
-    /// <c>OmpHostArtifactRepository</c> with the same defect, and both were fixed together --
-    /// they take the SAME named lock, so one leaking it blocks the other. The lock was taken
-    /// with <c>@LockOwner = N'Session'</c> and never released: there was no
-    /// <c>sp_releaseapplock</c> anywhere in either repository. Connection pooling means closing
-    /// the <see cref="SqlConnection"/> does not end the SQL session, so the pooled connection
-    /// went back to the pool still holding the lock, and every later repair drawn from another
-    /// session failed with "Another module definition SQL repair is already running". The
-    /// schema self-heal therefore stopped working after its first use in any long-running
-    /// process -- silently, because the exception reads like healthy contention.
-    ///
-    /// Found because <c>StaleSchemaHealTests</c> failed deterministically: the Portal test ran
-    /// first, leaked the lock onto a pooled session, and the HostAgent test then could not take
-    /// it. The two are separate classes, so nothing about the failure pointed here.
-    /// </remarks>
-    private sealed class ModuleDefinitionSqlExecutionLock(SqlConnection conn) : IAsyncDisposable
-    {
-        public async ValueTask DisposeAsync()
-        {
-            if (conn.State != System.Data.ConnectionState.Open)
-            {
-                return;
-            }
-
-            const string sql = @"
-IF APPLOCK_MODE('public', @Resource, 'Session') <> 'NoLock'
-BEGIN
-    EXEC sys.sp_releaseapplock @Resource = @Resource, @LockOwner = N'Session';
-END";
-
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
-                ModuleDefinitionSqlRepairLockResource;
-
-            try
-            {
-                await cmd.ExecuteNonQueryAsync();
-            }
-            catch (SqlException)
-            {
-                // Do not return a session that still holds the lock to the pool.
-                SqlConnection.ClearPool(conn);
-                throw;
-            }
-        }
-    }
-
-    private static async Task<ModuleDefinitionSqlExecutionLock> AcquireModuleDefinitionSqlExecutionLockAsync(
-        SqlConnection conn,
-        CancellationToken ct)
-    {
-        const string sql = @"
-DECLARE @Result int;
-EXEC @Result = sys.sp_getapplock
-    @Resource = @Resource,
-    @LockMode = N'Exclusive',
-    @LockOwner = N'Session',
-    @LockTimeout = 0;
-SELECT @Result;";
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
-            ModuleDefinitionSqlRepairLockResource;
-
-        var result = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
-        if (result < 0)
-        {
-            throw new InvalidOperationException("Another module definition SQL repair is already running.");
-        }
-
-        return new ModuleDefinitionSqlExecutionLock(conn);
     }
 
     private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(
