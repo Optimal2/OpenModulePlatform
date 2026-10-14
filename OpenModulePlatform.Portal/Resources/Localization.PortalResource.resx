@@ -3356,6 +3356,8 @@
   <data name="Previous match" xml:space="preserve"><value>Previous match</value></data>
   <data name="Next match" xml:space="preserve"><value>Next match</value></data>
   <data name="Hidden by the list's filter" xml:space="preserve"><value>Hidden by the list's filter</value></data>
+  <data name="Deep" xml:space="preserve"><value>Deep</value></data>
+  <data name="Also search collapsed rows and other pages" xml:space="preserve"><value>Also search collapsed rows and other pages</value></data>
   <data name="Close search" xml:space="preserve"><value>Close search</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)</value></data>
 </root>

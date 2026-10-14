@@ -8571,7 +8571,7 @@ tr.linkbox-editor-row--dragging {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: min(380px, calc(100vw - 32px));
+    width: min(430px, calc(100vw - 32px));
     margin: 0;
     padding: 6px 6px 6px 10px;
     border: 1px solid var(--border);
@@ -8633,6 +8633,32 @@ tr.linkbox-editor-row--dragging {
     border-color: var(--border);
     background: var(--accent);
     outline: none;
+}
+
+/* The depth switch: pressed is the amber of the matches, so the state reads
+   at a glance next to them. */
+.portal-search__toggle {
+    flex: none;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.portal-search__toggle:hover,
+.portal-search__toggle:focus-visible {
+    background: var(--accent);
+    outline: none;
+}
+
+.portal-search__toggle[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--dashboard-edit-accent, #f59e0b) 60%, transparent);
+    background: color-mix(in srgb, var(--dashboard-edit-accent, #f59e0b) 35%, transparent);
 }
 
 /* ::highlight accepts colour, background and text decoration only. The tint

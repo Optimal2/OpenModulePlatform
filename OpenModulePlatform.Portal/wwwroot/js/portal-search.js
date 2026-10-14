@@ -7,6 +7,10 @@
 // user is standing on is revealed by asking the page (an `omp:reveal` event the
 // match's owners answer by expanding or paging) and then scrolled into view.
 //
+// Depth is a switch in the panel, on by default: off, the search sees only
+// what the reader sees, like the browser's own find. The choice is kept in
+// the browser until a user setting carries it.
+//
 // Pilot on the maintenance page. The mount is `[data-portal-search]`, with the
 // labels in its data attributes and an optional `[data-portal-search-open]`
 // button inside it. Nothing here knows how a page hides its content.
@@ -35,8 +39,11 @@
         previous: mount.dataset.labelPrevious || 'Previous match',
         next: mount.dataset.labelNext || 'Next match',
         close: mount.dataset.labelClose || 'Close',
-        hidden: mount.dataset.labelHidden || "Hidden by the list's filter"
+        hidden: mount.dataset.labelHidden || "Hidden by the list's filter",
+        deep: mount.dataset.labelDeep || 'Deep',
+        deepTitle: mount.dataset.labelDeepTitle || 'Also search collapsed rows and other pages'
     };
+    const deepStorageKey = 'omp.portalSearch.deep';
     const matchCap = Number.parseInt(mount.dataset.matchCap || '500', 10) || 500;
     const debounceMs = 150;
     const highlightName = 'omp-search';
@@ -51,6 +58,7 @@
     panel.innerHTML = `
         <input type="text" class="portal-search__input" autocomplete="off" spellcheck="false" placeholder="${escapeAttribute(labels.placeholder)}" aria-label="${escapeAttribute(labels.title)}" />
         <span class="portal-search__status" aria-live="polite"></span>
+        <button type="button" class="portal-search__toggle" data-portal-search-deep aria-pressed="true" title="${escapeAttribute(labels.deepTitle)}">${escapeAttribute(labels.deep)}</button>
         <button type="button" class="portal-search__button" data-portal-search-prev title="${escapeAttribute(labels.previous)}" aria-label="${escapeAttribute(labels.previous)}">&#8593;</button>
         <button type="button" class="portal-search__button" data-portal-search-next title="${escapeAttribute(labels.next)}" aria-label="${escapeAttribute(labels.next)}">&#8595;</button>
         <button type="button" class="portal-search__button" data-portal-search-close title="${escapeAttribute(labels.close)}" aria-label="${escapeAttribute(labels.close)}">&#215;</button>`;
@@ -65,6 +73,7 @@
     const previousButton = panel.querySelector('[data-portal-search-prev]');
     const nextButton = panel.querySelector('[data-portal-search-next]');
     const closeButton = panel.querySelector('[data-portal-search-close]');
+    const deepButton = panel.querySelector('[data-portal-search-deep]');
 
     let matches = [];
     let current = -1;
@@ -78,6 +87,20 @@
     let currentHidden = false;
     const opener = mount.querySelector('[data-portal-search-open]');
     let returnFocusTo = null;
+
+    const readDeep = () => {
+        try {
+            const stored = window.localStorage.getItem(deepStorageKey);
+            return stored === null ? true : stored === '1';
+        } catch {
+            return true;
+        }
+    };
+    const writeDeep = (value) => {
+        try { window.localStorage.setItem(deepStorageKey, value ? '1' : '0'); } catch { /* storage unavailable */ }
+    };
+    let deep = readDeep();
+    deepButton.setAttribute('aria-pressed', deep ? 'true' : 'false');
 
     const isOpen = () => !panel.hidden;
 
@@ -131,7 +154,10 @@
     // Every text node the page has, shown or hidden: a script, style or
     // template is never text to the reader, and the panel does not search
     // itself. The page can mark a region [data-portal-search-skip] (an
-    // embedded document, say) to say it holds nothing to find.
+    // embedded document, say) to say it holds nothing to find. Without depth
+    // only text that is laid out counts, which is what the browser's find
+    // sees: a paged-out row, a collapsed detail and a closed group have no
+    // boxes.
     const collectTextNodes = () => {
         const nodes = [];
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
@@ -142,6 +168,10 @@
 
                 const parent = node.parentElement;
                 if (!parent || parent.closest('script, style, noscript, template, .portal-search, [data-portal-search-skip]')) {
+                    return NodeFilter.FILTER_REJECT;
+                }
+
+                if (!deep && parent.getClientRects().length === 0) {
                     return NodeFilter.FILTER_REJECT;
                 }
 
@@ -348,6 +378,17 @@
     previousButton.addEventListener('click', () => goTo(current - 1));
     nextButton.addEventListener('click', () => goTo(current + 1));
     closeButton.addEventListener('click', close);
+    deepButton.addEventListener('click', () => {
+        deep = !deep;
+        writeDeep(deep);
+        deepButton.setAttribute('aria-pressed', deep ? 'true' : 'false');
+        window.clearTimeout(debounceTimer);
+        if (input.value) {
+            runSearch(input.value);
+        }
+
+        input.focus();
+    });
     if (opener) {
         opener.setAttribute('aria-controls', panel.id);
         opener.setAttribute('aria-expanded', 'false');

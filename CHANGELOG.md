@@ -20,7 +20,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   top bar, are later steps. A row the list's own search or filter hides is
   reported as such instead of walking the pager to its last page; Enter
   typed before the search has caught up runs it rather than stepping the
-  old term's matches; closing returns the focus to where it was.
+  old term's matches; closing returns the focus to where it was. Depth is
+  a switch in the panel, on by default: off, the search sees only the text
+  the reader sees, as the browser's find does; the choice is kept in the
+  browser until a user setting carries it.
 
 ### Changed
 
