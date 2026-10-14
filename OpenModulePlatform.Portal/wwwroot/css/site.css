@@ -8650,10 +8650,15 @@ tr.linkbox-editor-row--dragging {
     cursor: pointer;
 }
 
-.portal-search__toggle:hover,
-.portal-search__toggle:focus-visible {
+.portal-search__toggle:hover {
     background: var(--accent);
-    outline: none;
+}
+
+/* The ring, not a background swap: pressed, the amber would win over the
+   swap and leave a focused toggle looking unfocused. */
+.portal-search__toggle:focus-visible {
+    outline: 2px solid var(--omp-focus, #0b57d0);
+    outline-offset: 1px;
 }
 
 .portal-search__toggle[aria-pressed="true"] {
