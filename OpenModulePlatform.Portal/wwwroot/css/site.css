@@ -8557,6 +8557,11 @@ tr.linkbox-editor-row--dragging {
     align-items: flex-start;
 }
 
+/* Hidden by the script where the browser has no Highlight API. */
+.portal-search-mount[hidden] {
+    display: none;
+}
+
 .portal-search {
     position: fixed;
     inset: auto;
@@ -8636,8 +8641,10 @@ tr.linkbox-editor-row--dragging {
     background-color: color-mix(in srgb, var(--dashboard-edit-accent, #f59e0b) 35%, transparent);
 }
 
+/* Dark text on the amber: the dark theme's light text reads at about 3:1
+   on it, dark text at 5:1 or better on both themes. */
 ::highlight(omp-search-current) {
     background-color: color-mix(in srgb, var(--dashboard-edit-accent, #f59e0b) 75%, transparent);
-    color: var(--text);
+    color: #111827;
 }
 

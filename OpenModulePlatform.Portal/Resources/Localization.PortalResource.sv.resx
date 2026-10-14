@@ -3279,6 +3279,7 @@
   <data name="More than {0} matches, refine the search" xml:space="preserve"><value>Fler än {0} träffar, förfina sökningen</value></data>
   <data name="Previous match" xml:space="preserve"><value>Föregående träff</value></data>
   <data name="Next match" xml:space="preserve"><value>Nästa träff</value></data>
+  <data name="Hidden by the list's filter" xml:space="preserve"><value>Dold av listans filter</value></data>
   <data name="Close search" xml:space="preserve"><value>Stäng sökningen</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Sök på sidan, även i hopfällda rader och på andra sidor (Ctrl+Skift+F)</value></data>
 </root>

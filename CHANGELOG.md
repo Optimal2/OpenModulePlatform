@@ -6,7 +6,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ## [Unreleased]
 
-### Changed
+### Added
 
 - **Search on this page, with depth (pilot on the maintenance page).** A
   find bar the size of the browser's own, opened with Ctrl+Shift+F or the
@@ -17,7 +17,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   (`omp:reveal`), which pages the list and opens the detail, then scrolled
   into view. Enter and Shift+Enter step, Escape closes. Ctrl+F stays the
   browser's; a user setting to take it over, and the move into the shared
-  top bar, are later steps.
+  top bar, are later steps. A row the list's own search or filter hides is
+  reported as such instead of walking the pager to its last page; Enter
+  typed before the search has caught up runs it rather than stepping the
+  old term's matches; closing returns the focus to where it was.
+
+### Changed
 
 - **Dashboard refresh submenu placed by CSS anchor positioning.** Where the
   browser has it (Chromium 129), the submenu is a popover in the top layer

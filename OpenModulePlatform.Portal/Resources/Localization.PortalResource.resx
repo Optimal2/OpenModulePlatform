@@ -3355,6 +3355,7 @@
   <data name="More than {0} matches, refine the search" xml:space="preserve"><value>More than {0} matches, refine the search</value></data>
   <data name="Previous match" xml:space="preserve"><value>Previous match</value></data>
   <data name="Next match" xml:space="preserve"><value>Next match</value></data>
+  <data name="Hidden by the list's filter" xml:space="preserve"><value>Hidden by the list's filter</value></data>
   <data name="Close search" xml:space="preserve"><value>Close search</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)</value></data>
 </root>
