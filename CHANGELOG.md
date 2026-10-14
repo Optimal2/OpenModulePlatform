@@ -23,7 +23,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   old term's matches; closing returns the focus to where it was. Depth is
   a switch in the panel, on by default: off, the search sees only the text
   the reader sees, as the browser's find does; the choice is kept in the
-  browser until a user setting carries it.
+  browser until a user setting carries it. A new portal user setting,
+  "Let Ctrl+F open the page search" (Portal/PageSearchOverridesCtrlF, off
+  by default, on the account settings page), hands Ctrl+F to the page
+  search on pages that have it; Ctrl+Shift+F always opens it.
 
 ### Changed
 

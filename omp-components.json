@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.1004",
+  "repositoryVersion": "0.3.1005",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.450",
+      "definitionVersion": "0.3.452",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -104,8 +104,8 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.890",
-      "minModuleDefinitionVersion": "0.3.383",
+      "version": "0.3.891",
+      "minModuleDefinitionVersion": "0.3.452",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip",

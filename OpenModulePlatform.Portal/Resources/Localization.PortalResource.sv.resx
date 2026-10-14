@@ -3282,6 +3282,8 @@
   <data name="Hidden by the list's filter" xml:space="preserve"><value>Dold av listans filter</value></data>
   <data name="Deep" xml:space="preserve"><value>Djup</value></data>
   <data name="Also search collapsed rows and other pages" xml:space="preserve"><value>Sök även i hopfällda rader och på andra sidor</value></data>
+  <data name="Let Ctrl+F open the page search" xml:space="preserve"><value>Låt Ctrl+F öppna sidsökningen</value></data>
+  <data name="When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it." xml:space="preserve"><value>När detta är på öppnar Ctrl+F (Cmd+F på Mac) sidsökningen i stället för webbläsarens sökning, på sidor som har den. Ctrl+Skift+F öppnar den alltid.</value></data>
   <data name="Close search" xml:space="preserve"><value>Stäng sökningen</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Sök på sidan, även i hopfällda rader och på andra sidor (Ctrl+Skift+F)</value></data>
 </root>

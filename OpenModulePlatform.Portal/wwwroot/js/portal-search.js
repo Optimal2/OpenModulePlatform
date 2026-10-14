@@ -7,9 +7,10 @@
 // user is standing on is revealed by asking the page (an `omp:reveal` event the
 // match's owners answer by expanding or paging) and then scrolled into view.
 //
-// Depth is a switch in the panel, on by default: off, the search sees only
+// Depth is a checkbox in the panel, on by default: off, the search sees only
 // what the reader sees, like the browser's own find. The choice is kept in
-// the browser until a user setting carries it.
+// the browser until a user setting carries it. Ctrl+F stays the browser's
+// unless the user's portal setting (rendered on <body>) hands it over.
 //
 // Pilot on the maintenance page. The mount is `[data-portal-search]`, with the
 // labels in its data attributes and an optional `[data-portal-search-open]`
@@ -58,7 +59,7 @@
     panel.innerHTML = `
         <input type="text" class="portal-search__input" autocomplete="off" spellcheck="false" placeholder="${escapeAttribute(labels.placeholder)}" aria-label="${escapeAttribute(labels.title)}" />
         <span class="portal-search__status" aria-live="polite"></span>
-        <button type="button" class="portal-search__toggle" data-portal-search-deep aria-pressed="true" title="${escapeAttribute(labels.deepTitle)}">${escapeAttribute(labels.deep)}</button>
+        <label class="portal-search__deep" title="${escapeAttribute(labels.deepTitle)}"><input type="checkbox" data-portal-search-deep checked /><span>${escapeAttribute(labels.deep)}</span></label>
         <button type="button" class="portal-search__button" data-portal-search-prev title="${escapeAttribute(labels.previous)}" aria-label="${escapeAttribute(labels.previous)}">&#8593;</button>
         <button type="button" class="portal-search__button" data-portal-search-next title="${escapeAttribute(labels.next)}" aria-label="${escapeAttribute(labels.next)}">&#8595;</button>
         <button type="button" class="portal-search__button" data-portal-search-close title="${escapeAttribute(labels.close)}" aria-label="${escapeAttribute(labels.close)}">&#215;</button>`;
@@ -73,7 +74,8 @@
     const previousButton = panel.querySelector('[data-portal-search-prev]');
     const nextButton = panel.querySelector('[data-portal-search-next]');
     const closeButton = panel.querySelector('[data-portal-search-close]');
-    const deepButton = panel.querySelector('[data-portal-search-deep]');
+    const deepBox = panel.querySelector('[data-portal-search-deep]');
+    const ctrlFOverridden = document.body.dataset.pageSearchCtrlF === 'true';
 
     let matches = [];
     let current = -1;
@@ -100,7 +102,7 @@
         try { window.localStorage.setItem(deepStorageKey, value ? '1' : '0'); } catch { /* storage unavailable */ }
     };
     let deep = readDeep();
-    deepButton.setAttribute('aria-pressed', deep ? 'true' : 'false');
+    deepBox.checked = deep;
 
     const isOpen = () => !panel.hidden;
 
@@ -378,10 +380,9 @@
     previousButton.addEventListener('click', () => goTo(current - 1));
     nextButton.addEventListener('click', () => goTo(current + 1));
     closeButton.addEventListener('click', close);
-    deepButton.addEventListener('click', () => {
-        deep = !deep;
+    deepBox.addEventListener('change', () => {
+        deep = deepBox.checked;
         writeDeep(deep);
-        deepButton.setAttribute('aria-pressed', deep ? 'true' : 'false');
         window.clearTimeout(debounceTimer);
         if (input.value) {
             runSearch(input.value);
@@ -396,10 +397,11 @@
     }
 
     // Ctrl+Shift+F (Cmd+Shift+F on a Mac): a combination neither Windows nor
-    // the browser uses. Ctrl+F stays the browser's; a user setting to take it
-    // over is a later step.
+    // the browser uses. Ctrl+F stays the browser's unless the user's setting
+    // hands it over; even then Ctrl+Shift+F keeps working.
     document.addEventListener('keydown', (event) => {
-        if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
+        const isF = (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f';
+        if (isF && (event.shiftKey || ctrlFOverridden)) {
             event.preventDefault();
             open();
         } else if (event.key === 'Escape' && isOpen() && event.target !== input && !document.querySelector('dialog[open]')) {

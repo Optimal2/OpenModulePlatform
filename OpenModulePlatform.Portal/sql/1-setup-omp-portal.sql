@@ -152,6 +152,15 @@ USING
            N'Controls whether notification and message toast sounds are played for the signed-in user.' AS description,
            50 AS sort_order,
            CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Portal' AS setting_category,
+           N'PageSearchOverridesCtrlF' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(0 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether Ctrl+F opens the page search instead of the browser''s find, on pages that have it, for the signed-in user.' AS description,
+           60 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
 AND target.setting_name = source.setting_name

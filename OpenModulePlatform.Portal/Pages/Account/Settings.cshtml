@@ -152,6 +152,12 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
             <p class="muted">@L["When this is turned off, notification and message toasts are shown silently."]</p>
         }
 
+        <div class="form-field checkbox-row checkbox-row--boxed">
+            <input asp-for="PortalInput.PageSearchOverridesCtrlF" type="checkbox" />
+            <label for="PortalInput_PageSearchOverridesCtrlF">@L["Let Ctrl+F open the page search"]</label>
+        </div>
+        <p class="muted">@L["When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it."]</p>
+
         <div class="toolbar">
             <button type="submit">@L["Save"]</button>
         </div>

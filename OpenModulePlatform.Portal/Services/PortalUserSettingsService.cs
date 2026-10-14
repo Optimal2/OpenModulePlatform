@@ -20,6 +20,7 @@ public sealed class PortalUserSettingsService
     private const string ShowPortalNavbarSetting = "ShowPortalNavbar";
     private const string NotificationToastsMutedSetting = "NotificationToastsMuted";
     private const string NotificationSoundsEnabledSetting = "NotificationSoundsEnabled";
+    private const string PageSearchOverridesCtrlFSetting = "PageSearchOverridesCtrlF";
     private const byte IntValueKind = 1;
 
     private readonly SqlConnectionFactory _db;
@@ -39,7 +40,8 @@ SELECT u.display_name,
        CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit),
        CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit),
        CAST(COALESCE(toasts_v.setting_value, toasts_d.default_int_value, 0) AS bit),
-       CAST(COALESCE(sounds_v.setting_value, sounds_d.default_int_value, 1) AS bit)
+       CAST(COALESCE(sounds_v.setting_value, sounds_d.default_int_value, 1) AS bit),
+       CAST(COALESCE(search_v.setting_value, search_d.default_int_value, 0) AS bit)
 FROM omp.users u
 LEFT JOIN omp_portal.user_setting_definitions admin_d
     ON admin_d.setting_category = @setting_category
@@ -81,6 +83,14 @@ LEFT JOIN omp_portal.user_setting_definitions sounds_d
 LEFT JOIN omp_portal.user_setting_int_values sounds_v
     ON sounds_v.user_id = u.user_id
    AND sounds_v.user_setting_definition_id = sounds_d.user_setting_definition_id
+LEFT JOIN omp_portal.user_setting_definitions search_d
+    ON search_d.setting_category = @setting_category
+   AND search_d.setting_name = @page_search_overrides_ctrl_f_setting_name
+   AND search_d.value_kind = @value_kind
+   AND search_d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values search_v
+    ON search_v.user_id = u.user_id
+   AND search_v.user_setting_definition_id = search_d.user_setting_definition_id
 WHERE u.user_id = @user_id
   AND u.account_status = 1;";
 
@@ -104,7 +114,8 @@ WHERE u.user_id = @user_id
             rdr.GetBoolean(4),
             rdr.GetBoolean(5),
             rdr.GetBoolean(6),
-            rdr.GetBoolean(7));
+            rdr.GetBoolean(7),
+            rdr.GetBoolean(8));
     }
 
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
@@ -141,13 +152,20 @@ WHERE u.user_id = @user_id
             NotificationSoundsEnabledSetting,
             defaultValue: true,
             ct);
+        var pageSearchOverridesCtrlF = await GetPortalBoolSettingAsync(
+            conn,
+            userId,
+            PageSearchOverridesCtrlFSetting,
+            defaultValue: false,
+            ct);
 
         return new PortalUserSettings(
             adminMetricsCollapsed,
             topbarDropdownsOpenOnHover,
             showPortalNavbar,
             notificationToastsMuted,
-            notificationSoundsEnabled);
+            notificationSoundsEnabled,
+            pageSearchOverridesCtrlF);
     }
 
     public static bool ParseNotificationToastsEnabled(string? value)
@@ -372,6 +390,16 @@ END;";
             missingDefinitionMessage: "Portal user setting definition is missing: Portal/NotificationSoundsEnabled.",
             ct);
 
+    public Task UpsertPageSearchOverridesCtrlFAsync(int userId, bool value, CancellationToken ct)
+        => UpsertPortalBoolSettingAsync(
+            userId,
+            PageSearchOverridesCtrlFSetting,
+            value,
+            defaultValue: false,
+            missingDefinitionErrorNumber: 52016,
+            missingDefinitionMessage: "Portal user setting definition is missing: Portal/PageSearchOverridesCtrlF.",
+            ct);
+
     private async Task UpsertPortalBoolSettingAsync(
         int userId,
         string settingName,
@@ -475,6 +503,7 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@show_portal_navbar_setting_name", SqlDbType.NVarChar, 200).Value = ShowPortalNavbarSetting;
         cmd.Parameters.Add("@notification_toasts_muted_setting_name", SqlDbType.NVarChar, 200).Value = NotificationToastsMutedSetting;
         cmd.Parameters.Add("@notification_sounds_enabled_setting_name", SqlDbType.NVarChar, 200).Value = NotificationSoundsEnabledSetting;
+        cmd.Parameters.Add("@page_search_overrides_ctrl_f_setting_name", SqlDbType.NVarChar, 200).Value = PageSearchOverridesCtrlFSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
     }
 
@@ -593,14 +622,16 @@ public sealed record PortalAccountSettings(
     bool TopbarDropdownsOpenOnHover,
     bool ShowPortalNavbar,
     bool NotificationToastsMuted,
-    bool NotificationSoundsEnabled);
+    bool NotificationSoundsEnabled,
+    bool PageSearchOverridesCtrlF);
 
 public sealed record PortalUserSettings(
     bool AdminMetricsCollapsed,
     bool TopbarDropdownsOpenOnHover,
     bool ShowPortalNavbar,
     bool NotificationToastsMuted,
-    bool NotificationSoundsEnabled);
+    bool NotificationSoundsEnabled,
+    bool PageSearchOverridesCtrlF);
 
 public sealed record CreateSelfServiceAdAccountResult(
     CreateSelfServiceAdAccountStatus Status,

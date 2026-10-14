@@ -318,6 +318,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             await _settings.UpsertNotificationSoundsEnabledAsync(userId, PortalInput.NotificationSoundsEnabled, ct);
         }
 
+        await _settings.UpsertPageSearchOverridesCtrlFAsync(userId, PortalInput.PageSearchOverridesCtrlF, ct);
+
         StatusMessage = T("Settings saved.");
         return RedirectToSettings(PortalTab);
     }
@@ -415,6 +417,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             PortalInput.ShowPortalNavbar = settings.ShowPortalNavbar;
             PortalInput.NotificationToastsMuted = settings.NotificationToastsMuted;
             PortalInput.NotificationSoundsEnabled = settings.NotificationSoundsEnabled;
+            PortalInput.PageSearchOverridesCtrlF = settings.PageSearchOverridesCtrlF;
         }
 
         var permissions = await GetUserPermissionsAsync(ct);
@@ -793,5 +796,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         public bool NotificationToastsMuted { get; set; }
 
         public bool NotificationSoundsEnabled { get; set; } = true;
+
+        public bool PageSearchOverridesCtrlF { get; set; }
     }
 }

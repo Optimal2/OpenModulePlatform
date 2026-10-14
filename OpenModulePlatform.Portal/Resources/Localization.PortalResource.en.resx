@@ -1211,6 +1211,8 @@
   <data name="Hidden by the list's filter" xml:space="preserve"><value>Hidden by the list's filter</value></data>
   <data name="Deep" xml:space="preserve"><value>Deep</value></data>
   <data name="Also search collapsed rows and other pages" xml:space="preserve"><value>Also search collapsed rows and other pages</value></data>
+  <data name="Let Ctrl+F open the page search" xml:space="preserve"><value>Let Ctrl+F open the page search</value></data>
+  <data name="When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it." xml:space="preserve"><value>When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it.</value></data>
   <data name="Close search" xml:space="preserve"><value>Close search</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)</value></data>
 </root>

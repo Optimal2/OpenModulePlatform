@@ -68,6 +68,7 @@
         && notificationToastsGloballyEnabled
         && portalLayoutSettings?.NotificationToastsMuted != true;
     var notificationSoundsEnabled = portalLayoutSettings?.NotificationSoundsEnabled ?? true;
+    var pageSearchOverridesCtrlF = portalLayoutSettings?.PageSearchOverridesCtrlF ?? false;
 
     if (string.IsNullOrWhiteSpace(documentTitle))
     {
@@ -111,7 +112,7 @@
         <meta name="omp-prevent-back-cache" content="true" />
     }
 </head>
-<body>
+<body data-page-search-ctrl-f="@pageSearchOverridesCtrlF.ToString().ToLowerInvariant()">
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
         @if (showPortalNavbar)
