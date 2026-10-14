@@ -23,6 +23,20 @@
         row.querySelector('.maintenance-finding-hint')?.setAttribute('aria-expanded', open ? 'true' : 'false');
     };
 
+    // The page search (portal-search.js) asks for a match in a collapsed
+    // detail to be shown; the detail opens as if its row had been clicked.
+    document.addEventListener('omp:reveal', (event) => {
+        const detail = event.target instanceof Element ? event.target.closest('tr.maintenance-finding-detail') : null;
+        if (!detail || detail.classList.contains('maintenance-finding-detail--open')) {
+            return;
+        }
+
+        const row = detail.previousElementSibling;
+        if (row?.matches('tr[data-finding-row]')) {
+            toggleFinding(row);
+        }
+    });
+
     document.addEventListener('click', (event) => {
         const hint = event.target.closest('.maintenance-finding-hint');
         if (hint) {
@@ -195,6 +209,20 @@
             body.hidden = !expanded;
         }
     };
+
+    // A match inside a folded preview group unfolds the group.
+    document.addEventListener('omp:reveal', (event) => {
+        const body = event.target instanceof Element ? event.target.closest('[data-maintenance-preview-body]') : null;
+        if (!body || !body.hidden) {
+            return;
+        }
+
+        const group = Array.from(groups).find((candidate) => candidate.contains(body));
+        if (group) {
+            setGroupExpanded(group, true);
+            updateBulkActions();
+        }
+    });
 
     for (const group of groups) {
         const toggle = group.querySelector('[data-maintenance-preview-toggle]');

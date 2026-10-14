@@ -3471,4 +3471,12 @@
   <data name="Pages" xml:space="preserve"><value>Sidor</value></data>
   <data name="The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner." xml:space="preserve"><value>Dashboardens meny kan dras vart som helst på skärmen; det här lägger tillbaka den i sitt hörn.</value></data>
   <data name="The menu will be back in its corner the next time the dashboard opens." xml:space="preserve"><value>Menyn ligger i sitt hörn igen nästa gång dashboarden öppnas.</value></data>
+  <data name="Search on this page" xml:space="preserve"><value>Sök på sidan</value></data>
+  <data name="{0} of {1}" xml:space="preserve"><value>{0} av {1}</value></data>
+  <data name="No matches" xml:space="preserve"><value>Inga träffar</value></data>
+  <data name="More than {0} matches, refine the search" xml:space="preserve"><value>Fler än {0} träffar, förfina sökningen</value></data>
+  <data name="Previous match" xml:space="preserve"><value>Föregående träff</value></data>
+  <data name="Next match" xml:space="preserve"><value>Nästa träff</value></data>
+  <data name="Close search" xml:space="preserve"><value>Stäng sökningen</value></data>
+  <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Sök på sidan, även i hopfällda rader och på andra sidor (Ctrl+Skift+F)</value></data>
 </root>

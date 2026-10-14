@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Search on this page, with depth (pilot on the maintenance page).** A
+  find bar the size of the browser's own, opened with Ctrl+Shift+F or the
+  page's Search button, that finds text everywhere the page has it: rows on
+  other pages of a paged list and text in collapsed details included, which
+  the browser's find never sees. Matches are painted with the CSS Custom
+  Highlight API; the match the user steps to is revealed by asking the page
+  (`omp:reveal`), which pages the list and opens the detail, then scrolled
+  into view. Enter and Shift+Enter step, Escape closes. Ctrl+F stays the
+  browser's; a user setting to take it over, and the move into the shared
+  top bar, are later steps.
+
 - **Dashboard refresh submenu placed by CSS anchor positioning.** Where the
   browser has it (Chromium 129), the submenu is a popover in the top layer
   anchored to its tile; CSS opens it above the tile and flips it below or
