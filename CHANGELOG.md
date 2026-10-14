@@ -15,13 +15,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   the browser's find never sees. Matches are painted with the CSS Custom
   Highlight API; the match the user steps to is revealed by asking the page
   (`omp:reveal`), which pages the list and opens the detail, then scrolled
-  into view. Enter and Shift+Enter step, Escape closes. Ctrl+F stays the
-  browser's; a user setting to take it over, and the move into the shared
-  top bar, are later steps. A row the list's own search or filter hides is
+  into view. Enter and Shift+Enter step, Escape closes. The move into the
+  shared top bar is a later step. A row the list's own search or filter hides is
   reported as such instead of walking the pager to its last page; Enter
   typed before the search has caught up runs it rather than stepping the
   old term's matches; closing returns the focus to where it was. Depth is
-  a switch in the panel, on by default: off, the search sees only the text
+  a checkbox in the panel, on by default: off, the search sees only the text
   the reader sees, as the browser's find does; the choice is kept in the
   browser until a user setting carries it. A new portal user setting,
   "Let Ctrl+F open the page search" (Portal/PageSearchOverridesCtrlF, off
