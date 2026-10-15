@@ -1877,6 +1877,64 @@ html:not([data-theme-mode]) .omp-theme-switch {
 
 /* ::highlight accepts colour, background and text decoration only. Amber,
    mixed so it reads on both themes; dark text on the current match. */
+/* Inline: the panel sits in the mount left of the icon and grows out of it,
+   a field in the bar's own colours (it is inside .portal-topbar here, so
+   the bar's tokens apply). The script sets the width; the content keeps
+   its size and is clipped while the field grows. */
+.omp-search--inline {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    flex: none;
+    flex-wrap: nowrap;
+    box-sizing: border-box;
+    width: 0;
+    max-width: none;
+    height: 28px;
+    margin: 0 4px 0 0;
+    padding: 0 2px 0 4px;
+    overflow: hidden;
+    border: 1px solid var(--portal-topbar-border);
+    border-radius: 8px;
+    background: var(--portal-topbar-surface-muted);
+    color: var(--portal-topbar-text);
+    box-shadow: none;
+    white-space: nowrap;
+    transition: width 150ms ease;
+}
+
+.omp-search--inline .omp-search__input {
+    height: 22px;
+    min-width: 80px;
+    border-color: transparent;
+    background: transparent;
+}
+
+.omp-search--inline .omp-search__input:focus {
+    outline: none;
+    border-color: var(--omp-focus, #0b57d0);
+}
+
+.omp-search--inline .omp-search__status {
+    color: var(--portal-topbar-text-muted);
+}
+
+.omp-search--inline .omp-search__deep,
+.omp-search--inline .omp-search__button {
+    height: 24px;
+}
+
+.omp-search--inline .omp-search__button {
+    width: 24px;
+    color: var(--portal-topbar-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .omp-search--inline {
+        transition: none;
+    }
+}
+
 ::highlight(omp-search) {
     background-color: color-mix(in srgb, var(--omp-search-highlight, #f59e0b) 35%, transparent);
 }

@@ -13,6 +13,11 @@
 // the browser until a user setting carries it. Ctrl+F stays the browser's
 // unless the app's user setting (rendered on <body>) hands it over.
 //
+// The panel has two placements. With room in the bar it grows leftward out
+// of the icon, inside the bar, taking only the space the navigation leaves
+// free (never pushing the bar's own overflow logic). Without room, or on a
+// compact viewport, it hangs under the bar instead.
+//
 // The mount is `[data-omp-search]` in the top bar (the PortalTopBar view and
 // its Blazor twin render it), with the labels in its data attributes and the
 // opener `[data-omp-search-open]` inside it. The mount stays hidden until
@@ -34,6 +39,7 @@
         }
 
         const bar = mount.closest('.portal-topbar') || mount.parentElement;
+        const nav = bar.querySelector('.portal-topbar__nav');
 
         const supportsHighlight = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
         if (!supportsHighlight) {
@@ -59,6 +65,12 @@
         const deepStorageKey = 'omp.search.deep';
         const matchCap = Number.parseInt(mount.dataset.matchCap || '500', 10) || 500;
         const debounceMs = 150;
+        // Inline, the field needs room for the input, the count, the depth box
+        // and three buttons; below this it hangs under the bar instead.
+        const inlineMinWidth = 280;
+        const inlineMaxWidth = 430;
+        const inlineMargin = 24;
+        const growMs = 150;
         const highlightName = 'omp-search';
         const currentHighlightName = 'omp-search-current';
 
@@ -76,13 +88,13 @@
             <button type="button" class="omp-search__button" data-omp-search-next title="${escapeAttribute(labels.next)}" aria-label="${escapeAttribute(labels.next)}">&#8595;</button>
             <button type="button" class="omp-search__button" data-omp-search-close title="${escapeAttribute(labels.close)}" aria-label="${escapeAttribute(labels.close)}">&#215;</button>`;
         const usePopover = typeof HTMLElement.prototype.showPopover === 'function';
-        if (usePopover) {
-            panel.setAttribute('popover', 'manual');
-        }
-        // The panel lives on <body>, not in the bar: a fixed header with a
-        // backdrop-filter, or a sticky header with a low z-index, would otherwise
-        // trap or cover it wherever the browser has no top layer to lift it into.
+        // Hanging under the bar, the panel lives on <body>: a fixed header with
+        // a backdrop-filter, or a sticky header with a low z-index, would
+        // otherwise trap or cover it wherever the browser has no top layer to
+        // lift it into. Inline, it moves into the mount, left of the icon.
         document.body.appendChild(panel);
+        let inline = false;
+        let growTimer = 0;
         mount.dataset.ompSearchReady = 'true';
 
         const input = panel.querySelector('.omp-search__input');
@@ -127,6 +139,42 @@
         // when the viewport moves; the Portal's header is fixed, other apps'
         // bars may scroll, so a bar that left the viewport pins the panel to
         // its top.
+        const isCompactViewport = () => {
+            const breakpoint = Number.parseFloat(getComputedStyle(bar).getPropertyValue('--portal-topbar-compact-breakpoint'));
+            return Number.isFinite(breakpoint) && window.innerWidth <= breakpoint;
+        };
+
+        // The room the navigation leaves free in the bar: the nav box minus what
+        // its children take (the modules host measures its content even when it
+        // clips it, so links the bar would hide still count). The bar's own
+        // overflow script measures the whole bar, which the field never
+        // widens, so the two never fight.
+        const freeSpace = () => {
+            if (!nav || isCompactViewport()) {
+                return 0;
+            }
+
+            const navWidth = nav.getBoundingClientRect().width;
+            const gap = Number.parseFloat(getComputedStyle(nav).columnGap) || 0;
+            let used = 0;
+            let shown = 0;
+            for (const child of nav.children) {
+                if (child.hidden || getComputedStyle(child).display === 'none') {
+                    continue;
+                }
+
+                used += child.hasAttribute('data-portal-topbar-modules') ? child.scrollWidth : child.getBoundingClientRect().width;
+                shown++;
+            }
+
+            return navWidth - used - Math.max(0, shown - 1) * gap;
+        };
+
+        const inlineWidth = () => {
+            const width = Math.min(inlineMaxWidth, Math.floor(freeSpace() - inlineMargin));
+            return width >= inlineMinWidth ? width : 0;
+        };
+
         const place = () => {
             const barRect = bar.getBoundingClientRect();
             const anchor = (opener || mount).getBoundingClientRect();
@@ -138,19 +186,89 @@
             panel.style.right = `${Math.round(right)}px`;
         };
 
+        // Shows the panel inline (grown leftward out of the icon to `width`)
+        // or, with width 0, hanging under the bar.
+        const show = (width) => {
+            window.clearTimeout(growTimer);
+            inline = width > 0;
+            panel.classList.toggle('omp-search--inline', inline);
+            if (inline) {
+                panel.removeAttribute('popover');
+                panel.style.top = '';
+                panel.style.right = '';
+                if (panel.parentElement !== mount) {
+                    mount.insertBefore(panel, opener && opener.parentElement === mount ? opener : null);
+                }
+
+                panel.style.width = '0px';
+                panel.hidden = false;
+                // A frame at width 0 first, so the growth is a transition.
+                void panel.offsetWidth;
+                panel.style.width = `${width}px`;
+                return;
+            }
+
+            if (panel.parentElement !== document.body) {
+                document.body.appendChild(panel);
+            }
+
+            panel.style.width = '';
+            if (usePopover) {
+                panel.setAttribute('popover', 'manual');
+            }
+
+            panel.hidden = false;
+            if (usePopover) {
+                try { panel.showPopover(); } catch { /* already shown, or not in the document */ }
+            }
+
+            place();
+        };
+
+        const hide = () => {
+            window.clearTimeout(growTimer);
+            if (usePopover && panel.matches(':popover-open')) {
+                try { panel.hidePopover(); } catch { /* not shown */ }
+            }
+
+            if (inline) {
+                // Shrink back into the icon, then hide.
+                panel.style.width = '0px';
+                growTimer = window.setTimeout(() => { panel.hidden = true; }, growMs + 20);
+                return;
+            }
+
+            panel.hidden = true;
+        };
+
+        // The viewport moved: the hanging panel follows the bar; the inline
+        // field keeps to the room left, and hangs under the bar when the room
+        // is gone (or comes back inline when it returns).
+        const onViewportChange = () => {
+            if (!isOpen()) {
+                return;
+            }
+
+            const width = inlineWidth();
+            if (inline && width > 0) {
+                panel.style.width = `${width}px`;
+            } else if (inline !== (width > 0)) {
+                window.clearTimeout(growTimer);
+                panel.hidden = true;
+                show(width);
+                input.focus();
+            } else {
+                place();
+            }
+        };
+
         const open = () => {
             if (!isOpen()) {
                 const active = document.activeElement;
                 returnFocusTo = active instanceof HTMLElement && active !== document.body ? active : opener;
-                panel.hidden = false;
-                opener?.setAttribute('aria-expanded', 'true');
-                if (usePopover) {
-                    try { panel.showPopover(); } catch { /* already shown, or not in the document */ }
-                }
-
-                place();
-                window.addEventListener('resize', place);
-                window.addEventListener('scroll', place, { passive: true });
+                show(inlineWidth());
+                window.addEventListener('resize', onViewportChange);
+                window.addEventListener('scroll', onViewportChange, { passive: true });
             }
 
             input.focus();
@@ -171,13 +289,9 @@
             searchedTerm = '';
             currentHidden = false;
             panel.classList.remove('omp-search--empty');
-            if (usePopover && panel.matches(':popover-open')) {
-                try { panel.hidePopover(); } catch { /* not shown */ }
-            }
-
-            panel.hidden = true;
-            window.removeEventListener('resize', place);
-            window.removeEventListener('scroll', place);
+            hide();
+            window.removeEventListener('resize', onViewportChange);
+            window.removeEventListener('scroll', onViewportChange);
             opener?.setAttribute('aria-expanded', 'false');
             if (returnFocusTo?.isConnected) {
                 returnFocusTo.focus();

@@ -12,8 +12,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   of the browser's own, opened with Ctrl+Shift+F or the search icon among
   the top bar's actions (`js/omp-search.js` in Web.Shared, mounted by the
   PortalTopBar view and its Blazor twin; the mount stays hidden in an app
-  that does not load the script), hanging from the bar's bottom edge under
-  the icon, that finds text everywhere the page has it: rows on
+  that does not load the script). With room in the bar the field grows
+  leftward out of the icon, taking only the space the navigation leaves
+  free; without room, or on a compact viewport, it hangs from the bar's
+  bottom edge under the icon instead. It finds text everywhere the page
+  has it: rows on
   other pages of a paged list and text in collapsed details included, which
   the browser's find never sees. Matches are painted with the CSS Custom
   Highlight API; the match the user steps to is revealed by asking the page
