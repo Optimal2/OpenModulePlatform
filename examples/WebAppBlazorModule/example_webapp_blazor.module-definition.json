@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_webapp_blazor",
-  "definitionVersion": "0.3.205",
+  "definitionVersion": "0.3.206",
   "module": {
     "displayName": "Example WebApp Blazor Module",
     "moduleType": "WebAppModule",
@@ -27,7 +27,7 @@
       "targetName": "example-webapp-blazor",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.359"
+      "maxVersion": "0.3.360"
     }
   ],
   "sqlScripts": [

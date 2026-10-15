@@ -98,6 +98,9 @@
         let refitTimer = 0;
         // Shrinking back into the icon: still displayed, no longer open.
         let closing = false;
+        // The bar width last seen by the observer; observing always reports
+        // once at once, which is no change and must not cut the opening grow.
+        let observedBarWidth = 0;
         mount.dataset.ompSearchReady = 'true';
 
         const input = panel.querySelector('.omp-search__input');
@@ -136,6 +139,13 @@
         deepBox.checked = deep;
 
         const isOpen = () => !panel.hidden && !closing;
+
+        // contentRect is the content box: the border box less borders and padding.
+        const borderAndPadding = (element) => {
+            const style = getComputedStyle(element);
+            return ['borderLeftWidth', 'borderRightWidth', 'paddingLeft', 'paddingRight']
+                .reduce((sum, name) => sum + (Number.parseFloat(style[name]) || 0), 0);
+        };
 
         // The panel hangs from the bottom edge of the top bar, its right edge at
         // the opener's, clamped to the viewport. Measured when opened and again
@@ -319,7 +329,17 @@
 
         // The bar's size is what decides the placement; a ResizeObserver sees
         // it settle after layout, which a window resize event does not.
-        const barObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(onViewportChange) : null;
+        const barObserver = typeof ResizeObserver === 'function'
+            ? new ResizeObserver((entries) => {
+                const width = entries[entries.length - 1]?.contentRect.width ?? bar.getBoundingClientRect().width;
+                if (width === observedBarWidth) {
+                    return;
+                }
+
+                observedBarWidth = width;
+                onViewportChange();
+            })
+            : null;
 
         const open = () => {
             if (!isOpen()) {
@@ -327,6 +347,7 @@
                 returnFocusTo = active instanceof HTMLElement && active !== document.body ? active : opener;
                 show(inlineWidth());
                 opener?.setAttribute('aria-expanded', 'true');
+                observedBarWidth = bar.getBoundingClientRect().width - borderAndPadding(bar);
                 barObserver?.observe(bar);
                 window.addEventListener('resize', onViewportChange);
                 window.addEventListener('scroll', onScroll, { passive: true });
