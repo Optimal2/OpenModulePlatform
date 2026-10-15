@@ -8,15 +8,20 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
-- **Search on this page, with depth (pilot on the maintenance page).** A
-  find bar the size of the browser's own, opened with Ctrl+Shift+F or the
-  page's Search button, that finds text everywhere the page has it: rows on
+- **Search on this page, with depth, in the top bar.** A find bar the size
+  of the browser's own, opened with Ctrl+Shift+F or the search icon among
+  the top bar's actions (`js/omp-search.js` in Web.Shared, mounted by the
+  PortalTopBar view and its Blazor twin; the mount stays hidden in an app
+  that does not load the script), hanging from the bar's bottom edge under
+  the icon, that finds text everywhere the page has it: rows on
   other pages of a paged list and text in collapsed details included, which
   the browser's find never sees. Matches are painted with the CSS Custom
   Highlight API; the match the user steps to is revealed by asking the page
   (`omp:reveal`), which pages the list and opens the detail, then scrolled
-  into view. Enter and Shift+Enter step, Escape closes. The move into the
-  shared top bar is a later step. A row the list's own search or filter hides is
+  into view. Enter and Shift+Enter step, Escape closes. The pilot's mount
+  on the maintenance page is gone; the page keeps answering `omp:reveal`.
+  The list script answering `omp:reveal` itself, instead of the search
+  pressing its pager, is a later step. A row the list's own search or filter hides is
   reported as such instead of walking the pager to its last page; Enter
   typed before the search has caught up runs it rather than stepping the
   old term's matches; closing returns the focus to where it was. Depth is

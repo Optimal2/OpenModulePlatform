@@ -1714,3 +1714,171 @@ button.portal-topbar__profile-role-link {
 html:not([data-theme-mode]) .omp-theme-switch {
     display: none;
 }
+
+/* Search on this page (js/omp-search.js): the opener among the actions, the
+   panel hanging from the bar's bottom edge under the opener, in the top
+   layer when the browser has popovers. Matches are painted with ::highlight,
+   so the page itself is untouched. The mount shows only once the script has
+   marked it ready: an app that does not load the script shows no dead icon. */
+.omp-search-mount {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.omp-search-mount:not([data-omp-search-ready]),
+.omp-search-mount[hidden] {
+    display: none;
+}
+
+.omp-search__opener {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    margin: 0;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--portal-topbar-text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.omp-search__opener:hover,
+.omp-search__opener[aria-expanded="true"] {
+    color: var(--portal-topbar-text);
+    background: var(--portal-topbar-surface-muted);
+}
+
+.omp-search__opener:focus-visible {
+    outline: 2px solid var(--omp-focus, #0b57d0);
+    outline-offset: 2px;
+}
+
+.portal-topbar__icon--search {
+    --portal-topbar-icon: url("../icons/search.svg");
+    background: currentColor;
+    -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
+    mask: var(--portal-topbar-icon) center / contain no-repeat;
+}
+
+/* Square top corners and no top border: the panel reads as a drawer pulled
+   out of the bar. The script sets top and right. */
+.omp-search {
+    position: fixed;
+    inset: auto;
+    top: 0;
+    right: 16px;
+    z-index: 41000;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: min(430px, calc(100vw - 16px));
+    margin: 0;
+    padding: 8px 8px 8px 12px;
+    border: 1px solid var(--portal-topbar-border);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: var(--portal-topbar-surface);
+    color: var(--portal-topbar-text);
+    box-shadow: var(--portal-topbar-shadow);
+}
+
+.omp-search[hidden] {
+    display: none;
+}
+
+.omp-search__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--omp-control-border, #7b8799);
+    border-radius: 8px;
+    background: var(--omp-surface, #fff);
+    color: inherit;
+    font: inherit;
+}
+
+.omp-search__input:focus {
+    outline: 2px solid var(--omp-focus, #0b57d0);
+    outline-offset: 0;
+}
+
+.omp-search__status {
+    flex: none;
+    min-width: 3.5em;
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--portal-topbar-text-muted);
+    white-space: nowrap;
+}
+
+.omp-search--empty .omp-search__status {
+    color: var(--omp-danger-text, #b42318);
+}
+
+/* The depth checkbox, in the link blue when checked. */
+.omp-search__deep {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.omp-search__deep input {
+    margin: 0;
+    accent-color: var(--omp-link, #0b57d0);
+}
+
+.omp-search__deep:hover {
+    background: var(--portal-topbar-surface-muted);
+}
+
+.omp-search__deep:has(input:focus-visible) {
+    outline: 2px solid var(--omp-focus, #0b57d0);
+    outline-offset: 1px;
+}
+
+.omp-search__button {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--portal-topbar-text);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.omp-search__button:hover,
+.omp-search__button:focus-visible {
+    border-color: var(--portal-topbar-border);
+    background: var(--portal-topbar-surface-muted);
+    outline: none;
+}
+
+/* ::highlight accepts colour, background and text decoration only. Amber,
+   mixed so it reads on both themes; dark text on the current match. */
+::highlight(omp-search) {
+    background-color: color-mix(in srgb, var(--omp-search-highlight, #f59e0b) 35%, transparent);
+}
+
+::highlight(omp-search-current) {
+    background-color: color-mix(in srgb, var(--omp-search-highlight, #f59e0b) 75%, transparent);
+    color: #111827;
+}

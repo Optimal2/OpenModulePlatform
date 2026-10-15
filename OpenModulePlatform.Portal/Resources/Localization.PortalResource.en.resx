@@ -1202,17 +1202,6 @@
   <data name="Pages" xml:space="preserve"><value>Pages</value></data>
   <data name="The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner." xml:space="preserve"><value>The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner.</value></data>
   <data name="The menu will be back in its corner the next time the dashboard opens." xml:space="preserve"><value>The menu will be back in its corner the next time the dashboard opens.</value></data>
-  <data name="Search on this page" xml:space="preserve"><value>Search on this page</value></data>
-  <data name="{0} of {1}" xml:space="preserve"><value>{0} of {1}</value></data>
-  <data name="No matches" xml:space="preserve"><value>No matches</value></data>
-  <data name="More than {0} matches, refine the search" xml:space="preserve"><value>More than {0} matches, refine the search</value></data>
-  <data name="Previous match" xml:space="preserve"><value>Previous match</value></data>
-  <data name="Next match" xml:space="preserve"><value>Next match</value></data>
-  <data name="Hidden by the list's filter" xml:space="preserve"><value>Hidden by the list's filter</value></data>
-  <data name="Deep" xml:space="preserve"><value>Deep</value></data>
-  <data name="Also search collapsed rows and other pages" xml:space="preserve"><value>Also search collapsed rows and other pages</value></data>
   <data name="Let Ctrl+F open the page search" xml:space="preserve"><value>Let Ctrl+F open the page search</value></data>
   <data name="When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it." xml:space="preserve"><value>When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it.</value></data>
-  <data name="Close search" xml:space="preserve"><value>Close search</value></data>
-  <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)</value></data>
 </root>

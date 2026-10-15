@@ -1,27 +1,34 @@
-// File: OpenModulePlatform.Portal/wwwroot/js/portal-search.js
-// Search on this page, with depth: a small corner panel (Ctrl+Shift+F, or the
-// page's search button) that finds text everywhere the page has it, including
-// rows on other pages of a paged list and text in collapsed details, which the
-// browser's own find never sees. Matches are painted with the CSS Custom
-// Highlight API, so no element is inserted into the page; the one match the
-// user is standing on is revealed by asking the page (an `omp:reveal` event the
-// match's owners answer by expanding or paging) and then scrolled into view.
+// File: OpenModulePlatform.Web.Shared/wwwroot/js/omp-search.js
+// Search on this page, with depth: the top bar's find bar (Ctrl+Shift+F, or
+// the search icon among the top bar's actions) that finds text everywhere the
+// page has it, including rows on other pages of a paged list and text in
+// collapsed details, which the browser's own find never sees. Matches are
+// painted with the CSS Custom Highlight API, so no element is inserted into
+// the page; the one match the user is standing on is revealed by asking the
+// page (an `omp:reveal` event the match's owners answer by expanding or
+// paging) and then scrolled into view.
 //
 // Depth is a checkbox in the panel, on by default: off, the search sees only
 // what the reader sees, like the browser's own find. The choice is kept in
 // the browser until a user setting carries it. Ctrl+F stays the browser's
-// unless the user's portal setting (rendered on <body>) hands it over.
+// unless the app's user setting (rendered on <body>) hands it over.
 //
-// Pilot on the maintenance page. The mount is `[data-portal-search]`, with the
-// labels in its data attributes and an optional `[data-portal-search-open]`
-// button inside it. Nothing here knows how a page hides its content.
+// The mount is `[data-omp-search]` in the top bar (the PortalTopBar view and
+// its Blazor twin render it), with the labels in its data attributes and the
+// opener `[data-omp-search-open]` inside it. The mount stays hidden until
+// this script marks it ready, so an app that does not load the script shows
+// no dead icon. A page can mark a region `[data-omp-search-skip]` (an
+// embedded document, say) as holding nothing to find. Nothing here knows
+// how a page hides its content.
 (function () {
     'use strict';
 
-    const mount = document.querySelector('[data-portal-search]');
+    const mount = document.querySelector('[data-omp-search]');
     if (!mount) {
         return;
     }
+
+    const bar = mount.closest('.portal-topbar') || mount.parentElement;
 
     const supportsHighlight = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
     if (!supportsHighlight) {
@@ -44,37 +51,38 @@
         deep: mount.dataset.labelDeep || 'Deep',
         deepTitle: mount.dataset.labelDeepTitle || 'Also search collapsed rows and other pages'
     };
-    const deepStorageKey = 'omp.portalSearch.deep';
+    const deepStorageKey = 'omp.search.deep';
     const matchCap = Number.parseInt(mount.dataset.matchCap || '500', 10) || 500;
     const debounceMs = 150;
     const highlightName = 'omp-search';
     const currentHighlightName = 'omp-search-current';
 
     const panel = document.createElement('div');
-    panel.className = 'portal-search';
+    panel.className = 'omp-search';
     panel.setAttribute('role', 'search');
     panel.setAttribute('aria-label', labels.title);
     panel.hidden = true;
-    panel.id = 'portal-search-panel';
+    panel.id = 'omp-search-panel';
     panel.innerHTML = `
-        <input type="text" class="portal-search__input" autocomplete="off" spellcheck="false" placeholder="${escapeAttribute(labels.placeholder)}" aria-label="${escapeAttribute(labels.title)}" />
-        <span class="portal-search__status" aria-live="polite"></span>
-        <label class="portal-search__deep" title="${escapeAttribute(labels.deepTitle)}"><input type="checkbox" data-portal-search-deep checked /><span>${escapeAttribute(labels.deep)}</span></label>
-        <button type="button" class="portal-search__button" data-portal-search-prev title="${escapeAttribute(labels.previous)}" aria-label="${escapeAttribute(labels.previous)}">&#8593;</button>
-        <button type="button" class="portal-search__button" data-portal-search-next title="${escapeAttribute(labels.next)}" aria-label="${escapeAttribute(labels.next)}">&#8595;</button>
-        <button type="button" class="portal-search__button" data-portal-search-close title="${escapeAttribute(labels.close)}" aria-label="${escapeAttribute(labels.close)}">&#215;</button>`;
+        <input type="text" class="omp-search__input" autocomplete="off" spellcheck="false" placeholder="${escapeAttribute(labels.placeholder)}" aria-label="${escapeAttribute(labels.title)}" />
+        <span class="omp-search__status" aria-live="polite"></span>
+        <label class="omp-search__deep" title="${escapeAttribute(labels.deepTitle)}"><input type="checkbox" data-omp-search-deep checked /><span>${escapeAttribute(labels.deep)}</span></label>
+        <button type="button" class="omp-search__button" data-omp-search-prev title="${escapeAttribute(labels.previous)}" aria-label="${escapeAttribute(labels.previous)}">&#8593;</button>
+        <button type="button" class="omp-search__button" data-omp-search-next title="${escapeAttribute(labels.next)}" aria-label="${escapeAttribute(labels.next)}">&#8595;</button>
+        <button type="button" class="omp-search__button" data-omp-search-close title="${escapeAttribute(labels.close)}" aria-label="${escapeAttribute(labels.close)}">&#215;</button>`;
     const usePopover = typeof HTMLElement.prototype.showPopover === 'function';
     if (usePopover) {
         panel.setAttribute('popover', 'manual');
     }
     mount.appendChild(panel);
+    mount.dataset.ompSearchReady = 'true';
 
-    const input = panel.querySelector('.portal-search__input');
-    const status = panel.querySelector('.portal-search__status');
-    const previousButton = panel.querySelector('[data-portal-search-prev]');
-    const nextButton = panel.querySelector('[data-portal-search-next]');
-    const closeButton = panel.querySelector('[data-portal-search-close]');
-    const deepBox = panel.querySelector('[data-portal-search-deep]');
+    const input = panel.querySelector('.omp-search__input');
+    const status = panel.querySelector('.omp-search__status');
+    const previousButton = panel.querySelector('[data-omp-search-prev]');
+    const nextButton = panel.querySelector('[data-omp-search-next]');
+    const closeButton = panel.querySelector('[data-omp-search-close]');
+    const deepBox = panel.querySelector('[data-omp-search-deep]');
     const ctrlFOverridden = document.body.dataset.pageSearchCtrlF === 'true';
 
     let matches = [];
@@ -87,7 +95,7 @@
     // Whether the current match could be shown: a row the list's own
     // search or filter hides stays hidden whatever page it is on.
     let currentHidden = false;
-    const opener = mount.querySelector('[data-portal-search-open]');
+    const opener = mount.querySelector('[data-omp-search-open]');
     let returnFocusTo = null;
 
     const readDeep = () => {
@@ -106,6 +114,20 @@
 
     const isOpen = () => !panel.hidden;
 
+    // The panel hangs from the bottom edge of the top bar, its right edge at
+    // the opener's, clamped to the viewport. Measured when opened and again
+    // when the viewport moves; the Portal's header is fixed, other apps'
+    // bars may scroll, so a bar that left the viewport pins the panel to
+    // its top.
+    const place = () => {
+        const barRect = bar.getBoundingClientRect();
+        const anchor = (opener || mount).getBoundingClientRect();
+        const width = panel.offsetWidth || 0;
+        const right = Math.max(8, Math.min(window.innerWidth - anchor.right, window.innerWidth - 8 - width));
+        panel.style.top = `${Math.max(0, Math.round(barRect.bottom))}px`;
+        panel.style.right = `${Math.round(right)}px`;
+    };
+
     const open = () => {
         if (!isOpen()) {
             const active = document.activeElement;
@@ -115,6 +137,10 @@
             if (usePopover) {
                 try { panel.showPopover(); } catch { /* already shown, or not in the document */ }
             }
+
+            place();
+            window.addEventListener('resize', place);
+            window.addEventListener('scroll', place, { passive: true });
         }
 
         input.focus();
@@ -134,12 +160,14 @@
         status.textContent = '';
         searchedTerm = '';
         currentHidden = false;
-        panel.classList.remove('portal-search--empty');
+        panel.classList.remove('omp-search--empty');
         if (usePopover && panel.matches(':popover-open')) {
             try { panel.hidePopover(); } catch { /* not shown */ }
         }
 
         panel.hidden = true;
+        window.removeEventListener('resize', place);
+        window.removeEventListener('scroll', place);
         opener?.setAttribute('aria-expanded', 'false');
         if (returnFocusTo?.isConnected) {
             returnFocusTo.focus();
@@ -155,7 +183,7 @@
 
     // Every text node the page has, shown or hidden: a script, style or
     // template is never text to the reader, and the panel does not search
-    // itself. The page can mark a region [data-portal-search-skip] (an
+    // itself. The page can mark a region [data-omp-search-skip] (an
     // embedded document, say) to say it holds nothing to find. Without depth
     // only text that is laid out counts, which is what the browser's find
     // sees: a paged-out row, a collapsed detail and a closed group have no
@@ -169,7 +197,7 @@
                 }
 
                 const parent = node.parentElement;
-                if (!parent || parent.closest('script, style, noscript, template, .portal-search, [data-portal-search-skip]')) {
+                if (!parent || parent.closest('script, style, noscript, template, .omp-search, [data-omp-search-skip]')) {
                     return NodeFilter.FILTER_REJECT;
                 }
 
@@ -255,7 +283,7 @@
                 .replace('{1}', String(matches.length));
         }
 
-        panel.classList.toggle('portal-search--empty', !!input.value && matches.length === 0);
+        panel.classList.toggle('omp-search--empty', !!input.value && matches.length === 0);
     };
 
     // A match on another page of a paged list: step the list's own pager to the

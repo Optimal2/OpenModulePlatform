@@ -355,6 +355,32 @@
         </nav>
 
         <div class="portal-topbar__actions">
+            @* Search on this page (js/omp-search.js builds the panel; this only
+               mounts and labels it, and stays hidden until the script is loaded). *@
+            <div class="omp-search-mount"
+                 data-omp-search
+                 data-match-cap="500"
+                 data-label-title="@L["Search on this page"]"
+                 data-label-placeholder="@L["Search"]"
+                 data-label-status="@L["{0} of {1}"]"
+                 data-label-none="@L["No matches"]"
+                 data-label-many="@L["More than {0} matches, refine the search"]"
+                 data-label-previous="@L["Previous match"]"
+                 data-label-next="@L["Next match"]"
+                 data-label-close="@L["Close search"]"
+                 data-label-hidden="@L["Hidden by the list's filter"]"
+                 data-label-deep="@L["Deep"]"
+                 data-label-deep-title="@L["Also search collapsed rows and other pages"]">
+                <button type="button"
+                        class="omp-search__opener"
+                        data-omp-search-open
+                        title="@L["Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)"]"
+                        aria-label="@L["Search on this page"]"
+                        aria-expanded="false">
+                    <span class="portal-topbar__icon portal-topbar__icon--search" aria-hidden="true"></span>
+                </button>
+            </div>
+
             @await Component.InvokeAsync("OmpThemeSwitch")
 
             @if (Model.LanguageOptions.Count > 1)
