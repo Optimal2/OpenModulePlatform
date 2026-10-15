@@ -95,6 +95,7 @@
         document.body.appendChild(panel);
         let inline = false;
         let growTimer = 0;
+        let refitTimer = 0;
         mount.dataset.ompSearchReady = 'true';
 
         const input = panel.querySelector('.omp-search__input');
@@ -144,30 +145,44 @@
             return Number.isFinite(breakpoint) && window.innerWidth <= breakpoint;
         };
 
-        // The room the navigation leaves free in the bar: the nav box minus what
-        // its children take (the modules host measures its content even when it
-        // clips it, so links the bar would hide still count). The bar's own
-        // overflow script measures the whole bar, which the field never
-        // widens, so the two never fight.
+        // The width a flex row's shown children take, with the row's gaps.
+        const contentWidth = (row) => {
+            const gap = Number.parseFloat(getComputedStyle(row).columnGap) || 0;
+            let used = 0;
+            let shown = 0;
+            for (const child of row.children) {
+                if (child.hidden || getComputedStyle(child).display === 'none') {
+                    continue;
+                }
+
+                // A child that grows (the modules host) fills the row, so its box
+                // says nothing; its own children do (links the bar clips count).
+                const grows = (Number.parseFloat(getComputedStyle(child).flexGrow) || 0) > 0;
+                used += grows ? contentWidth(child) : child.getBoundingClientRect().width;
+                shown++;
+            }
+
+            return used + Math.max(0, shown - 1) * gap;
+        };
+
+        // The room the bar leaves free for the field: the bar's inner width
+        // minus what the navigation's and the actions' children take (the
+        // field itself not counted), measured from content widths, never
+        // from boxes, so a bar that has wrapped or a nav the field has
+        // squeezed does not fool it. The bar's own overflow script measures
+        // the whole bar, which the field never widens, so the two never fight.
         const freeSpace = () => {
             if (!nav || isCompactViewport()) {
                 return 0;
             }
 
-            const navWidth = nav.getBoundingClientRect().width;
-            const gap = Number.parseFloat(getComputedStyle(nav).columnGap) || 0;
-            let used = 0;
-            let shown = 0;
-            for (const child of nav.children) {
-                if (child.hidden || getComputedStyle(child).display === 'none') {
-                    continue;
-                }
-
-                used += child.hasAttribute('data-portal-topbar-modules') ? child.scrollWidth : child.getBoundingClientRect().width;
-                shown++;
-            }
-
-            return navWidth - used - Math.max(0, shown - 1) * gap;
+            const barStyle = getComputedStyle(bar);
+            const inner = bar.clientWidth - (Number.parseFloat(barStyle.paddingLeft) || 0) - (Number.parseFloat(barStyle.paddingRight) || 0);
+            const barGap = Number.parseFloat(barStyle.columnGap) || 0;
+            const actions = mount.parentElement;
+            const ownWidth = inline && !panel.hidden ? panel.getBoundingClientRect().width + (Number.parseFloat(getComputedStyle(panel).marginRight) || 0) : 0;
+            const actionsWidth = actions && actions !== bar ? contentWidth(actions) - ownWidth : 0;
+            return inner - contentWidth(nav) - barGap - actionsWidth;
         };
 
         const inlineWidth = () => {
@@ -241,10 +256,14 @@
             panel.hidden = true;
         };
 
-        // The viewport moved: the hanging panel follows the bar; the inline
-        // field keeps to the room left, and hangs under the bar when the room
-        // is gone (or comes back inline when it returns).
-        const onViewportChange = () => {
+        // The bar or the viewport changed: the hanging panel follows the bar;
+        // the inline field keeps to the room left, and hangs under the bar
+        // when the room is gone (or comes back inline when it returns). The
+        // room is measured a moment later, after the bar's own script has
+        // rebalanced its navigation for the new width (a timer, not a frame:
+        // frames pause in a hidden tab, and the bar's next size change
+        // brings another measurement anyway).
+        const refit = () => {
             if (!isOpen()) {
                 return;
             }
@@ -262,11 +281,25 @@
             }
         };
 
+        const onViewportChange = () => {
+            if (!inline) {
+                place();
+            }
+
+            window.clearTimeout(refitTimer);
+            refitTimer = window.setTimeout(refit, 40);
+        };
+
+        // The bar's size is what decides the placement; a ResizeObserver sees
+        // it settle after layout, which a window resize event does not.
+        const barObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(onViewportChange) : null;
+
         const open = () => {
             if (!isOpen()) {
                 const active = document.activeElement;
                 returnFocusTo = active instanceof HTMLElement && active !== document.body ? active : opener;
                 show(inlineWidth());
+                barObserver?.observe(bar);
                 window.addEventListener('resize', onViewportChange);
                 window.addEventListener('scroll', onViewportChange, { passive: true });
             }
@@ -290,6 +323,8 @@
             currentHidden = false;
             panel.classList.remove('omp-search--empty');
             hide();
+            barObserver?.disconnect();
+            window.clearTimeout(refitTimer);
             window.removeEventListener('resize', onViewportChange);
             window.removeEventListener('scroll', onViewportChange);
             opener?.setAttribute('aria-expanded', 'false');
