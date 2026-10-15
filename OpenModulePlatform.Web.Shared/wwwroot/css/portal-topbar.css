@@ -1766,7 +1766,9 @@ html:not([data-theme-mode]) .omp-theme-switch {
 }
 
 /* Square top corners and no top border: the panel reads as a drawer pulled
-   out of the bar. The script sets top and right. */
+   out of the bar. The script sets top and right. The panel lives on <body>,
+   outside .portal-topbar, so it reads the app tokens (with the theme
+   contract's --omp-* as fallback), never the bar's scoped --portal-topbar-*. */
 .omp-search {
     position: fixed;
     inset: auto;
@@ -1776,15 +1778,16 @@ html:not([data-theme-mode]) .omp-theme-switch {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: min(430px, calc(100vw - 16px));
+    /* Percent of the viewport the script measures (no scrollbar), not 100vw. */
+    width: min(430px, calc(100% - 16px));
     margin: 0;
     padding: 8px 8px 8px 12px;
-    border: 1px solid var(--portal-topbar-border);
+    border: 1px solid var(--border, var(--omp-border, #d7deea));
     border-top: 0;
     border-radius: 0 0 12px 12px;
-    background: var(--portal-topbar-surface);
-    color: var(--portal-topbar-text);
-    box-shadow: var(--portal-topbar-shadow);
+    background: var(--surface, var(--omp-surface, #fff));
+    color: var(--text, var(--omp-text, #172033));
+    box-shadow: var(--shadow, var(--omp-shadow, 0 12px 30px rgba(15, 23, 42, 0.14)));
 }
 
 .omp-search[hidden] {
@@ -1813,7 +1816,7 @@ html:not([data-theme-mode]) .omp-theme-switch {
     min-width: 3.5em;
     text-align: right;
     font-size: 0.8rem;
-    color: var(--portal-topbar-text-muted);
+    color: var(--text-muted, var(--omp-text-muted, #5b667a));
     white-space: nowrap;
 }
 
@@ -1843,7 +1846,7 @@ html:not([data-theme-mode]) .omp-theme-switch {
 }
 
 .omp-search__deep:hover {
-    background: var(--portal-topbar-surface-muted);
+    background: var(--surface-muted, var(--omp-surface-muted, #f8fafc));
 }
 
 .omp-search__deep:has(input:focus-visible) {
@@ -1859,7 +1862,7 @@ html:not([data-theme-mode]) .omp-theme-switch {
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent;
-    color: var(--portal-topbar-text);
+    color: var(--text, var(--omp-text, #172033));
     font-size: 1rem;
     line-height: 1;
     cursor: pointer;
@@ -1867,8 +1870,8 @@ html:not([data-theme-mode]) .omp-theme-switch {
 
 .omp-search__button:hover,
 .omp-search__button:focus-visible {
-    border-color: var(--portal-topbar-border);
-    background: var(--portal-topbar-surface-muted);
+    border-color: var(--border, var(--omp-border, #d7deea));
+    background: var(--surface-muted, var(--omp-surface-muted, #f8fafc));
     outline: none;
 }
 
