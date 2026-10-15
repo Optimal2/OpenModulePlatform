@@ -98,11 +98,14 @@
         let refitTimer = 0;
         // Shrinking back into the icon: still displayed, no longer open.
         let closing = false;
-        // The bar's content box last seen by the observer; observing always
-        // reports once at once, which is no change and must not cut the
-        // opening grow. Height counts too: a bar that wraps changes height
-        // first, and the hanging panel's top follows it.
-        let observedBarSize = '';
+        // The bar's content box last reported by the observer. Observing
+        // always reports once at once: that report is the baseline, not a
+        // change, and must not cut the opening grow; only the observer's own
+        // numbers are compared, since another measurement differs by a hair
+        // at a device scale factor other than 1. Height counts too: a bar
+        // that wraps changes height first, and the hanging panel's top
+        // follows it.
+        let observedBarSize = null;
         mount.dataset.ompSearchReady = 'true';
 
         const input = panel.querySelector('.omp-search__input');
@@ -142,16 +145,6 @@
 
         const isOpen = () => !panel.hidden && !closing;
 
-        // The content box as the observer reports it: the border box less
-        // borders and padding, in both directions.
-        const contentBoxSize = (element) => {
-            const style = getComputedStyle(element);
-            const sum = (...names) => names.reduce((total, name) => total + (Number.parseFloat(style[name]) || 0), 0);
-            const rect = element.getBoundingClientRect();
-            const width = rect.width - sum('borderLeftWidth', 'borderRightWidth', 'paddingLeft', 'paddingRight');
-            const height = rect.height - sum('borderTopWidth', 'borderBottomWidth', 'paddingTop', 'paddingBottom');
-            return `${width}x${height}`;
-        };
 
         // The panel hangs from the bottom edge of the top bar, its right edge at
         // the opener's, clamped to the viewport. Measured when opened and again
@@ -338,8 +331,10 @@
         const barObserver = typeof ResizeObserver === 'function'
             ? new ResizeObserver((entries) => {
                 const rect = entries[entries.length - 1]?.contentRect;
-                const size = rect ? `${rect.width}x${rect.height}` : contentBoxSize(bar);
-                if (size === observedBarSize) {
+                const size = rect ? `${rect.width}x${rect.height}` : '';
+                const first = observedBarSize === null;
+                if (first || size === observedBarSize) {
+                    observedBarSize = size;
                     return;
                 }
 
@@ -354,7 +349,7 @@
                 returnFocusTo = active instanceof HTMLElement && active !== document.body ? active : opener;
                 show(inlineWidth());
                 opener?.setAttribute('aria-expanded', 'true');
-                observedBarSize = contentBoxSize(bar);
+                observedBarSize = null;
                 barObserver?.observe(bar);
                 window.addEventListener('resize', onViewportChange);
                 window.addEventListener('scroll', onScroll, { passive: true });
