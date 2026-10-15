@@ -96,6 +96,8 @@
         let inline = false;
         let growTimer = 0;
         let refitTimer = 0;
+        // Shrinking back into the icon: still displayed, no longer open.
+        let closing = false;
         mount.dataset.ompSearchReady = 'true';
 
         const input = panel.querySelector('.omp-search__input');
@@ -133,7 +135,7 @@
         let deep = readDeep();
         deepBox.checked = deep;
 
-        const isOpen = () => !panel.hidden;
+        const isOpen = () => !panel.hidden && !closing;
 
         // The panel hangs from the bottom edge of the top bar, its right edge at
         // the opener's, clamped to the viewport. Measured when opened and again
@@ -157,8 +159,13 @@
 
                 // A child that grows (the modules host) fills the row, so its box
                 // says nothing; its own children do (links the bar clips count).
-                const grows = (Number.parseFloat(getComputedStyle(child).flexGrow) || 0) > 0;
-                used += grows ? contentWidth(child) : child.getBoundingClientRect().width;
+                const childStyle = getComputedStyle(child);
+                const grows = (Number.parseFloat(childStyle.flexGrow) || 0) > 0;
+                // Margin boxes, as the flex algorithm sums them (the bar's menus
+                // pull their padding back with negative margins).
+                used += (grows ? contentWidth(child) : child.getBoundingClientRect().width)
+                    + (Number.parseFloat(childStyle.marginLeft) || 0)
+                    + (Number.parseFloat(childStyle.marginRight) || 0);
                 shown++;
             }
 
@@ -205,6 +212,7 @@
         // or, with width 0, hanging under the bar.
         const show = (width) => {
             window.clearTimeout(growTimer);
+            closing = false;
             inline = width > 0;
             panel.classList.toggle('omp-search--inline', inline);
             if (inline) {
@@ -248,8 +256,12 @@
 
             if (inline) {
                 // Shrink back into the icon, then hide.
+                closing = true;
                 panel.style.width = '0px';
-                growTimer = window.setTimeout(() => { panel.hidden = true; }, growMs + 20);
+                growTimer = window.setTimeout(() => {
+                    panel.hidden = true;
+                    closing = false;
+                }, growMs + 20);
                 return;
             }
 
@@ -299,6 +311,7 @@
                 const active = document.activeElement;
                 returnFocusTo = active instanceof HTMLElement && active !== document.body ? active : opener;
                 show(inlineWidth());
+                opener?.setAttribute('aria-expanded', 'true');
                 barObserver?.observe(bar);
                 window.addEventListener('resize', onViewportChange);
                 window.addEventListener('scroll', onViewportChange, { passive: true });
