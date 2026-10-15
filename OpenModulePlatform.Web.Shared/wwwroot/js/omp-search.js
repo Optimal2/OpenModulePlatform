@@ -74,7 +74,10 @@
     if (usePopover) {
         panel.setAttribute('popover', 'manual');
     }
-    mount.appendChild(panel);
+    // The panel lives on <body>, not in the bar: a fixed header with a
+    // backdrop-filter, or a sticky header with a low z-index, would otherwise
+    // trap or cover it wherever the browser has no top layer to lift it into.
+    document.body.appendChild(panel);
     mount.dataset.ompSearchReady = 'true';
 
     const input = panel.querySelector('.omp-search__input');
@@ -123,7 +126,9 @@
         const barRect = bar.getBoundingClientRect();
         const anchor = (opener || mount).getBoundingClientRect();
         const width = panel.offsetWidth || 0;
-        const right = Math.max(8, Math.min(window.innerWidth - anchor.right, window.innerWidth - 8 - width));
+        // The layout viewport, without the scrollbar, is what `right` measures from.
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        const right = Math.max(8, Math.min(viewportWidth - anchor.right, viewportWidth - 8 - width));
         panel.style.top = `${Math.max(0, Math.round(barRect.bottom))}px`;
         panel.style.right = `${Math.round(right)}px`;
     };

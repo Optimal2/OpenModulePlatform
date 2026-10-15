@@ -23,7 +23,7 @@
         row.querySelector('.maintenance-finding-hint')?.setAttribute('aria-expanded', open ? 'true' : 'false');
     };
 
-    // The page search (portal-search.js) asks for a match in a collapsed
+    // The page search (Web.Shared's omp-search.js) asks for a match in a collapsed
     // detail to be shown; the detail opens as if its row had been clicked.
     document.addEventListener('omp:reveal', (event) => {
         const detail = event.target instanceof Element ? event.target.closest('tr.maintenance-finding-detail') : null;

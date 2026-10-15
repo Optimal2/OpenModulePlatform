@@ -14,6 +14,7 @@ This checklist documents the integration contract for OMP web applications that 
   @await Component.InvokeAsync("PortalTopBar")
   ```
 - [ ] Include `portal-topbar.css` and `portal-topbar.js` from the shared library in the layout.
+- [ ] Include `omp-search.js` after `portal-topbar.js` for the top bar's page search (the search icon stays hidden without it; leave it out on pages that embed documents in iframes).
 - [ ] Blazor consumers: use the shared `PortalTopBar` component (`OpenModulePlatform.Web.Shared.Components.Layout.PortalTopBar`).
 
 ## Authentication configuration
