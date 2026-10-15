@@ -1929,6 +1929,12 @@ html:not([data-theme-mode]) .omp-theme-switch {
     color: var(--portal-topbar-text);
 }
 
+/* While the viewport changes the width follows the room at once; the
+   transition is for the user's own opening and closing. */
+.omp-search--inline.omp-search--settling {
+    transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .omp-search--inline {
         transition: none;

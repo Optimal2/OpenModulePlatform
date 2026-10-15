@@ -297,16 +297,24 @@
         };
 
         const onViewportChange = () => {
+            // At once, and without the width transition, so a window being
+            // dragged never leaves the bar wrapped around a field whose used
+            // width lags its target; once more after the bar's own script has
+            // settled, and the transition is back for the user's own actions.
+            panel.classList.add('omp-search--settling');
+            refit();
+            window.clearTimeout(refitTimer);
+            refitTimer = window.setTimeout(() => {
+                refit();
+                panel.classList.remove('omp-search--settling');
+            }, 40);
+        };
+
+        // Scrolling moves only the hanging panel, which follows the bar.
+        const onScroll = () => {
             if (!inline) {
                 place();
             }
-
-            // At once, so a window being dragged never leaves the bar wrapped
-            // around a field that is too wide, and once more after the bar's
-            // own script has settled.
-            refit();
-            window.clearTimeout(refitTimer);
-            refitTimer = window.setTimeout(refit, 40);
         };
 
         // The bar's size is what decides the placement; a ResizeObserver sees
@@ -321,7 +329,7 @@
                 opener?.setAttribute('aria-expanded', 'true');
                 barObserver?.observe(bar);
                 window.addEventListener('resize', onViewportChange);
-                window.addEventListener('scroll', onViewportChange, { passive: true });
+                window.addEventListener('scroll', onScroll, { passive: true });
             }
 
             input.focus();
@@ -345,8 +353,9 @@
             hide();
             barObserver?.disconnect();
             window.clearTimeout(refitTimer);
+            panel.classList.remove('omp-search--settling');
             window.removeEventListener('resize', onViewportChange);
-            window.removeEventListener('scroll', onViewportChange);
+            window.removeEventListener('scroll', onScroll);
             opener?.setAttribute('aria-expanded', 'false');
             if (returnFocusTo?.isConnected) {
                 returnFocusTo.focus();
