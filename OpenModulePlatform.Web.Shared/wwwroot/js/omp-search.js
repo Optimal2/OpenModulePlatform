@@ -284,10 +284,13 @@
             if (inline && width > 0) {
                 panel.style.width = `${width}px`;
             } else if (inline !== (width > 0)) {
+                // The placement changes under the user: keep the focus where it
+                // was (in the panel, on the same control; elsewhere, untouched).
+                const focused = panel.contains(document.activeElement) ? document.activeElement : null;
                 window.clearTimeout(growTimer);
                 panel.hidden = true;
                 show(width);
-                input.focus();
+                focused?.focus();
             } else {
                 place();
             }
@@ -298,6 +301,10 @@
                 place();
             }
 
+            // At once, so a window being dragged never leaves the bar wrapped
+            // around a field that is too wide, and once more after the bar's
+            // own script has settled.
+            refit();
             window.clearTimeout(refitTimer);
             refitTimer = window.setTimeout(refit, 40);
         };
@@ -593,7 +600,7 @@
         if (opener) {
             opener.setAttribute('aria-controls', panel.id);
             opener.setAttribute('aria-expanded', 'false');
-            opener.addEventListener('click', open);
+            opener.addEventListener('click', () => (isOpen() ? close() : open()));
         }
 
         // Ctrl+Shift+F (Cmd+Shift+F on a Mac): a combination neither Windows nor
