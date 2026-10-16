@@ -31,9 +31,8 @@
 (function () {
     'use strict';
 
-    // Bound once the document is parsed, like portal-topbar.js: a host that
-    // renders the bar after the script tag (a Blazor app without
-    // prerendering, say) would otherwise never get its mount.
+    // Builds the panel and binds the first mount; start() below decides when
+    // it runs.
     const init = () => {
 
         let mount = document.querySelector('[data-omp-search]');
@@ -308,6 +307,12 @@
         };
 
         const onViewportChange = () => {
+            // A bar the host just replaced reports 0x0 on its way out; the
+            // rebind that follows decides what happens to the panel.
+            if (!bar.isConnected) {
+                return;
+            }
+
             // At once, and without the width transition, so a window being
             // dragged never leaves the bar wrapped around a field whose used
             // width lags its target; once more after the bar's own script has
@@ -590,24 +595,36 @@
             nav = bar.querySelector('.portal-topbar__nav');
             opener = mount.querySelector('[data-omp-search-open]');
 
-            if (!panel.isConnected) {
-                // The panel left with the old mount: back, closed, on <body>.
+            if (isOpen() || closing || !panel.isConnected) {
+                // The host replaced the bar under an open panel: the page it
+                // searched is gone with it (a Blazor navigation, say), so the
+                // search ends and the panel comes back closed on <body>.
+                window.clearTimeout(debounceTimer);
                 window.clearTimeout(growTimer);
+                window.clearTimeout(refitTimer);
+                clearHighlights();
+                matches = [];
+                current = -1;
+                searchedTerm = '';
+                currentHidden = false;
+                status.textContent = '';
                 closing = false;
                 inline = false;
-                panel.classList.remove('omp-search--inline', 'omp-search--settling');
+                panel.classList.remove('omp-search--inline', 'omp-search--settling', 'omp-search--empty');
                 panel.style.width = '';
+                if (usePopover && panel.isConnected && panel.matches(':popover-open')) {
+                    try { panel.hidePopover(); } catch { /* not shown */ }
+                }
+
                 panel.hidden = true;
-                document.body.appendChild(panel);
+                if (panel.parentElement !== document.body) {
+                    document.body.appendChild(panel);
+                }
+
                 barObserver?.disconnect();
                 window.removeEventListener('resize', onViewportChange);
                 window.removeEventListener('scroll', onScroll);
-            } else if (isOpen()) {
-                // Hanging under a bar that was replaced: watch the new bar.
-                barObserver?.disconnect();
-                observedBarSize = null;
-                barObserver?.observe(bar);
-                place();
+                returnFocusTo = null;
             }
 
             if (opener) {
@@ -665,8 +682,12 @@
             return;
         }
 
+        // A page that never shows a mount stops being watched after a while
+        // (a Blazor circuit is up long before that).
+        const giveUp = window.setTimeout(() => waiting.disconnect(), 60000);
         const waiting = new MutationObserver(() => {
             if (document.querySelector('[data-omp-search]')) {
+                window.clearTimeout(giveUp);
                 waiting.disconnect();
                 init();
             }
