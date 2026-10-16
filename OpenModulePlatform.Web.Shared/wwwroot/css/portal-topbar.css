@@ -1800,11 +1800,16 @@ html:not([data-theme-mode]) .omp-theme-switch {
     height: 28px;
     padding: 0 8px;
     border: 1px solid var(--omp-control-border, #7b8799);
-    /* Squarer than the panel and the buttons: a 28 px field at 8 px reads as a pill. */
-    border-radius: 4px;
     background: var(--omp-surface, #fff);
     color: inherit;
     font: inherit;
+}
+
+/* Squarer than the panel and the buttons: at 8 px the 28 px field read as a
+   pill, the 22 px inline one more so. Written with the extra class so it
+   outranks an app's generic input[type=text] rule (the Portal's sets 12 px). */
+.omp-search input.omp-search__input {
+    border-radius: 4px;
 }
 
 .omp-search__input:focus {
