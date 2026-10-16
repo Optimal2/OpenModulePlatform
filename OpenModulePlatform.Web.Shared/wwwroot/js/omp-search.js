@@ -24,9 +24,10 @@
 // this script marks it ready, so an app that does not load the script shows
 // no dead icon. A host may replace the mount after the script bound it (a
 // Blazor app re-renders its prerendered bar once the circuit is up, and on
-// enhanced navigation); the script watches for that and binds the new one. A page can mark a region `[data-omp-search-skip]` (an
-// embedded document, say) as holding nothing to find. Nothing here knows
-// how a page hides its content.
+// enhanced navigation); the script watches for that and binds the new one.
+// A page can mark a region `[data-omp-search-skip]` (an embedded document,
+// say) as holding nothing to find. Nothing here knows how a page hides its
+// content.
 (function () {
     'use strict';
 
@@ -381,9 +382,7 @@
             window.removeEventListener('resize', onViewportChange);
             window.removeEventListener('scroll', onScroll);
             opener?.setAttribute('aria-expanded', 'false');
-            if (returnFocusTo?.isConnected) {
-                returnFocusTo.focus();
-            }
+            (returnFocusTo?.isConnected ? returnFocusTo : opener)?.focus();
 
             returnFocusTo = null;
         };
@@ -590,13 +589,9 @@
             bar = mount.closest('.portal-topbar') || mount.parentElement;
             nav = bar.querySelector('.portal-topbar__nav');
             opener = mount.querySelector('[data-omp-search-open]');
-            if (opener) {
-                opener.setAttribute('aria-controls', panel.id);
-                opener.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
-                opener.addEventListener('click', () => (isOpen() ? close() : open()));
-            }
 
             if (!panel.isConnected) {
+                // The panel left with the old mount: back, closed, on <body>.
                 window.clearTimeout(growTimer);
                 closing = false;
                 inline = false;
@@ -607,6 +602,18 @@
                 barObserver?.disconnect();
                 window.removeEventListener('resize', onViewportChange);
                 window.removeEventListener('scroll', onScroll);
+            } else if (isOpen()) {
+                // Hanging under a bar that was replaced: watch the new bar.
+                barObserver?.disconnect();
+                observedBarSize = null;
+                barObserver?.observe(bar);
+                place();
+            }
+
+            if (opener) {
+                opener.setAttribute('aria-controls', panel.id);
+                opener.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
+                opener.addEventListener('click', () => (isOpen() ? close() : open()));
             }
 
             mount.dataset.ompSearchReady = 'true';
@@ -650,9 +657,26 @@
         }
     };
 
+    // A host that renders the bar after parsing (a Blazor app without
+    // prerendering) gets its mount bound when it appears.
+    const start = () => {
+        if (document.querySelector('[data-omp-search]') || typeof MutationObserver !== 'function') {
+            init();
+            return;
+        }
+
+        const waiting = new MutationObserver(() => {
+            if (document.querySelector('[data-omp-search]')) {
+                waiting.disconnect();
+                init();
+            }
+        });
+        waiting.observe(document.body, { childList: true, subtree: true });
+    };
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init, { once: true });
+        document.addEventListener('DOMContentLoaded', start, { once: true });
     } else {
-        init();
+        start();
     }
 })();
