@@ -22,7 +22,9 @@
 // its Blazor twin render it), with the labels in its data attributes and the
 // opener `[data-omp-search-open]` inside it. The mount stays hidden until
 // this script marks it ready, so an app that does not load the script shows
-// no dead icon. A page can mark a region `[data-omp-search-skip]` (an
+// no dead icon. A host may replace the mount after the script bound it (a
+// Blazor app re-renders its prerendered bar once the circuit is up, and on
+// enhanced navigation); the script watches for that and binds the new one. A page can mark a region `[data-omp-search-skip]` (an
 // embedded document, say) as holding nothing to find. Nothing here knows
 // how a page hides its content.
 (function () {
@@ -33,13 +35,13 @@
     // prerendering, say) would otherwise never get its mount.
     const init = () => {
 
-        const mount = document.querySelector('[data-omp-search]');
+        let mount = document.querySelector('[data-omp-search]');
         if (!mount) {
             return;
         }
 
-        const bar = mount.closest('.portal-topbar') || mount.parentElement;
-        const nav = bar.querySelector('.portal-topbar__nav');
+        let bar = mount.closest('.portal-topbar') || mount.parentElement;
+        let nav = bar.querySelector('.portal-topbar__nav');
 
         const supportsHighlight = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
         if (!supportsHighlight) {
@@ -106,7 +108,6 @@
         // that wraps changes height first, and the hanging panel's top
         // follows it.
         let observedBarSize = null;
-        mount.dataset.ompSearchReady = 'true';
 
         const input = panel.querySelector('.omp-search__input');
         const status = panel.querySelector('.omp-search__status');
@@ -126,7 +127,7 @@
         // Whether the current match could be shown: a row the list's own
         // search or filter hides stays hidden whatever page it is on.
         let currentHidden = false;
-        const opener = mount.querySelector('[data-omp-search-open]');
+        let opener = null;
         let returnFocusTo = null;
 
         const readDeep = () => {
@@ -581,10 +582,49 @@
 
             input.focus();
         });
-        if (opener) {
-            opener.setAttribute('aria-controls', panel.id);
-            opener.setAttribute('aria-expanded', 'false');
-            opener.addEventListener('click', () => (isOpen() ? close() : open()));
+        // Binds a mount: the bar it sits in, its opener, and the ready mark
+        // that shows it. Called again when a host replaces the mount; a panel
+        // that went with the old mount (inline) comes back closed on <body>.
+        const bindMount = (next) => {
+            mount = next;
+            bar = mount.closest('.portal-topbar') || mount.parentElement;
+            nav = bar.querySelector('.portal-topbar__nav');
+            opener = mount.querySelector('[data-omp-search-open]');
+            if (opener) {
+                opener.setAttribute('aria-controls', panel.id);
+                opener.setAttribute('aria-expanded', isOpen() ? 'true' : 'false');
+                opener.addEventListener('click', () => (isOpen() ? close() : open()));
+            }
+
+            if (!panel.isConnected) {
+                window.clearTimeout(growTimer);
+                closing = false;
+                inline = false;
+                panel.classList.remove('omp-search--inline', 'omp-search--settling');
+                panel.style.width = '';
+                panel.hidden = true;
+                document.body.appendChild(panel);
+                barObserver?.disconnect();
+                window.removeEventListener('resize', onViewportChange);
+                window.removeEventListener('scroll', onScroll);
+            }
+
+            mount.dataset.ompSearchReady = 'true';
+        };
+
+        bindMount(mount);
+
+        if (typeof MutationObserver === 'function') {
+            let rebindTimer = 0;
+            new MutationObserver(() => {
+                window.clearTimeout(rebindTimer);
+                rebindTimer = window.setTimeout(() => {
+                    const next = document.querySelector('[data-omp-search]');
+                    if (next && next !== mount) {
+                        bindMount(next);
+                    }
+                }, 0);
+            }).observe(document.body, { childList: true, subtree: true });
         }
 
         // Ctrl+Shift+F (Cmd+Shift+F on a Mac): a combination neither Windows nor
