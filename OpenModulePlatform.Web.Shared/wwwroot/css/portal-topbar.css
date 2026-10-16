@@ -1800,7 +1800,8 @@ html:not([data-theme-mode]) .omp-theme-switch {
     height: 28px;
     padding: 0 8px;
     border: 1px solid var(--omp-control-border, #7b8799);
-    border-radius: 8px;
+    /* Squarer than the panel and the buttons: a 28 px field at 8 px reads as a pill. */
+    border-radius: 4px;
     background: var(--omp-surface, #fff);
     color: inherit;
     font: inherit;
