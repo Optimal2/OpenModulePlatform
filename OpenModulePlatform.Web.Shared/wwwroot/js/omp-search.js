@@ -497,69 +497,21 @@
             panel.classList.toggle('omp-search--empty', !!input.value && matches.length === 0);
         };
 
-        // A match on another page of a paged list: step the list's own pager to the
-        // page that shows the row. The shared list script owns the paging; this
-        // only presses its buttons, from the first page forward, until the row is
-        // in view. (The pilot's way in; the list script will answer `omp:reveal`
-        // itself once the search moves into the shared scripts.) A row the list's
-        // own search or filter hides is on no page: the walk ends at the last page
-        // with the row still hidden, so the list is put back where it was and the
-        // caller is told.
-        const pageTo = (row) => {
-            const table = row.closest('table[data-page-size]');
-            if (!table || !table.id) {
-                return false;
-            }
-
-            const pager = document.querySelector(`[data-list-pager="${table.id}"]`);
-            const previous = pager?.querySelector('[data-list-pager-prev]');
-            const next = pager?.querySelector('[data-list-pager-next]');
-            if (!previous || !next) {
-                return false;
-            }
-
-            let stepsBack = 0;
-            for (let guard = 0; guard < 500 && !previous.disabled; guard++) {
-                previous.click();
-                stepsBack++;
-            }
-
-            for (let guard = 0; guard < 500 && row.hidden && !next.disabled; guard++) {
-                next.click();
-            }
-
-            if (!row.hidden) {
-                return true;
-            }
-
-            for (let guard = 0; guard < 500 && !previous.disabled; guard++) {
-                previous.click();
-            }
-
-            for (let guard = 0; guard < stepsBack && !next.disabled; guard++) {
-                next.click();
-            }
-
-            return false;
-        };
-
+        // The page's owners show what they hide: the shared list script pages
+        // to a row it has paged out, the page expands a collapsed detail or a
+        // folded group. Nothing listens on a page with nothing to show. A row
+        // still hidden afterwards is one the list's own search or filter
+        // excludes (it is on no page), and the caller is told.
         const reveal = (match) => {
             const element = match.node.parentElement;
             if (!element) {
                 return false;
             }
 
-            // A collapsed detail is hidden by its own class, not the row's hidden
-            // flag; only a row the list has paged out needs paging.
-            const row = element.closest('tr');
-            if (row?.hidden && !pageTo(row)) {
-                return false;
-            }
-
-            // The page's owners expand what they hide (a collapsed detail, a
-            // folded group). Nothing listens on a page with nothing to expand.
             element.dispatchEvent(new CustomEvent('omp:reveal', { bubbles: true, detail: { node: match.node } }));
-            return true;
+            // A collapsed detail is hidden by its own class, not the row's hidden
+            // flag; the flag is the list's, and means paged out or excluded.
+            return !element.closest('tr')?.hidden;
         };
 
         const goTo = (index, { scroll = true, reveal: doReveal = true } = {}) => {

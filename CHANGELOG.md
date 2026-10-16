@@ -23,8 +23,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   (`omp:reveal`), which pages the list and opens the detail, then scrolled
   into view. Enter and Shift+Enter step, Escape closes. The pilot's mount
   on the maintenance page is gone; the page keeps answering `omp:reveal`.
-  The list script answering `omp:reveal` itself, instead of the search
-  pressing its pager, is a later step. A row the list's own search or filter hides is
+  The shared list script answers `omp:reveal` for its own rows: a row it
+  has paged out is shown by jumping its pager to that row's page, a row cut
+  off behind "show more" by widening the window; the search no longer
+  presses the pager itself, and knows nothing about lists. A row the list's own search or filter hides is
   reported as such instead of walking the pager to its last page; Enter
   typed before the search has caught up runs it rather than stepping the
   old term's matches; closing returns the focus to where it was. Depth is

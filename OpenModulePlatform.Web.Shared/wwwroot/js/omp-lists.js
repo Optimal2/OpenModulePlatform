@@ -227,6 +227,11 @@
         controller.viewport = viewport;
 
         table.addEventListener('sortable-list:sorted', () => refreshListController(controller));
+        // The page search (omp-search.js) asks for a match to be shown by
+        // dispatching `omp:reveal` from the matched element; a row this list
+        // has paged out, or cut off behind "show more", is brought into view.
+        // A row the search or filters exclude stays hidden: it is on no page.
+        table.addEventListener('omp:reveal', (event) => revealListRow(controller, event.target));
         controller.showMoreButton?.addEventListener('click', () => {
             controller.visibleLimit += controller.pageSize;
             refreshListController(controller);
@@ -295,6 +300,36 @@
         });
     }
 
+    // Brings the row group holding `target` into view when this list has
+    // paged it out or cut it off behind "show more": the pager jumps to the
+    // page holding the group's position among the matching rows, the
+    // "show more" window grows to include it. Rows the search or filters
+    // exclude have no position and are left alone.
+    function revealListRow(controller, target) {
+        const row = target instanceof Element ? target.closest('tr') : null;
+        if (!row || !controller.tbody.contains(row) || controller.pageSize <= 0) {
+            return;
+        }
+
+        let lead = row;
+        while (lead && lead.hasAttribute('data-list-follow')) {
+            lead = lead.previousElementSibling;
+        }
+
+        const index = lead ? controller.matchIndexByRow?.get(lead) : undefined;
+        if (index === undefined || !lead.hidden) {
+            return;
+        }
+
+        if (controller.pager) {
+            controller.pageIndex = Math.floor(index / controller.pageSize);
+        } else {
+            controller.visibleLimit = Math.max(controller.visibleLimit, Math.ceil((index + 1) / controller.pageSize) * controller.pageSize);
+        }
+
+        refreshListController(controller);
+    }
+
     function refreshListController(controller) {
         const groups = new Map();
         controller.filterInputs.filter((input) => input.checked).forEach((input) => {
@@ -309,6 +344,7 @@
         });
 
         const rowGroups = getListRowGroups(controller.tbody);
+        const matchIndexByRow = new Map();
         const paged = !!controller.pager && controller.pageSize > 0;
         const limit = !paged && controller.pageSize > 0 ? controller.visibleLimit : Number.POSITIVE_INFINITY;
         let matchingCount = 0;
@@ -347,10 +383,12 @@
             let show = false;
             if (pinned) {
                 show = true;
+                matchIndexByRow.set(row, matchingCount);
                 matchingCount += 1;
             } else if (matches) {
                 show = matchingCount < limit;
                 decisions.push({ rowGroup, deepRows, matchIndex: matchingCount, pinned: false });
+                matchIndexByRow.set(row, matchingCount);
                 matchingCount += 1;
             }
             if (pinned || matches) {
@@ -362,6 +400,8 @@
             }
             decisions[decisions.length - 1].show = show;
         });
+
+        controller.matchIndexByRow = matchIndexByRow;
 
         // A pager shows one window of the matching rows (pinned rows always).
         // The page is clamped first: a search or filter can leave fewer pages
