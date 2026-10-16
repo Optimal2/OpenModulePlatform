@@ -311,8 +311,10 @@
             return;
         }
 
+        // Back to the group's lead row, over follow rows and over ignored rows
+        // (which getListRowGroups skips, so they may sit inside a group).
         let lead = row;
-        while (lead && lead.hasAttribute('data-list-follow')) {
+        while (lead && (lead.hasAttribute('data-list-follow') || lead.hasAttribute('data-list-ignore'))) {
             lead = lead.previousElementSibling;
         }
 
