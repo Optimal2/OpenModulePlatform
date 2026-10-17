@@ -106,7 +106,8 @@ public sealed class ConfigOverlayObjectService
                     document.ModuleKey,
                     document.AppKey,
                     document.ArtifactVersion,
-                    Path.GetFileName(path)));
+                    Path.GetFileName(path),
+                    ConfigOverlayHostScopeNames.ToName(document.HostScope)));
             }
             catch (IOException)
             {
@@ -367,7 +368,8 @@ public sealed record AvailableConfigOverlayObject(
     string? ModuleKey,
     string? AppKey,
     string? ArtifactVersion,
-    string FileName);
+    string FileName,
+    string HostScope = "Host");
 
 public sealed record ConfigObjectImportResult(
     string ObjectKind,

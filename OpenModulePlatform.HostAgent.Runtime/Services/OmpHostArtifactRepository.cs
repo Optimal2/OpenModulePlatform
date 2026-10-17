@@ -701,6 +701,7 @@ WHERE OverlayKey = @overlayKey
 
         try
         {
+            var hasHostScopeColumn = await ColumnExistsAsync(conn, tx, "omp", "ConfigOverlayDocuments", "HostScope", ct);
             int? existingId = null;
             string? existingSha256 = null;
             await using (var find = new SqlCommand(findSql, conn, tx))
@@ -738,7 +739,7 @@ WHERE OverlayKey = @overlayKey
                 // checks the filtered unique index per statement, so setting IsEnabled = 1
                 // while a sibling is still enabled fails with 2601 mid-transaction.
                 await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
-                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, ct);
+                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, hasHostScopeColumn, ct);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
             else
@@ -751,7 +752,7 @@ WHERE OverlayKey = @overlayKey
                     await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, -1, ct);
                 }
 
-                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, ct);
+                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, hasHostScopeColumn, ct);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
 
@@ -3390,7 +3391,7 @@ SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFile
        @artifactId AS ArtifactId,
        overlayFile.RelativePath,
        overlayFile.FileContent,
-       CAST(1 AS int) AS SourcePriority,
+       __SOURCE_PRIORITY__ AS SourcePriority,
        overlay.UpdatedUtc AS SourceUpdatedUtc,
        overlay.OverlayVersion AS SourceOverlayVersion,
        __MERGE_MODE__ AS MergeMode,
@@ -3400,7 +3401,7 @@ INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
     ON overlayFile.ConfigOverlayDocumentId = overlay.ConfigOverlayDocumentId
 WHERE overlay.IsEnabled = 1
   AND overlayFile.IsEnabled = 1
-  AND overlay.HostKey = @hostKey
+  AND __HOST_MATCH__
   AND (overlay.ModuleKey IS NULL OR overlay.ModuleKey = @ModuleKey)
   AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
   AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
@@ -3409,10 +3410,33 @@ ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFi
 
     /// <summary>The configuration-files query for a database with or without the ADR 0006 MergeMode column.</summary>
     internal static string BuildConfigurationFilesSql(bool hasMergeModeColumn)
-        => ConfigurationFilesSqlTemplate.Replace(
-            "__MERGE_MODE__",
-            hasMergeModeColumn ? "overlayFile.MergeMode" : "CAST(NULL AS nvarchar(20))",
-            StringComparison.Ordinal);
+        => BuildConfigurationFilesSql(hasMergeModeColumn, hasHostScopeColumn: false);
+
+    /// <summary>
+    /// Configuration-files query for a database with or without the HostScope
+    /// column. Without it only exact-host rows match (legacy rows never
+    /// broadcast). With it, AllHosts rows get priority 1 and host rows 2, so a
+    /// host-specific overlay wins over an installation-wide one regardless of
+    /// overlayVersion ordering.
+    /// </summary>
+    internal static string BuildConfigurationFilesSql(bool hasMergeModeColumn, bool hasHostScopeColumn)
+        => ConfigurationFilesSqlTemplate
+            .Replace(
+                "__MERGE_MODE__",
+                hasMergeModeColumn ? "overlayFile.MergeMode" : "CAST(NULL AS nvarchar(20))",
+                StringComparison.Ordinal)
+            .Replace(
+                "__SOURCE_PRIORITY__",
+                hasHostScopeColumn
+                    ? "CASE WHEN COALESCE(overlay.HostScope, N'Host') = N'AllHosts' THEN 1 ELSE 2 END"
+                    : "CAST(1 AS int)",
+                StringComparison.Ordinal)
+            .Replace(
+                "__HOST_MATCH__",
+                hasHostScopeColumn
+                    ? "(COALESCE(overlay.HostScope, N'Host') = N'AllHosts' OR (COALESCE(overlay.HostScope, N'Host') = N'Host' AND overlay.HostKey = @hostKey))"
+                    : "overlay.HostKey = @hostKey",
+                StringComparison.Ordinal);
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_mergeModeMigrationAttempted = new(StringComparer.OrdinalIgnoreCase);
 
@@ -3460,6 +3484,76 @@ END;",
         return await ColumnExistsAsync(conn, "omp", "ConfigOverlayConfigurationFiles", "MergeMode", ct);
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_hostScopeMigrationAttempted = new(StringComparer.OrdinalIgnoreCase);
+
+    internal static async Task<bool> EnsureConfigOverlayHostScopeColumnAsync(SqlConnection conn, CancellationToken ct)
+    {
+        if (await ColumnExistsAsync(conn, "omp", "ConfigOverlayDocuments", "HostScope", ct))
+        {
+            return true;
+        }
+
+        var databaseKey = conn.DataSource + "|" + conn.Database;
+        if (!s_hostScopeMigrationAttempted.TryAdd(databaseKey, true))
+        {
+            return false;
+        }
+
+        try
+        {
+            await using var alter = new SqlCommand(
+                @"
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
+BEGIN
+    ALTER TABLE omp.ConfigOverlayDocuments ADD HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
+END;",
+                conn);
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        catch (SqlException)
+        {
+            return false;
+        }
+
+        return await ColumnExistsAsync(conn, "omp", "ConfigOverlayDocuments", "HostScope", ct);
+    }
+
+    internal static async Task<bool> EnsureConfigOverlayHostScopeColumnAsync(SqlConnection conn, SqlTransaction? tx, CancellationToken ct)
+    {
+        // Transactional variant used on save paths: check inside the tx.
+        const string sql = @"
+SELECT 1 FROM sys.columns c
+INNER JOIN sys.tables t ON t.object_id = c.object_id
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = N'omp' AND t.name = N'ConfigOverlayDocuments' AND c.name = N'HostScope';";
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        if (await cmd.ExecuteScalarAsync(ct) is not null)
+        {
+            return true;
+        }
+
+        try
+        {
+            await using var alter = new SqlCommand(
+                @"
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
+BEGIN
+    ALTER TABLE omp.ConfigOverlayDocuments ADD HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
+END;",
+                conn, tx);
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        catch (SqlException)
+        {
+            return false;
+        }
+
+        await using var check = new SqlCommand(sql, conn, tx);
+        return await check.ExecuteScalarAsync(ct) is not null;
+    }
+
     public async Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
         int artifactId,
         string hostKey,
@@ -3472,7 +3566,8 @@ END;",
 
         var artifactVersion = await GetArtifactVersionAsync(conn, artifactId, ct);
         var hasMergeModeColumn = await EnsureConfigOverlayMergeModeColumnAsync(conn, ct);
-        var sql = BuildConfigurationFilesSql(hasMergeModeColumn);
+        var hasHostScopeColumn = await EnsureConfigOverlayHostScopeColumnAsync(conn, ct);
+        var sql = BuildConfigurationFilesSql(hasMergeModeColumn, hasHostScopeColumn);
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
@@ -3525,13 +3620,16 @@ END;",
                 }
             }
 
-            // mergeMode: a winning overlay row deep-merges onto the artifact-owned
-            // base row instead of replacing it (default for .json paths).
-            if (winner.SourcePriority > 0
-                && ArtifactConfigurationFileWriter.ShouldMergeOverlayConfiguration(winner.MergeMode, winner.Descriptor.RelativePath))
+            // Layered merge/replace: apply overlay rows in precedence order
+            // (artifact base, then AllHosts, then host-specific; within a scope
+            // the highest overlayVersion last). A merge row deep-merges onto
+            // the current content, a replace row discards it. This preserves
+            // the single-overlay behavior and lets a host merge build on an
+            // installation-wide merge instead of dropping it.
+            if (winner.SourcePriority > 0)
             {
-                var baseRow = group.FirstOrDefault(static row => row.SourcePriority == 0);
-                if (baseRow is not null)
+                var effectiveContent = ResolveLayeredConfigurationContent(group, winner);
+                if (!string.Equals(effectiveContent, winner.Descriptor.FileContent, StringComparison.Ordinal))
                 {
                     winner = winner with
                     {
@@ -3540,10 +3638,7 @@ END;",
                             ArtifactConfigurationFileId = winner.Descriptor.ArtifactConfigurationFileId,
                             ArtifactId = winner.Descriptor.ArtifactId,
                             RelativePath = winner.Descriptor.RelativePath,
-                            FileContent = ArtifactConfigurationFileWriter.MergeOverlayJsonConfiguration(
-                                baseRow.Descriptor.FileContent,
-                                winner.Descriptor.FileContent,
-                                winner.Descriptor.RelativePath)
+                            FileContent = effectiveContent
                         }
                     };
                 }
@@ -3568,7 +3663,7 @@ END;",
         string hostKey,
         CancellationToken ct)
     {
-        const string sql = @"
+        const string sqlTemplate = @"
 IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NULL
 BEGIN
     SELECT TOP (0)
@@ -3598,7 +3693,7 @@ SELECT DISTINCT
        overlay.ArtifactVersion
 FROM omp.ConfigOverlayDocuments overlay
 WHERE overlay.IsEnabled = 1
-  AND overlay.HostKey = @hostKey
+  AND __HOST_MATCH__
   AND (overlay.ModuleKey IS NULL OR overlay.ModuleKey = @ModuleKey)
   AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
   AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
@@ -3611,6 +3706,13 @@ ORDER BY overlay.OverlayKey, overlay.OverlayVersion;";
         await conn.OpenAsync(ct);
 
         var artifactVersion = await GetArtifactVersionAsync(conn, artifactId, ct);
+        var hasHostScopeColumn = await EnsureConfigOverlayHostScopeColumnAsync(conn, ct);
+        var sql = sqlTemplate.Replace(
+            "__HOST_MATCH__",
+            hasHostScopeColumn
+                ? "(COALESCE(overlay.HostScope, N'Host') = N'AllHosts' OR (COALESCE(overlay.HostScope, N'Host') = N'Host' AND overlay.HostKey = @hostKey))"
+                : "overlay.HostKey = @hostKey",
+            StringComparison.Ordinal);
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
@@ -3673,6 +3775,56 @@ WHERE ar.ArtifactId = @artifactId;";
         }
 
         return candidate.Descriptor.ArtifactConfigurationFileId > existing.Descriptor.ArtifactConfigurationFileId;
+    }
+
+    private static string ResolveLayeredConfigurationContent(
+        List<ResolvedConfigurationFile> group,
+        ResolvedConfigurationFile winner)
+    {
+        // One winner per scope level: competing versions of the same overlay
+        // are versions, not layers, so only the scope winner is applied.
+        var ordered = group
+            .GroupBy(static row => row.SourcePriority)
+            .Select(static scopeGroup =>
+            {
+                var scopeWinner = scopeGroup.First();
+                foreach (var candidate in scopeGroup.Skip(1))
+                {
+                    if (ConfigurationFileCandidateWins(candidate, scopeWinner))
+                    {
+                        scopeWinner = candidate;
+                    }
+                }
+
+                return scopeWinner;
+            })
+            .OrderBy(static row => row.SourcePriority)
+            .ToList();
+
+        string? current = null;
+        foreach (var row in ordered)
+        {
+            if (row.SourcePriority == 0)
+            {
+                current = row.Descriptor.FileContent;
+                continue;
+            }
+
+            if (current is not null
+                && ArtifactConfigurationFileWriter.ShouldMergeOverlayConfiguration(row.MergeMode, row.Descriptor.RelativePath))
+            {
+                current = ArtifactConfigurationFileWriter.MergeOverlayJsonConfiguration(
+                    current,
+                    row.Descriptor.FileContent,
+                    row.Descriptor.RelativePath);
+            }
+            else
+            {
+                current = row.Descriptor.FileContent;
+            }
+        }
+
+        return current ?? winner.Descriptor.FileContent;
     }
 
     private sealed record ResolvedConfigurationFile(
@@ -5423,9 +5575,48 @@ WHERE OverlayKey = @overlayKey
         SqlTransaction tx,
         PortableConfigOverlayDocument input,
         bool isEnabled,
+        bool hasHostScopeColumn,
         CancellationToken ct)
     {
-        const string sql = @"
+        var sql = hasHostScopeColumn ? @"
+INSERT INTO omp.ConfigOverlayDocuments
+(
+    OverlayKey,
+    OverlayVersion,
+    HostKey,
+    HostScope,
+    ModuleKey,
+    ModuleDefinitionVersion,
+    AppKey,
+    PackageType,
+    TargetName,
+    ArtifactVersion,
+    FormatVersion,
+    OverlayJson,
+    OverlaySha256,
+    SourceName,
+    IsEnabled
+)
+VALUES
+(
+    @overlayKey,
+    @overlayVersion,
+    @hostKey,
+    @hostScope,
+    @moduleKey,
+    @moduleDefinitionVersion,
+    @appKey,
+    @packageType,
+    @targetName,
+    @artifactVersion,
+    @formatVersion,
+    @overlayJson,
+    @overlaySha256,
+    @sourceName,
+    @isEnabled
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);" : @"
 INSERT INTO omp.ConfigOverlayDocuments
 (
     OverlayKey,
@@ -5465,6 +5656,11 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         BindConfigOverlayDocument(cmd, input);
+        if (hasHostScopeColumn)
+        {
+            Add(cmd, "@hostScope", ConfigOverlayHostScopeNames.ToName(input.HostScope));
+        }
+
         Add(cmd, "@isEnabled", isEnabled);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
@@ -5474,11 +5670,15 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         SqlTransaction tx,
         int documentId,
         PortableConfigOverlayDocument input,
+        bool hasHostScopeColumn,
         CancellationToken ct)
     {
-        const string sql = @"
+        var sql = (hasHostScopeColumn ? @"
 UPDATE omp.ConfigOverlayDocuments
-SET ModuleKey = @moduleKey,
+SET HostScope = @hostScope,
+    ModuleKey = @moduleKey," : @"
+UPDATE omp.ConfigOverlayDocuments
+SET ModuleKey = @moduleKey,") + @"
     ModuleDefinitionVersion = @moduleDefinitionVersion,
     AppKey = @appKey,
     PackageType = @packageType,
@@ -5495,6 +5695,11 @@ WHERE ConfigOverlayDocumentId = @configOverlayDocumentId;";
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@configOverlayDocumentId", documentId);
         BindConfigOverlayDocument(cmd, input);
+        if (hasHostScopeColumn)
+        {
+            Add(cmd, "@hostScope", ConfigOverlayHostScopeNames.ToName(input.HostScope));
+        }
+
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

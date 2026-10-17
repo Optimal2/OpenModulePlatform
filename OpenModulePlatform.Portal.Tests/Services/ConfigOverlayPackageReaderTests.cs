@@ -148,6 +148,103 @@ public sealed class ConfigOverlayPackageReaderTests : IDisposable
         Assert.Contains("mergeMode", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithAllHostsScope_NormalizesSentinelAndScope()
+    {
+        var path = WriteOverlayJson("""
+        {
+          "overlayKey": "test-overlay",
+          "overlayVersion": "1.0.0",
+          "hostScope": "all-hosts",
+          "configurationFiles": [
+            { "relativePath": "appsettings.json", "fileContent": "{ \"a\": 1 }" }
+          ]
+        }
+        """);
+
+        var overlay = await new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None);
+
+        Assert.Equal(ConfigOverlayHostScope.AllHosts, overlay.HostScope);
+        Assert.Equal("*", overlay.HostKey);
+        Assert.Contains("\"hostScope\": \"AllHosts\"", overlay.OverlayJson, StringComparison.Ordinal);
+        Assert.Contains("\"hostKey\": \"*\"", overlay.OverlayJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithoutScope_DefaultsToHost()
+    {
+        var path = WriteOverlayJson("""
+        { "overlayKey": "test-overlay", "overlayVersion": "1.0.0", "hostKey": "test-host" }
+        """);
+
+        var overlay = await new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None);
+
+        Assert.Equal(ConfigOverlayHostScope.Host, overlay.HostScope);
+        Assert.Equal("test-host", overlay.HostKey);
+    }
+
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithWildcardHostKeyAndNoScope_Throws()
+    {
+        var path = WriteOverlayJson("""
+        { "overlayKey": "test-overlay", "overlayVersion": "1.0.0", "hostKey": "*" }
+        """);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None));
+        Assert.Contains("hostScope", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithUnknownScope_Throws()
+    {
+        var path = WriteOverlayJson("""
+        { "overlayKey": "test-overlay", "overlayVersion": "1.0.0", "hostKey": "test-host", "hostScope": "Everywhere" }
+        """);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None));
+        Assert.Contains("hostScope", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithAllHostsAndRealHostKey_Throws()
+    {
+        var path = WriteOverlayJson("""
+        { "overlayKey": "test-overlay", "overlayVersion": "1.0.0", "hostScope": "AllHosts", "hostKey": "test-host" }
+        """);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None));
+    }
+
+    [Fact]
+    public void ExportJson_LegacyMetadataOnly_ReconstructsFilesFromRows()
+    {
+        var json = ConfigOverlayExportJson.Build(
+            """{ "overlayKey": "k", "overlayVersion": "1.0.0", "hostKey": "h1" }""",
+            "Host",
+            "h1",
+            [new PortableConfigOverlayConfigurationFile("appsettings.json", "{ \"a\": 1 }", "merge")]);
+
+        Assert.Contains("appsettings.json", json, StringComparison.Ordinal);
+        Assert.Contains("merge", json, StringComparison.Ordinal);
+        Assert.Contains("\"hostScope\": \"Host\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExportJson_WithExistingFiles_DoesNotReplaceThem()
+    {
+        var json = ConfigOverlayExportJson.Build(
+            """{ "overlayKey": "k", "overlayVersion": "1.0.0", "hostKey": "*", "hostScope": "AllHosts", "configurationFiles": [{ "relativePath": "a.json", "fileContent": "x" }] }""",
+            "AllHosts",
+            "*",
+            [new PortableConfigOverlayConfigurationFile("b.json", "y")]);
+
+        Assert.Contains("a.json", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("b.json", json, StringComparison.Ordinal);
+    }
+
     private string WriteOverlayJson(string json)
     {
         var path = GetTempFilePath($"overlay-{Guid.NewGuid():N}.json");

@@ -176,16 +176,115 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayResolutionTests : IDis
         Assert.Equal("overlay-wins", file.FileContent);
     }
 
+    [Fact]
+    public async Task AllHostsOverlay_AppliesToAnyHostInInstallation()
+    {
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "all-hosts-wins", hostScope: ConfigOverlayHostScope.AllHosts, relativePath: "site.config.js"),
+            replaceExisting: false, CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, "other-host", CancellationToken.None);
+
+        var file = Assert.Single(files);
+        Assert.Equal("all-hosts-wins", file.FileContent);
+    }
+
+    [Fact]
+    public async Task HostOverlay_OverridesAllHostsEvenWithOlderVersion()
+    {
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("2.0.0", "all-hosts-newer", hostScope: ConfigOverlayHostScope.AllHosts, relativePath: "site.config.js"),
+            replaceExisting: false, CancellationToken.None);
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlayForHost("1.0.0", "host-older-wins", HostKey, relativePath: "site.config.js"),
+            replaceExisting: false, CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+
+        Assert.Equal("host-older-wins", Assert.Single(files).FileContent);
+    }
+
+    [Fact]
+    public async Task HostOverlayForOtherHost_DoesNotOverrideAllHosts()
+    {
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "all-hosts", hostScope: ConfigOverlayHostScope.AllHosts, relativePath: "site.config.js"),
+            replaceExisting: false, CancellationToken.None);
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlayForHost("9.0.0", "other-host-only", "other-host", relativePath: "site.config.js"),
+            replaceExisting: false, CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+
+        Assert.Equal("all-hosts", Assert.Single(files).FileContent);
+    }
+
+    [Fact]
+    public async Task AllHostsAndHostMerge_LayerOntoArtifactBase()
+    {
+        _database.InsertArtifactConfigurationFile(ArtifactId, "appsettings.json", """{ "a": 1, "b": 1 }""", packageFileContent: null);
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", """{ "b": 2, "c": 2 }""", hostScope: ConfigOverlayHostScope.AllHosts),
+            replaceExisting: false, CancellationToken.None);
+        // Different overlay key so both stay enabled (enabled uniqueness is per key+host).
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlayForHost("1.0.0", """{ "c": 3, "d": 3 }""", HostKey, overlayKey: "test-overlay-host"),
+            replaceExisting: false, CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+
+        var merged = System.Text.Json.Nodes.JsonNode.Parse(Assert.Single(files).FileContent)!.AsObject();
+        Assert.Equal(1, merged["a"]!.GetValue<int>());
+        Assert.Equal(2, merged["b"]!.GetValue<int>());
+        Assert.Equal(3, merged["c"]!.GetValue<int>());
+        Assert.Equal(3, merged["d"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task LegacyWildcardHostKeyRow_NeverBroadcasts()
+    {
+        // Direct legacy row: HostScope 'Host' with '*' key must match no real host.
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlayForHost("1.0.0", "wildcard-legacy", "*", relativePath: "site.config.js"),
+            replaceExisting: false, CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+
+        Assert.Empty(files);
+    }
+
+    [Fact]
+    public void ConfigurationFilesSqlWithoutHostScope_CompilesAndMatchesOnlyExactHost()
+    {
+        var fallback = OmpHostArtifactRepository.BuildConfigurationFilesSql(hasMergeModeColumn: true, hasHostScopeColumn: false);
+        Assert.DoesNotContain("HostScope", fallback, StringComparison.Ordinal);
+        Assert.Contains("overlay.HostKey = @hostKey", fallback, StringComparison.Ordinal);
+        var scoped = OmpHostArtifactRepository.BuildConfigurationFilesSql(hasMergeModeColumn: true, hasHostScopeColumn: true);
+        Assert.Contains("AllHosts", scoped, StringComparison.Ordinal);
+    }
+
     private static PortableConfigOverlayDocument CreateOverlay(
         string version,
         string content,
         string? artifactVersion = null,
         string? mergeMode = null,
-        string relativePath = "appsettings.json")
+        string relativePath = "appsettings.json",
+        ConfigOverlayHostScope hostScope = ConfigOverlayHostScope.Host)
+        => CreateOverlayForHost(version, content, hostScope == ConfigOverlayHostScope.AllHosts ? "*" : HostKey, artifactVersion, mergeMode, relativePath, OverlayKey, hostScope);
+
+    private static PortableConfigOverlayDocument CreateOverlayForHost(
+        string version,
+        string content,
+        string hostKey,
+        string? artifactVersion = null,
+        string? mergeMode = null,
+        string relativePath = "appsettings.json",
+        string overlayKey = OverlayKey,
+        ConfigOverlayHostScope hostScope = ConfigOverlayHostScope.Host)
         => new(
-            OverlayKey: OverlayKey,
+            OverlayKey: overlayKey,
             OverlayVersion: version,
-            HostKey: HostKey,
+            HostKey: hostKey,
             FormatVersion: 1,
             OverlayJson: content,
             OverlaySha256: "sha256:" + content,
@@ -199,5 +298,7 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayResolutionTests : IDis
             ConfigurationFiles: new[]
             {
                 new PortableConfigOverlayConfigurationFile(relativePath, content, mergeMode)
-            });
+            },
+            SqlScriptCount: 0,
+            HostScope: hostScope);
 }

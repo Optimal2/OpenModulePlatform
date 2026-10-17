@@ -236,6 +236,7 @@ CREATE TABLE omp.ConfigOverlayDocuments
     OverlayKey nvarchar(200) NOT NULL,
     OverlayVersion nvarchar(50) NOT NULL,
     HostKey nvarchar(128) NOT NULL,
+    HostScope nvarchar(20) NOT NULL DEFAULT(N'Host'),
     ModuleKey nvarchar(100) NULL,
     ModuleDefinitionVersion nvarchar(50) NULL,
     AppKey nvarchar(100) NULL,
@@ -279,6 +280,16 @@ CREATE TABLE omp.ConfigOverlayConfigurationFiles
     public void DropOverlayMergeModeColumn()
     {
         Execute("ALTER TABLE omp.ConfigOverlayConfigurationFiles DROP COLUMN MergeMode;");
+    }
+
+    public bool OverlayHostScopeColumnExists()
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT CASE WHEN COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL THEN 0 ELSE 1 END;",
+            conn);
+        return (int)cmd.ExecuteScalar()! == 1;
     }
 
     public bool OverlayMergeModeColumnExists()

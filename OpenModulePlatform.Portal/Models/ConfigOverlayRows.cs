@@ -31,6 +31,9 @@ public sealed class ConfigOverlayDocumentRow
 
     public string HostKey { get; init; } = string.Empty;
 
+    /// <summary>"Host" (default, exact host) or "AllHosts" (installation-wide).</summary>
+    public string HostScope { get; init; } = "Host";
+
     public string? ModuleKey { get; init; }
 
     public string? ModuleDefinitionVersion { get; init; }

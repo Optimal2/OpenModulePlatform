@@ -41,7 +41,8 @@ public sealed record PortableConfigOverlayDocument(
     string? ArtifactVersion,
     string? SourceName,
     IReadOnlyList<PortableConfigOverlayConfigurationFile> ConfigurationFiles,
-    int SqlScriptCount = 0);
+    int SqlScriptCount = 0,
+    ConfigOverlayHostScope HostScope = ConfigOverlayHostScope.Host);
 
 public sealed record PortableConfigOverlayConfigurationFile(
     string RelativePath,
@@ -125,9 +126,19 @@ public sealed class ConfigOverlayPackageReader
             return PortableConfigObjectKind.ModuleDefinition;
         }
 
+        var isAllHosts = false;
+        try
+        {
+            isAllHosts = ConfigOverlayHostScopeNames.Parse(GetString(root, "hostScope")) == ConfigOverlayHostScope.AllHosts;
+        }
+        catch (InvalidOperationException)
+        {
+            isAllHosts = false;
+        }
+
         if (!string.IsNullOrWhiteSpace(GetString(root, "overlayKey"))
             && !string.IsNullOrWhiteSpace(GetString(root, "overlayVersion"))
-            && !string.IsNullOrWhiteSpace(GetString(root, "hostKey")))
+            && (!string.IsNullOrWhiteSpace(GetString(root, "hostKey")) || isAllHosts))
         {
             return PortableConfigObjectKind.ConfigOverlay;
         }
@@ -228,7 +239,31 @@ public sealed class ConfigOverlayPackageReader
         var root = ParseJsonObject(jsonText, "Config overlay JSON");
         var overlayKey = RequireString(root, "overlayKey", "Config overlay");
         var overlayVersion = RequireString(root, "overlayVersion", "Config overlay");
-        var hostKey = RequireString(root, "hostKey", "Config overlay");
+        var hostScope = ConfigOverlayHostScopeNames.Parse(GetString(root, "hostScope"));
+        var rawHostKey = GetString(root, "hostKey");
+        string hostKey;
+        if (hostScope == ConfigOverlayHostScope.AllHosts)
+        {
+            // hostKey is optional for AllHosts; when present it must be the
+            // sentinel or empty, never a real host that would narrow the scope.
+            if (!string.IsNullOrWhiteSpace(rawHostKey)
+                && !string.Equals(rawHostKey.Trim(), ConfigOverlayHostScopeNames.AllHostsHostKey, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Config overlay with hostScope 'AllHosts' must not specify a hostKey other than '*'.");
+            }
+
+            hostKey = ConfigOverlayHostScopeNames.AllHostsHostKey;
+        }
+        else
+        {
+            hostKey = ConfigOverlayHostScopeNames.RequireHostKey(rawHostKey);
+        }
+
+        // Normalize scope into the stored document so export round-trips it
+        // and the canonical JSON, normalized file rows and hash stay in sync.
+        root["hostScope"] = ConfigOverlayHostScopeNames.ToName(hostScope);
+        root["hostKey"] = hostKey;
         var files = NormalizeConfigurationFiles(root, archive, externalRoot);
         var sqlScriptCount = NormalizeSqlScripts(root, archive, externalRoot);
 
@@ -248,7 +283,8 @@ public sealed class ConfigOverlayPackageReader
             NullIfWhiteSpace(GetString(root, "artifactVersion")),
             Truncate(sourceName, 400),
             files,
-            sqlScriptCount);
+            sqlScriptCount,
+            hostScope);
     }
 
     private static IReadOnlyList<PortableConfigOverlayConfigurationFile> NormalizeConfigurationFiles(

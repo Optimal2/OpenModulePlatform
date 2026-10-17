@@ -69,7 +69,7 @@ customer-specific generation scripts decide which values are meaningful.
 ```
 
 The selectors are intentionally optional except for `overlayKey`,
-`overlayVersion`, and `hostKey`.
+`overlayVersion`, and `hostKey` (see `hostScope` below for the exception).
 
 - If `moduleKey` is omitted, the overlay can match any module on that host.
 - If `appKey` is omitted, it can match any app in the selected module scope.
@@ -95,6 +95,33 @@ rollback below the minimum excludes it again, with a deployment warning.
 Configuration files are stored in `omp.ConfigOverlayConfigurationFiles`.
 HostAgent loads artifact-owned configuration first, then matching overlay files.
 If both define the same `relativePath`, the overlay wins for that host.
+
+## Installation-wide scope (`hostScope`, ADR 0007)
+
+An overlay normally targets one host. Add `"hostScope": "AllHosts"` to target
+every host in the same OMP installation instead — useful for equivalent
+load-balanced hosts — optionally narrowed by `moduleKey`, `appKey`,
+`packageType`, `targetName`, or the `artifactVersion` minimum:
+
+```json
+{
+  "overlayKey": "opendocviewer-site-config",
+  "overlayVersion": "1.0.0",
+  "hostScope": "AllHosts",
+  "configurationFiles": [ ]
+}
+```
+
+- Absent/`"Host"` keeps exact-host semantics and requires `hostKey`.
+  `"AllHosts"` makes `hostKey` optional (omitted or `"*"` only). Unknown
+  scope values and wildcard host keys without explicit AllHosts are rejected,
+  and legacy rows default to Host scope, so nothing silently broadcasts.
+- Scope is installation-local only: it resolves against the connected
+  database and never carries values across installations.
+- Per file, precedence is artifact base, then AllHosts, then host-specific.
+  A host-specific overlay beats a matching AllHosts overlay even with an
+  older `overlayVersion`; within one scope the highest `overlayVersion`
+  wins. Merge/replace layers in that order (see below).
 
 ## Per-file mergeMode
 

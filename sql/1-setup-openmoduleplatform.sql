@@ -726,6 +726,7 @@ BEGIN
         OverlayKey nvarchar(200) NOT NULL,
         OverlayVersion nvarchar(50) NOT NULL,
         HostKey nvarchar(128) NOT NULL,
+        HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host'),
         ModuleKey nvarchar(100) NULL,
         ModuleDefinitionVersion nvarchar(50) NULL,
         AppKey nvarchar(100) NULL,
@@ -741,9 +742,31 @@ BEGIN
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT UQ_omp_ConfigOverlayDocuments_Key_Host_Version
             UNIQUE(OverlayKey, HostKey, OverlayVersion),
+        CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope
+            CHECK(HostScope IN (N'Host', N'AllHosts')),
         CONSTRAINT CK_omp_ConfigOverlayDocuments_Json
             CHECK(ISJSON(OverlayJson) = 1)
     );
+END
+GO
+
+-- Existing installations: add HostScope without turning legacy rows into
+-- broadcast overlays. The default 'Host' preserves exact-host semantics;
+-- AllHosts is only ever written from an explicit hostScope 'AllHosts'.
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
+BEGIN
+    ALTER TABLE omp.ConfigOverlayDocuments
+        ADD HostScope nvarchar(20) NOT NULL
+            CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
+END
+GO
+
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_ConfigOverlayDocuments_HostScope' AND parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments'))
+BEGIN
+    ALTER TABLE omp.ConfigOverlayDocuments WITH CHECK
+        ADD CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope CHECK(HostScope IN (N'Host', N'AllHosts'));
 END
 GO
 

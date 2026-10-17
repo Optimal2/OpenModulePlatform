@@ -63,7 +63,11 @@ ORDER BY HostKey, ConfigurationVersion DESC, HostConfigurationDocumentId DESC;";
 
     public async Task<IReadOnlyList<ConfigOverlayDocumentRow>> GetConfigOverlayDocumentsAsync(CancellationToken ct)
     {
-        const string sql = @"
+        await using var conn0 = _db.Create();
+        await conn0.OpenAsync(ct);
+        var hasHostScopeColumn = await ColumnExistsAsync(conn0, "omp.ConfigOverlayDocuments", "HostScope", ct);
+        var hostScopeExpr = hasHostScopeColumn ? "overlay.HostScope" : "CAST(N'Host' AS nvarchar(20))";
+        var sql = $@"
 IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NULL
 BEGIN
     SELECT TOP (0)
@@ -71,6 +75,7 @@ BEGIN
         CAST(NULL AS nvarchar(200)) AS OverlayKey,
         CAST(NULL AS nvarchar(50)) AS OverlayVersion,
         CAST(NULL AS nvarchar(128)) AS HostKey,
+        CAST(NULL AS nvarchar(20)) AS HostScope,
         CAST(NULL AS nvarchar(100)) AS ModuleKey,
         CAST(NULL AS nvarchar(50)) AS ModuleDefinitionVersion,
         CAST(NULL AS nvarchar(100)) AS AppKey,
@@ -89,6 +94,7 @@ SELECT overlay.ConfigOverlayDocumentId,
        overlay.OverlayKey,
        overlay.OverlayVersion,
        overlay.HostKey,
+       {hostScopeExpr} AS HostScope,
        overlay.ModuleKey,
        overlay.ModuleDefinitionVersion,
        overlay.AppKey,
@@ -107,6 +113,7 @@ GROUP BY overlay.ConfigOverlayDocumentId,
          overlay.OverlayKey,
          overlay.OverlayVersion,
          overlay.HostKey,
+         {hostScopeExpr},
          overlay.ModuleKey,
          overlay.ModuleDefinitionVersion,
          overlay.AppKey,
@@ -132,17 +139,18 @@ ORDER BY overlay.HostKey, overlay.ModuleKey, overlay.AppKey, overlay.OverlayKey,
                 OverlayKey = rdr.GetString(1),
                 OverlayVersion = rdr.GetString(2),
                 HostKey = rdr.GetString(3),
-                ModuleKey = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                ModuleDefinitionVersion = rdr.IsDBNull(5) ? null : rdr.GetString(5),
-                AppKey = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-                PackageType = rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                TargetName = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-                ArtifactVersion = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-                OverlaySha256 = rdr.GetString(10),
-                SourceName = rdr.IsDBNull(11) ? null : rdr.GetString(11),
-                ConfigurationFileCount = rdr.GetInt32(12),
-                IsEnabled = rdr.GetBoolean(13),
-                UpdatedUtc = rdr.GetDateTime(14)
+                HostScope = rdr.IsDBNull(4) ? "Host" : rdr.GetString(4),
+                ModuleKey = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                ModuleDefinitionVersion = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                AppKey = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                PackageType = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                TargetName = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+                ArtifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+                OverlaySha256 = rdr.GetString(11),
+                SourceName = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+                ConfigurationFileCount = rdr.GetInt32(13),
+                IsEnabled = rdr.GetBoolean(14),
+                UpdatedUtc = rdr.GetDateTime(15)
             });
         }
 
@@ -190,6 +198,92 @@ WHERE ConfigOverlayDocumentId = @ConfigOverlayDocumentId;";
         return await rdr.ReadAsync(ct)
             ? (rdr.GetString(0), rdr.GetString(1), rdr.GetString(2), rdr.GetString(3))
             : null;
+    }
+
+    public async Task<IReadOnlyList<PortableConfigOverlayConfigurationFile>> GetConfigOverlayConfigurationFilesAsync(
+        int documentId,
+        CancellationToken ct)
+    {
+        var hasMergeModeColumn = false;
+        await using (var probeConn = _db.Create())
+        {
+            await probeConn.OpenAsync(ct);
+            hasMergeModeColumn = await ColumnExistsAsync(probeConn, "omp.ConfigOverlayConfigurationFiles", "MergeMode", ct);
+        }
+
+        var mergeExpr = hasMergeModeColumn ? "MergeMode" : "CAST(NULL AS nvarchar(20))";
+        var sql = $@"
+SELECT RelativePath, FileContent, {mergeExpr}
+FROM omp.ConfigOverlayConfigurationFiles
+WHERE ConfigOverlayDocumentId = @ConfigOverlayDocumentId AND IsEnabled = 1
+ORDER BY RelativePath;";
+        var rows = new List<PortableConfigOverlayConfigurationFile>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ConfigOverlayDocumentId", documentId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new PortableConfigOverlayConfigurationFile(
+                rdr.GetString(0),
+                rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2)));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Export JSON for a stored overlay. Legacy rows may carry a metadata-only
+    /// OverlayJson while the normalized file rows hold the actual content;
+    /// export reconstructs configurationFiles from those rows instead of
+    /// dropping the settings, without inventing files that are not stored.
+    /// </summary>
+    public async Task<(string OverlayKey, string HostKey, string HostScope, string OverlayVersion, string Json)?> GetConfigOverlayExportJsonAsync(
+        int documentId,
+        CancellationToken ct)
+    {
+        var row = await GetConfigOverlayJsonAsync(documentId, ct);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var allRows = await GetConfigOverlayDocumentsAsync(ct);
+        var summary = allRows.FirstOrDefault(item => item.ConfigOverlayDocumentId == documentId);
+        var hostScope = summary?.HostScope ?? "Host";
+        var files = await GetConfigOverlayConfigurationFilesAsync(documentId, ct);
+        var json = ConfigOverlayExportJson.Build(row.Value.Json, hostScope, row.Value.HostKey, files);
+        return (row.Value.OverlayKey, row.Value.HostKey, hostScope, row.Value.OverlayVersion, json);
+    }
+
+    /// <summary>Overlays applicable to a concrete host: its own rows plus AllHosts rows.</summary>
+    public async Task<IReadOnlyList<ConfigOverlayListItemDto>> GetConfigOverlaysApplicableToHostAsync(
+        string hostKey,
+        CancellationToken ct)
+    {
+        var rows = await GetConfigOverlayDocumentsAsync(ct);
+        return rows
+            .Where(row => string.Equals(row.HostScope, "AllHosts", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(row.HostKey, hostKey, StringComparison.OrdinalIgnoreCase))
+            .Select(static row => new ConfigOverlayListItemDto(
+                row.ConfigOverlayDocumentId,
+                row.OverlayKey,
+                row.OverlayVersion,
+                row.HostKey,
+                row.HostScope,
+                string.Equals(row.HostScope, "AllHosts", StringComparison.OrdinalIgnoreCase),
+                row.ModuleKey,
+                row.AppKey,
+                row.PackageType,
+                row.TargetName,
+                row.ArtifactVersion,
+                row.ConfigurationFileCount,
+                row.IsEnabled,
+                row.SourceName,
+                row.UpdatedUtc))
+            .ToList();
     }
 
     public async Task<(int DocumentId, bool Created, bool Replaced, bool WasIdentical)> SaveImportedHostConfigurationAsync(
@@ -267,6 +361,7 @@ WHERE OverlayKey = @OverlayKey
 
         try
         {
+            var hasHostScopeColumn = await ColumnExistsAsync(conn, tx, "omp.ConfigOverlayDocuments", "HostScope", ct);
             int? existingId = null;
             string? existingSha256 = null;
             await using (var find = new SqlCommand(findSql, conn, tx))
@@ -304,7 +399,7 @@ WHERE OverlayKey = @OverlayKey
                 // checks the filtered unique index per statement, so setting IsEnabled = 1
                 // while a sibling is still enabled fails with 2601 mid-transaction.
                 await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
-                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, ct);
+                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, hasHostScopeColumn, ct);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
             else
@@ -317,7 +412,7 @@ WHERE OverlayKey = @OverlayKey
                     await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, -1, ct);
                 }
 
-                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, ct);
+                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, hasHostScopeColumn, ct);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
 
@@ -494,9 +589,48 @@ WHERE OverlayKey = @OverlayKey
         SqlTransaction tx,
         PortableConfigOverlayDocument input,
         bool isEnabled,
+        bool hasHostScopeColumn,
         CancellationToken ct)
     {
-        const string sql = @"
+        var sql = hasHostScopeColumn ? @"
+INSERT INTO omp.ConfigOverlayDocuments
+(
+    OverlayKey,
+    OverlayVersion,
+    HostKey,
+    HostScope,
+    ModuleKey,
+    ModuleDefinitionVersion,
+    AppKey,
+    PackageType,
+    TargetName,
+    ArtifactVersion,
+    FormatVersion,
+    OverlayJson,
+    OverlaySha256,
+    SourceName,
+    IsEnabled
+)
+VALUES
+(
+    @OverlayKey,
+    @OverlayVersion,
+    @HostKey,
+    @HostScope,
+    @ModuleKey,
+    @ModuleDefinitionVersion,
+    @AppKey,
+    @PackageType,
+    @TargetName,
+    @ArtifactVersion,
+    @FormatVersion,
+    @OverlayJson,
+    @OverlaySha256,
+    @SourceName,
+    @IsEnabled
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);" : @"
 INSERT INTO omp.ConfigOverlayDocuments
 (
     OverlayKey,
@@ -536,6 +670,11 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         BindConfigOverlayDocument(cmd, input);
+        if (hasHostScopeColumn)
+        {
+            Add(cmd, "@HostScope", ConfigOverlayHostScopeNames.ToName(input.HostScope));
+        }
+
         Add(cmd, "@IsEnabled", isEnabled);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
@@ -545,11 +684,15 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         SqlTransaction tx,
         int documentId,
         PortableConfigOverlayDocument input,
+        bool hasHostScopeColumn,
         CancellationToken ct)
     {
-        const string sql = @"
+        var sql = (hasHostScopeColumn ? @"
 UPDATE omp.ConfigOverlayDocuments
-SET ModuleKey = @ModuleKey,
+SET HostScope = @HostScope,
+    ModuleKey = @ModuleKey," : @"
+UPDATE omp.ConfigOverlayDocuments
+SET ModuleKey = @ModuleKey,") + @"
     ModuleDefinitionVersion = @ModuleDefinitionVersion,
     AppKey = @AppKey,
     PackageType = @PackageType,
@@ -566,6 +709,11 @@ WHERE ConfigOverlayDocumentId = @ConfigOverlayDocumentId;";
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@ConfigOverlayDocumentId", documentId);
         BindConfigOverlayDocument(cmd, input);
+        if (hasHostScopeColumn)
+        {
+            Add(cmd, "@HostScope", ConfigOverlayHostScopeNames.ToName(input.HostScope));
+        }
+
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

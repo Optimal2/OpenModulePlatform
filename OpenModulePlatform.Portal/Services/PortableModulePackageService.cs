@@ -1074,7 +1074,7 @@ public sealed class PortableModulePackageService
 
                 foreach (var documentId in request.ConfigOverlayDocumentIds.Distinct().Order())
                 {
-                    var row = await _repo.GetConfigOverlayJsonAsync(documentId, ct)
+                    var row = await _repo.GetConfigOverlayExportJsonAsync(documentId, ct)
                         ?? throw new InvalidOperationException($"Config overlay {documentId} was not found.");
                     var entryName = BuildHostSpecificEntryName(
                         ConfigOverlaysFolder,

@@ -120,7 +120,44 @@ public sealed class OmpAdminRepositoryConfigOverlayImportTests : IClassFixture<C
         Assert.Equal(first.DocumentId, enabled[0].DocumentId);
     }
 
+    [Fact]
+    public async Task ImportAllHostsOverlay_StoresSentinelAndListsForAnyHost()
+    {
+        var overlay = CreateOverlay("*", "1.0.0", "{ \"a\": 9 }", ConfigOverlayHostScope.AllHosts);
+
+        var imported = await _repository.SaveImportedConfigOverlayAsync(overlay, replaceExisting: false, CancellationToken.None);
+        Assert.True(imported.Created);
+
+        var rows = await _fixture.GetDocumentsAsync(OverlayKey, "*");
+        Assert.Single(rows, r => r.DocumentId == imported.DocumentId);
+
+        var applicable = await _repository.GetConfigOverlaysApplicableToHostAsync("some-other-host", CancellationToken.None);
+        var item = Assert.Single(applicable, r => r.ConfigOverlayDocumentId == imported.DocumentId);
+        Assert.True(item.IsAllHosts);
+        Assert.Equal("AllHosts", item.HostScope);
+
+        var export = await _repository.GetConfigOverlayExportJsonAsync(imported.DocumentId, CancellationToken.None);
+        Assert.NotNull(export);
+        Assert.Equal("AllHosts", export.Value.HostScope);
+        Assert.Contains("appsettings.json", export.Value.Json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ImportAllHostsNewer_DoesNotDisableHostSpecificEnabledRow()
+    {
+        var hostOverlay = CreateOverlay(_hostKey, "1.0.0", "{ \"a\": 1 }");
+        var hostImported = await _repository.SaveImportedConfigOverlayAsync(hostOverlay, replaceExisting: false, CancellationToken.None);
+        var allHosts = CreateOverlay("*", "2.0.0", "{ \"a\": 2 }", ConfigOverlayHostScope.AllHosts);
+        await _repository.SaveImportedConfigOverlayAsync(allHosts, replaceExisting: false, CancellationToken.None);
+
+        var hostRows = await _fixture.GetDocumentsAsync(OverlayKey, _hostKey);
+        Assert.True(hostRows.Single(r => r.DocumentId == hostImported.DocumentId).IsEnabled);
+    }
+
     private static PortableConfigOverlayDocument CreateOverlay(string hostKey, string version, string json)
+        => CreateOverlay(hostKey, version, json, ConfigOverlayHostScope.Host);
+
+    private static PortableConfigOverlayDocument CreateOverlay(string hostKey, string version, string json, ConfigOverlayHostScope hostScope)
         => new(
             OverlayKey: OverlayKey,
             OverlayVersion: version,
@@ -138,5 +175,7 @@ public sealed class OmpAdminRepositoryConfigOverlayImportTests : IClassFixture<C
             ConfigurationFiles: new[]
             {
                 new PortableConfigOverlayConfigurationFile("appsettings.json", json)
-            });
+            },
+            SqlScriptCount: 0,
+            HostScope: hostScope);
 }
