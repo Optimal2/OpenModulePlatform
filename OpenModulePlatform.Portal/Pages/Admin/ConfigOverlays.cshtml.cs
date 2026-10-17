@@ -34,7 +34,11 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
             Draft = new() { Id = id, Scope = Detail.Summary.HostScope, HostKey = Detail.Summary.HostKey,
                 Json = Detail.Json, Token = Token(Detail.Summary) };
         }
-        else if (Snapshot.Hosts.Any(h => h.HostKey == HostKey)) Draft.HostKey = HostKey;
+        else
+        {
+            var hosts = Snapshot.Hosts.Where(h => string.Equals(h.HostKey, HostKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (hosts.Length == 1) Draft.HostKey = hosts[0].HostKey;
+        }
         if (ArtifactId.HasValue && !string.IsNullOrWhiteSpace(HostKey))
         {
             try { Effective = await administration.ReadEffectiveAsync(Snapshot, HostKey, ArtifactId.Value, ct); }

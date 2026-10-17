@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -39,6 +40,69 @@ public sealed class ConfigOverlaysPageTests
         Assert.Equal(1, store.Reads);
         Assert.Contains("no-store", response.Headers.CacheControl!.ToString());
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/admin/configoverlays?id=999")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("host-a")]
+    [InlineData("HOST-A")]
+    [InlineData("HoSt-A")]
+    public async Task HostQueryPrefillsRegisteredKeyRegardlessOfCase(string hostKey)
+    {
+        var store = new OverlayAdminFakeStore();
+        using var server = Server(store);
+        using var client = server.CreateClient();
+        Assert.Equal("host-a", await PrefilledHost(client, hostKey));
+        Assert.Equal(1, store.Reads);
+        Assert.Equal(0, store.SourceReads);
+        Assert.Empty(store.DetailReads);
+        Assert.Null(store.Saved);
+        Assert.Empty(store.Changes);
+    }
+
+    [Theory]
+    [InlineData("unknown-host")]
+    [InlineData("*")]
+    [InlineData("")]
+    public async Task HostQueryDoesNotPrefillUnregisteredKeys(string hostKey)
+    {
+        using var server = Server(new OverlayAdminFakeStore());
+        using var client = server.CreateClient();
+        Assert.Null(await PrefilledHost(client, hostKey));
+    }
+
+    [Fact]
+    public async Task HostQueryCannotPrefillHostRegisteredOnlyInAnotherInstallation()
+    {
+        using var localServer = Server(new OverlayAdminFakeStore());
+        using var foreignServer = Server(new OverlayAdminFakeStore
+        {
+            Snapshot = ConfigOverlayAdministrationTests.Snapshot() with
+            { Hosts = [new() { HostKey = "other-host" }] }
+        });
+        using var localClient = localServer.CreateClient();
+        using var foreignClient = foreignServer.CreateClient();
+        Assert.Equal("other-host", await PrefilledHost(foreignClient, "OTHER-HOST"));
+        Assert.Null(await PrefilledHost(localClient, "OTHER-HOST"));
+    }
+
+    [Fact]
+    public async Task HostQueryDoesNotPrefillAmbiguousHostIdentity()
+    {
+        using var server = Server(new OverlayAdminFakeStore
+        {
+            Snapshot = ConfigOverlayAdministrationTests.Snapshot() with
+            { Hosts = [new() { HostKey = "host-a" }, new() { HostKey = "HOST-A" }] }
+        });
+        using var client = server.CreateClient();
+        Assert.Null(await PrefilledHost(client, "host-a"));
+    }
+
+    private static async Task<string?> PrefilledHost(HttpClient client, string hostKey)
+    {
+        using var response = await client.GetAsync($"/admin/configoverlays?HostKey={Uri.EscapeDataString(hostKey)}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return body.RootElement.GetProperty("draft").GetProperty("hostKey").GetString();
     }
 
     [Theory]
