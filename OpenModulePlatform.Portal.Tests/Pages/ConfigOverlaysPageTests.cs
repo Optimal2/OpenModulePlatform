@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -10,6 +11,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.Razor;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -97,12 +101,44 @@ public sealed class ConfigOverlaysPageTests
         Assert.Null(await PrefilledHost(client, "host-a"));
     }
 
+    [Theory]
+    [InlineData("host-a", false, "host-a", 1)]
+    [InlineData("HOST-A", false, "host-a", 1)]
+    [InlineData("HoSt-A", false, "host-a", 1)]
+    [InlineData("unknown-host", false, "", 0)]
+    [InlineData("other-installation-host", false, "", 0)]
+    [InlineData("host-a", true, "", 0)]
+    public async Task RenderedReadbackSelectsOnlyUniqueRegisteredIdentity(string query, bool ambiguous,
+        string selectedHost, int sourceReads)
+    {
+        var store = new OverlayAdminFakeStore();
+        if (ambiguous)
+            store.Snapshot = store.Snapshot with { Hosts = [new() { HostKey = "host-a" }, new() { HostKey = "HOST-A" }] };
+        using var server = Server(store, renderPage: true);
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync($"/admin/configoverlays?HostKey={Uri.EscapeDataString(query)}&ArtifactId=42");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        var select = Regex.Match(html, "<select[^>]*id=\"HostKey\"[^>]*>(.*?)</select>", RegexOptions.Singleline);
+        Assert.True(select.Success, html);
+        var options = Regex.Matches(select.Groups[1].Value, "<option[^>]*>");
+        var explicitSelections = options.Where(o => o.Value.Contains("selected=\"selected\"", StringComparison.Ordinal)).ToArray();
+        // A single-select with no explicit selection displays its first option in the browser.
+        var selected = explicitSelections.Length == 0 ? options[0] : Assert.Single(explicitSelections);
+        Assert.Contains($"value=\"{selectedHost}\"", selected.Value);
+        Assert.Equal(sourceReads, store.SourceReads);
+        if (sourceReads == 0)
+            Assert.Contains("Select a registered host and artifact in this installation.", html);
+    }
+
     private static async Task<string?> PrefilledHost(HttpClient client, string hostKey)
     {
         using var response = await client.GetAsync($"/admin/configoverlays?HostKey={Uri.EscapeDataString(hostKey)}");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return body.RootElement.GetProperty("draft").GetProperty("hostKey").GetString();
+        var draftHost = body.RootElement.GetProperty("draft").GetProperty("hostKey").GetString();
+        Assert.Equal(draftHost, body.RootElement.GetProperty("hostKey").GetString());
+        return draftHost;
     }
 
     [Theory]
@@ -231,7 +267,7 @@ public sealed class ConfigOverlaysPageTests
         return new() { ["__RequestVerificationToken"] = await response.Content.ReadAsStringAsync() };
     }
 
-    private static InMemoryPortalHost Server(OverlayAdminFakeStore store, bool admin = true) => new(new HostBuilder()
+    private static InMemoryPortalHost Server(OverlayAdminFakeStore store, bool admin = true, bool renderPage = false) => new(new HostBuilder()
         .ConfigureWebHost(web => web.UseTestServer()
         .ConfigureServices(services =>
         {
@@ -244,8 +280,16 @@ public sealed class ConfigOverlaysPageTests
             services.AddScoped<RbacService>(sp => new(null!, sp.GetRequiredService<IHttpContextAccessor>(), null!, sp.GetRequiredService<ILogger<RbacService>>()));
             services.AddSingleton<IConfigOverlayAdminStore>(store);
             services.AddScoped<ConfigOverlayAdministration>();
-            services.AddRazorPages(o => o.Conventions.ConfigureFilter(new ReadbackFilter()))
-                .AddApplicationPart(typeof(ConfigOverlaysModel).Assembly);
+            // Razor imports require these services; the page body never calls their database methods.
+            services.AddMemoryCache();
+            services.AddScoped<OmpConfigurationService>(sp => new(null!, sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+                sp.GetRequiredService<ILogger<OmpConfigurationService>>()));
+            services.AddScoped<OmpBrandingService>();
+            services.AddSingleton(new OmpTime());
+            services.AddScoped<PortalUserSettingsService>(_ => new(null!));
+            services.AddRazorPages(o => o.Conventions.ConfigureFilter(new ReadbackFilter(renderPage)))
+                .AddApplicationPart(typeof(ConfigOverlaysModel).Assembly)
+                .AddApplicationPart(typeof(OpenModulePlatform.Web.Shared.ViewComponents.OmpFeedbackViewComponent).Assembly);
         })
         .Configure(app =>
         {
@@ -272,14 +316,41 @@ public sealed class ConfigOverlaysPageTests
     }
 
     // Exercise production routing/handlers without activating the database-backed shared layout.
-    private sealed class ReadbackFilter : IPageFilter
+    private sealed class ReadbackFilter(bool renderPage) : IPageFilter
     {
         public void OnPageHandlerSelected(PageHandlerSelectedContext context) { }
         public void OnPageHandlerExecuting(PageHandlerExecutingContext context) { }
         public void OnPageHandlerExecuted(PageHandlerExecutedContext context)
         {
             if (context.Result is PageResult && context.HandlerInstance is ConfigOverlaysModel model)
-                context.Result = new JsonResult(new { model.Draft, Errors = model.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+            {
+                if (renderPage)
+                {
+                    // Render the production compiled page and tag helpers without the database-backed layout/ViewStart.
+                    context.Result = new RenderedPageResult(model);
+                }
+                else
+                    context.Result = new JsonResult(new { model.Draft, model.HostKey, Errors = model.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+            }
+        }
+    }
+
+    private sealed class RenderedPageResult(ConfigOverlaysModel model) : IActionResult
+    {
+        public async Task ExecuteResultAsync(ActionContext context)
+        {
+            var services = context.HttpContext.RequestServices;
+            var engine = services.GetRequiredService<IRazorViewEngine>();
+            var page = Assert.IsAssignableFrom<Page>(engine.GetPage(string.Empty, "/Pages/Admin/ConfigOverlays.cshtml").Page);
+            model.ViewData.Model = model;
+            page.PageContext = model.PageContext;
+            var view = new RazorView(engine, services.GetRequiredService<IRazorPageActivator>(), [], page,
+                HtmlEncoder.Default, services.GetRequiredService<System.Diagnostics.DiagnosticListener>());
+            using var writer = new StringWriter();
+            var tempData = services.GetRequiredService<ITempDataDictionaryFactory>().GetTempData(context.HttpContext);
+            await view.RenderAsync(new ViewContext(context, view, model.ViewData, tempData, writer, new HtmlHelperOptions()));
+            context.HttpContext.Response.ContentType = "text/html; charset=utf-8";
+            await context.HttpContext.Response.WriteAsync(writer.ToString());
         }
     }
 

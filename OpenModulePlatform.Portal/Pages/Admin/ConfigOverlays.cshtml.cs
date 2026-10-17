@@ -26,6 +26,11 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null) return guard;
         await LoadAsync(ct);
+        var requestedHostKey = HostKey;
+        var hosts = Snapshot.Hosts.Where(h => string.Equals(h.HostKey, requestedHostKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+        HostKey = hosts.Length == 1 ? hosts[0].HostKey : null;
+        // Render only a unique installation-local identity, rather than the raw query value.
+        ModelState.Remove(nameof(HostKey));
         if (id.HasValue)
         {
             if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == id.Value)) return NotFound();
@@ -36,12 +41,11 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         }
         else
         {
-            var hosts = Snapshot.Hosts.Where(h => string.Equals(h.HostKey, HostKey, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (hosts.Length == 1) Draft.HostKey = hosts[0].HostKey;
+            Draft.HostKey = HostKey;
         }
-        if (ArtifactId.HasValue && !string.IsNullOrWhiteSpace(HostKey))
+        if (ArtifactId.HasValue && !string.IsNullOrWhiteSpace(requestedHostKey))
         {
-            try { Effective = await administration.ReadEffectiveAsync(Snapshot, HostKey, ArtifactId.Value, ct); }
+            try { Effective = await administration.ReadEffectiveAsync(Snapshot, requestedHostKey, ArtifactId.Value, ct); }
             catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a registered host and artifact in this installation.")); }
         }
         return Page();
