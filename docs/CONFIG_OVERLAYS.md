@@ -315,6 +315,9 @@ config overlays before dropping them into the watched folder.
 
 ## Tooling
 
+- Portal: `/admin/configoverlays` administers saved overlays in the connected
+  installation and explains saved effective sources. See the
+  [administration guide](CONFIG_OVERLAY_ADMINISTRATION.md).
 - Portal: `/admin/modulepackageimport` imports and exports host configurations
   and config overlays through universal packages.
 - Standalone: `tools/universal-package-builder/index.html` can assemble

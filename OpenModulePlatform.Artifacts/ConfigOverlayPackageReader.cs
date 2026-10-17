@@ -230,6 +230,10 @@ public sealed class ConfigOverlayPackageReader
             Truncate(sourceName, 400));
     }
 
+    /// <summary>Validates an inline editor document without resolving any filesystem references.</summary>
+    public static PortableConfigOverlayDocument ReadInlineConfigOverlay(string jsonText)
+        => ReadConfigOverlay(jsonText, "Portal editor", null, null);
+
     private static PortableConfigOverlayDocument ReadConfigOverlay(
         string jsonText,
         string sourceName,

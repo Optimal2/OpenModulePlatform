@@ -28,6 +28,8 @@ builder.AddOmpPushEventDispatcher();
 builder.Services.AddScoped<AppCatalogService>();
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddScoped<OmpAdminRepository>();
+builder.Services.AddScoped<IConfigOverlayAdminStore>(services => services.GetRequiredService<OmpAdminRepository>());
+builder.Services.AddScoped<ConfigOverlayAdministration>();
 builder.Services.AddScoped<ISystemLogReader>(services => services.GetRequiredService<OmpAdminRepository>());
 // The Portal's own activity log: admin events (maintenance, roles, package
 // imports, host actions) go to omp_portal.ActivityLog in the shared envelope

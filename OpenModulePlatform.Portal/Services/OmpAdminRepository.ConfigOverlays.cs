@@ -345,12 +345,13 @@ WHERE HostKey = @HostKey
     public async Task<(int DocumentId, bool Created, bool Replaced, bool WasIdentical)> SaveImportedConfigOverlayAsync(
         PortableConfigOverlayDocument input,
         bool replaceExisting,
-        CancellationToken ct)
+        CancellationToken ct,
+        OverlayEditorSave? editor = null)
     {
         const string findSql = @"
 SELECT ConfigOverlayDocumentId,
-       OverlaySha256
-FROM omp.ConfigOverlayDocuments
+       OverlaySha256, IsEnabled, UpdatedUtc
+FROM omp.ConfigOverlayDocuments WITH (UPDLOCK, HOLDLOCK)
 WHERE OverlayKey = @OverlayKey
   AND HostKey = @HostKey
   AND OverlayVersion = @OverlayVersion;";
@@ -365,6 +366,8 @@ WHERE OverlayKey = @OverlayKey
             ConfigOverlayHostScopeNames.RequireWritableSchema(input.HostScope, hasHostScopeColumn);
             int? existingId = null;
             string? existingSha256 = null;
+            var existingEnabled = true;
+            DateTime existingUpdated = default;
             await using (var find = new SqlCommand(findSql, conn, tx))
             {
                 Add(find, "@OverlayKey", input.OverlayKey);
@@ -375,7 +378,21 @@ WHERE OverlayKey = @OverlayKey
                 {
                     existingId = rdr.GetInt32(0);
                     existingSha256 = rdr.GetString(1);
+                    existingEnabled = rdr.GetBoolean(2);
+                    existingUpdated = rdr.GetDateTime(3);
                 }
+            }
+
+            if (editor is not null && (existingId != editor.DocumentId
+                || (existingId.HasValue && editor.ExpectedHash != OverlayEditToken(existingSha256!, existingUpdated))))
+                throw new InvalidOperationException("Overlay changed or identity already exists. Reload before saving.");
+            var disabledPaths = new List<string>();
+            if (editor?.DocumentId is not null)
+            {
+                await using var disabled = new SqlCommand("SELECT RelativePath FROM omp.ConfigOverlayConfigurationFiles WHERE ConfigOverlayDocumentId = @id AND IsEnabled = 0;", conn, tx);
+                Add(disabled, "@id", existingId);
+                await using var reader = await disabled.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct)) disabledPaths.Add(reader.GetString(0));
             }
 
             var isIdentical = existingId.HasValue
@@ -399,9 +416,17 @@ WHERE OverlayKey = @OverlayKey
                 // Disable the enabled siblings BEFORE this row is re-enabled: SQL Server
                 // checks the filtered unique index per statement, so setting IsEnabled = 1
                 // while a sibling is still enabled fails with 2601 mid-transaction.
-                await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
-                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, hasHostScopeColumn, ct);
+                if (editor is null || existingEnabled)
+                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
+                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, hasHostScopeColumn, ct,
+                    editor is null || existingEnabled);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
+                foreach (var path in disabledPaths)
+                {
+                    await using var disable = new SqlCommand("UPDATE omp.ConfigOverlayConfigurationFiles SET IsEnabled = 0 WHERE ConfigOverlayDocumentId = @id AND RelativePath = @path;", conn, tx);
+                    Add(disable, "@id", documentId); Add(disable, "@path", path);
+                    await disable.ExecuteNonQueryAsync(ct);
+                }
             }
             else
             {
@@ -686,7 +711,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         int documentId,
         PortableConfigOverlayDocument input,
         bool hasHostScopeColumn,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isEnabled = true)
     {
         var sql = (hasHostScopeColumn ? @"
 UPDATE omp.ConfigOverlayDocuments
@@ -703,12 +729,13 @@ SET ModuleKey = @ModuleKey,") + @"
     OverlayJson = @OverlayJson,
     OverlaySha256 = @OverlaySha256,
     SourceName = @SourceName,
-    IsEnabled = 1,
+    IsEnabled = @IsEnabled,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE ConfigOverlayDocumentId = @ConfigOverlayDocumentId;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@ConfigOverlayDocumentId", documentId);
+        Add(cmd, "@IsEnabled", isEnabled);
         BindConfigOverlayDocument(cmd, input);
         if (hasHostScopeColumn)
         {

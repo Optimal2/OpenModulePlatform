@@ -1,0 +1,131 @@
+@page "/admin/configoverlays"
+@model OpenModulePlatform.Portal.Pages.Admin.ConfigOverlaysModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>@L["Configuration overlays"]</h2>
+        <p class="lede">@L["This installation is the connected Portal database. All hosts means every host in this installation, including future hosts, stored as one overlay. It does not target another installation."]</p>
+    </div>
+</section>
+<div class="toolbar">
+    <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Installation"]</a>
+    <a class="action-link" href="~/admin/hosts">@L["Hosts"]</a>
+    <a class="action-link" href="~/admin/modulepackageimport">@L["Import/export"]</a>
+</div>
+@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage, includeValidationSummary = true })
+@if (Model.Snapshot.Hosts.GroupBy(h => h.HostKey, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+{
+    <p role="alert">@L["Duplicate host keys exist across instance rows. Overlay identity uses the host key alone. Resolve duplicate host keys before exact-host editing or effective readback; existing runtime matching is unchanged."]</p>
+}
+@if (!Model.Snapshot.SchemaReady)
+{
+    <div class="empty-state" role="alert">@L["Schema not ready. Upgrade the platform schema before editing. Missing HostScope uses exact-host fallback; existing rows remain readable."]</div>
+}
+<section class="card top-gap">
+    <h3>@L["Saved overlays"]</h3>
+    @if (Model.Snapshot.Overlays.Count == 0)
+    {
+        <p>@L["No saved overlays in this installation."]</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>@L["Overlay"]</th><th>@L["Scope"]</th><th>@L["Selectors"]</th><th>@L["Files"]</th><th>@L["State"]</th><th>@L["Actions"]</th></tr></thead>
+            <tbody>
+            @foreach (var row in Model.Snapshot.Overlays)
+            {
+                <tr>
+                    <td><a asp-page="/Admin/ConfigOverlays" asp-route-id="@row.ConfigOverlayDocumentId">@row.OverlayKey @row.OverlayVersion</a></td>
+                    <td>
+                        @(row.HostScope == "AllHosts" ? L["All hosts in this installation"].Value : row.HostKey)
+                        @if (row.HostScope != "AllHosts" && !Model.Snapshot.Hosts.Any(h => string.Equals(h.HostKey, row.HostKey, StringComparison.OrdinalIgnoreCase)))
+                        { <span class="pill">@L["Host missing from this installation"]</span> }
+                    </td>
+                    <td>@row.ModuleKey / @row.AppKey / @row.PackageType / @row.TargetName / @L["Minimum artifact version"]: @row.ArtifactVersion</td>
+                    <td>@row.ConfigurationFileCount</td>
+                    <td>@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</td>
+                    <td>
+                        <form method="post" data-omp-confirm="@L["Change this saved overlay? Enabling disables other versions of the same key and scope. Delete removes the document and its files. No other version is automatically selected after disable or delete."]">
+                            <input type="hidden" name="id" value="@row.ConfigOverlayDocumentId" />
+                            <input type="hidden" name="token" value="@ConfigOverlaysModel.Token(row)" />
+                            <button asp-page-handler="@(row.IsEnabled ? "Disable" : "Enable")" disabled="@(!Model.Snapshot.SchemaReady)">@(row.IsEnabled ? L["Disable"] : L["Enable"])</button>
+                            <button asp-page-handler="Delete" class="btn btn-danger" disabled="@(!Model.Snapshot.SchemaReady)">@L["Delete"]</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
+<section class="card top-gap">
+    <h3>@(Model.Draft.Id.HasValue ? L["Edit saved overlay draft"] : L["Add overlay draft"])</h3>
+    <p>@L["Saving persists configuration for a future deployment; it never writes live files. Editing preserves enabled state and disabled file paths. New versions follow import version selection. Scope, key and version are immutable during edit."]</p>
+    <p>@L["Choose scope and host below; these controls set hostScope and hostKey in JSON. Keep module/app/package/target selectors and moduleDefinitionVersion as needed. artifactVersion is a minimum, not an exact version. Files must use inline fileContent and safe relative deployment paths; filesystem references are unavailable."]</p>
+    <form method="post" asp-page-handler="Save" autocomplete="off">
+        <input type="hidden" asp-for="Draft.Id" />
+        <input type="hidden" asp-for="Draft.Token" />
+        <div class="form-field">
+            <label asp-for="Draft.Scope">@L["Scope"]</label>
+            <select asp-for="Draft.Scope">
+                <option value="Host">@L["One exact host"]</option>
+                <option value="AllHosts">@L["All hosts in this installation"]</option>
+            </select>
+        </div>
+        <div class="form-field">
+            <label asp-for="Draft.HostKey">@L["Host (used only for exact-host scope)"]</label>
+            <select asp-for="Draft.HostKey">
+                <option value="">@L["Select host"]</option>
+                @foreach (var host in Model.Snapshot.Hosts) { <option value="@host.HostKey">@host.HostKey (@host.InstanceKey)</option> }
+            </select>
+        </div>
+        <div class="form-field">
+            <label asp-for="Draft.Json">@L["Overlay JSON draft (may contain secrets)"]</label>
+            <textarea asp-for="Draft.Json" rows="18" spellcheck="false" autocomplete="off"></textarea>
+            <span asp-validation-for="Draft.Json"></span>
+        </div>
+        @if (Model.Detail is not null)
+        {
+            <ul>
+            @foreach (var file in Model.Detail.Files)
+            {
+                <li>@file.RelativePath — @(file.IsEnabled ? L["Enabled"] : L["Disabled"]) — @OpenModulePlatform.Portal.Services.ConfigOverlayAdministration.Mode(file.MergeMode, file.RelativePath)</li>
+            }
+            </ul>
+        }
+        <button type="submit" disabled="@(!Model.Snapshot.SchemaReady)">@L["Save overlay"]</button>
+        <a asp-page="/Admin/ConfigOverlays">@L["New overlay / discard draft"]</a>
+    </form>
+</section>
+<section class="card top-gap">
+    <h3>@L["Saved effective sources"]</h3>
+    <p>@L["This readback uses saved rows, never the unsaved draft. Precedence: artifact → AllHosts → exact host. The highest version wins within a scope, then update time and file row ID. Merge retains earlier inputs; replace discards them. This is overlay provenance, not live file contents or final deployment configuration (connection protection and other runtime transformations apply later)."]</p>
+    <form method="get">
+        <label asp-for="HostKey">@L["Host"]</label>
+        <select asp-for="HostKey">
+            <option value="">@L["Select host"]</option>
+            @foreach (var host in Model.Snapshot.Hosts) { <option value="@host.HostKey">@host.HostKey</option> }
+        </select>
+        <label asp-for="ArtifactId">@L["Artifact"]</label>
+        <select asp-for="ArtifactId">
+            <option value="">@L["Select artifact"]</option>
+            @foreach (var artifact in Model.Snapshot.Artifacts) { <option value="@artifact.ArtifactId">@artifact.ModuleKey / @artifact.AppKey / @artifact.PackageType / @artifact.TargetName / @artifact.Version</option> }
+        </select>
+        <button type="submit">@L["Read saved sources"]</button>
+    </form>
+    @if (Model.Effective is not null)
+    {
+        foreach (var diagnostic in Model.Effective.Diagnostics) { <p role="status">@diagnostic</p> }
+        foreach (var file in Model.Effective.Files)
+        {
+            <h4>@file.RelativePath</h4>
+            <ul>
+            @foreach (var source in file.Sources)
+            {
+                <li>@source.SourceKind @source.HostScope @source.OverlayKey @source.OverlayVersion — @source.EffectiveMergeMode — @(source.IsWinner ? L["Final winner"] : source.IsShadowed ? L["Shadowed"] : L["Contributes through merge"])</li>
+            }
+            </ul>
+        }
+    }
+</section>

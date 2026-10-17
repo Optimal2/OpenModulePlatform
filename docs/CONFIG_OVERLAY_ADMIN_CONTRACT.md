@@ -2,7 +2,8 @@
 
 This contract complements [config overlays](CONFIG_OVERLAYS.md) and
 [ADR 0007](adr/0007-config-overlay-all-hosts-scope.md). It defines the boundary
-for Portal CRUD and effective-source views; it does not introduce UI or routes.
+for Portal CRUD and effective-source views. The implemented page is
+`/admin/configoverlays`; see the [operator guide](CONFIG_OVERLAY_ADMINISTRATION.md).
 
 ## Authorization and content
 
@@ -24,13 +25,15 @@ or explicit export responses. Do not copy content into status messages or logs.
 | Reconstruct portable export | `GetConfigOverlayExportJsonAsync(documentId, ct)` preserves stored JSON entries and fills missing legacy configuration files from normalized rows. |
 | Parse authoring/import JSON | `ConfigOverlayPackageReader.ReadConfigOverlayAsync(path, sourceName, ct)` validates paths and selectors and normalizes scope, content and SHA-256. Use this boundary before saving; do not construct a mismatched document/hash/file-row tuple in a form handler. |
 | Save/import | Both Portal and HostAgent `SaveImportedConfigOverlayAsync(input, replaceExisting, ct)` return `(DocumentId, Created, Replaced, WasIdentical)`. |
+| Inline editor JSON | `ReadInlineConfigOverlay(jsonText)` uses the same normalization with no external root/archive, so filesystem references cannot resolve. The administration service also rejects rooted deployment paths before normalization. |
 | Universal export | `PortableModulePackageService.ExportUniversalPackageAsync(request, ct)` accepts selected document IDs and uses reconstructed JSON. No direct legacy JSON-export route is enabled. |
 
 The DTO declarations are in
 `OpenModulePlatform.Portal/Models/ConfigOverlayAdminDtos.cs`:
 `ConfigOverlayListItemDto`, `ConfigOverlayFileDto`, `ConfigOverlayDetailDto`,
 `EffectiveConfigurationSourceDto` and `EffectiveConfigurationFileDto`.
-These are data contracts, not implemented CRUD/effective-source endpoints.
+The saved-source view uses these metadata contracts; the authorized editor
+loads canonical JSON and normalized rows through `IConfigOverlayAdminStore`.
 
 ## Save and CRUD semantics
 
@@ -53,9 +56,12 @@ These are data contracts, not implemented CRUD/effective-source endpoints.
   even where the list DTO omits them. Changing identity creates a new document;
   do not silently change the identity of a different version or scope.
 
-Explicit enable/disable, deletion, and reading disabled file rows have no
-dedicated repository methods yet. The dependent CRUD implementation must add
-authorized operations for them. Enabling must keep the same transactional
+`IConfigOverlayAdminStore` supplies detail (including disabled files), editor
+save and explicit enable/disable/delete operations. The page authorizes each
+handler before using this installation-local store. Editor saves additionally
+check the document ID and hash/update-time token inside the save transaction;
+unlike changed-content imports, they preserve disabled document/file state.
+Enabling keeps the same transactional
 sibling rule; disabling must not automatically select another version. Delete
 by document ID and use the existing cascading file-row foreign key. Do not
 implement these operations by re-importing JSON: identical import is a no-op.
@@ -95,8 +101,7 @@ is the final winner and `Sources` retains all matching candidates for explanatio
 Source metadata needs the true update time and file row ID for ordering; DTO
 display order or document-list order cannot substitute for them.
 
-No repository service currently returns these effective-source DTOs. The
-dependent implementation must produce provenance using the runtime's
+`ConfigOverlayAdministration` returns these effective-source DTOs using the runtime's
 `ConfigurationFileCandidateWins` and `ResolveLayeredConfigurationContent`
 semantics, not label the host candidate list as an effective view. Keep this
 overlay result distinct from final deployment configuration, which also applies

@@ -1,10 +1,7 @@
 namespace OpenModulePlatform.Portal.Models;
 
 /// <summary>
-/// Phase B Portal API contract for overlay administration and the
-/// effective-configuration view. Phase A (this change) defines these DTOs and
-/// the repository methods behind them; the Razor pages in Phase B bind to
-/// them without changing the persistence or resolution contract.
+/// Portal metadata contracts for overlay administration and effective sources.
 /// All content fields are only populated for authorized admin callers; list
 /// DTOs never carry file content or secrets.
 /// </summary>
