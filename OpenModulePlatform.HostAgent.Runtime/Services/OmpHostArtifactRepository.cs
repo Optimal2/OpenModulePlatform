@@ -702,6 +702,7 @@ WHERE OverlayKey = @overlayKey
         try
         {
             var hasHostScopeColumn = await ColumnExistsAsync(conn, tx, "omp", "ConfigOverlayDocuments", "HostScope", ct);
+            ConfigOverlayHostScopeNames.RequireWritableSchema(input.HostScope, hasHostScopeColumn);
             int? existingId = null;
             string? existingSha256 = null;
             await using (var find = new SqlCommand(findSql, conn, tx))
@@ -3486,72 +3487,59 @@ END;",
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_hostScopeMigrationAttempted = new(StringComparer.OrdinalIgnoreCase);
 
-    internal static async Task<bool> EnsureConfigOverlayHostScopeColumnAsync(SqlConnection conn, CancellationToken ct)
-    {
-        if (await ColumnExistsAsync(conn, "omp", "ConfigOverlayDocuments", "HostScope", ct))
-        {
-            return true;
-        }
-
-        var databaseKey = conn.DataSource + "|" + conn.Database;
-        if (!s_hostScopeMigrationAttempted.TryAdd(databaseKey, true))
-        {
-            return false;
-        }
-
-        try
-        {
-            await using var alter = new SqlCommand(
-                @"
+    internal const string ConfigOverlayHostScopeUpgradeSql = @"
 IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
-   AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
 BEGIN
-    ALTER TABLE omp.ConfigOverlayDocuments ADD HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
-END;",
-                conn);
-            await alter.ExecuteNonQueryAsync(ct);
-        }
-        catch (SqlException)
-        {
-            return false;
-        }
+    IF COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
+        ALTER TABLE omp.ConfigOverlayDocuments ADD HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
 
-        return await ColumnExistsAsync(conn, "omp", "ConfigOverlayDocuments", "HostScope", ct);
-    }
+    IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_ConfigOverlayDocuments_HostScope' AND parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments'))
+        EXEC(N'ALTER TABLE omp.ConfigOverlayDocuments WITH CHECK ADD CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope CHECK(HostScope IN (N''Host'', N''AllHosts''));');
+    ELSE
+        EXEC(N'ALTER TABLE omp.ConfigOverlayDocuments WITH CHECK CHECK CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope;');
+END;";
+
+    internal static Task<bool> EnsureConfigOverlayHostScopeColumnAsync(SqlConnection conn, CancellationToken ct)
+        => EnsureConfigOverlayHostScopeColumnAsync(conn, null, ct);
 
     internal static async Task<bool> EnsureConfigOverlayHostScopeColumnAsync(SqlConnection conn, SqlTransaction? tx, CancellationToken ct)
     {
-        // Transactional variant used on save paths: check inside the tx.
-        const string sql = @"
-SELECT 1 FROM sys.columns c
-INNER JOIN sys.tables t ON t.object_id = c.object_id
-INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
-WHERE s.name = N'omp' AND t.name = N'ConfigOverlayDocuments' AND c.name = N'HostScope';";
-        await using var cmd = new SqlCommand(sql, conn, tx);
-        if (await cmd.ExecuteScalarAsync(ct) is not null)
+        var hasHostScopeColumn = await ColumnExistsAsync(conn, tx, "omp", "ConfigOverlayDocuments", "HostScope", ct);
+        // A column-only upgrade must also repair the CHECK. Avoid DDL on a
+        // fully upgraded database, and retain read compatibility without ALTER.
+        const string checkSql = @"
+SELECT 1 FROM sys.check_constraints
+WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
+  AND name = N'CK_omp_ConfigOverlayDocuments_HostScope'
+  AND is_disabled = 0 AND is_not_trusted = 0;";
+        await using var check = new SqlCommand(checkSql, conn, tx);
+        if (hasHostScopeColumn && await check.ExecuteScalarAsync(ct) is not null)
         {
             return true;
+        }
+
+        // Transactional attempts must not be cached: their DDL can roll back.
+        var databaseKey = conn.DataSource + "|" + conn.Database;
+        if (tx is null && !s_hostScopeMigrationAttempted.TryAdd(databaseKey, true))
+        {
+            return hasHostScopeColumn;
         }
 
         try
         {
             await using var alter = new SqlCommand(
-                @"
-IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
-   AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
-BEGIN
-    ALTER TABLE omp.ConfigOverlayDocuments ADD HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
-END;",
+                ConfigOverlayHostScopeUpgradeSql,
                 conn, tx);
             await alter.ExecuteNonQueryAsync(ct);
         }
         catch (SqlException)
         {
-            return false;
+            // Existing HostScope readers still work if only CHECK repair was
+            // denied; pre-column databases continue using exact-host fallback.
+            return hasHostScopeColumn;
         }
 
-        await using var check = new SqlCommand(sql, conn, tx);
-        return await check.ExecuteScalarAsync(ct) is not null;
+        return await ColumnExistsAsync(conn, tx, "omp", "ConfigOverlayDocuments", "HostScope", ct);
     }
 
     public async Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
@@ -3754,7 +3742,7 @@ WHERE ar.ArtifactId = @artifactId;";
     /// (highest version wins, compared with <see cref="ArtifactVersionComparer"/>),
     /// then UpdatedUtc, and finally the row id so the outcome never depends on read order.
     /// </summary>
-    private static bool ConfigurationFileCandidateWins(
+    internal static bool ConfigurationFileCandidateWins(
         ResolvedConfigurationFile candidate,
         ResolvedConfigurationFile existing)
     {
@@ -3777,7 +3765,7 @@ WHERE ar.ArtifactId = @artifactId;";
         return candidate.Descriptor.ArtifactConfigurationFileId > existing.Descriptor.ArtifactConfigurationFileId;
     }
 
-    private static string ResolveLayeredConfigurationContent(
+    internal static string ResolveLayeredConfigurationContent(
         List<ResolvedConfigurationFile> group,
         ResolvedConfigurationFile winner)
     {
@@ -3827,7 +3815,7 @@ WHERE ar.ArtifactId = @artifactId;";
         return current ?? winner.Descriptor.FileContent;
     }
 
-    private sealed record ResolvedConfigurationFile(
+    internal sealed record ResolvedConfigurationFile(
         ArtifactConfigurationFileDescriptor Descriptor,
         int SourcePriority,
         DateTime SourceUpdatedUtc,

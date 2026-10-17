@@ -125,6 +125,9 @@ load-balanced hosts — optionally narrowed by `moduleKey`, `appKey`,
 
 ## Per-file mergeMode
 
+For Portal administration, save behavior on older schemas and effective-source
+provenance, see the [administration contract](CONFIG_OVERLAY_ADMIN_CONTRACT.md).
+
 Each `configurationFiles` entry accepts an optional `mergeMode`
 (`"merge"` or `"replace"`, case-insensitive):
 

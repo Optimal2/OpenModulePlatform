@@ -2,8 +2,8 @@
 
 ## Status
 
-Decided (2026-10-17), implemented in Phase A of the overlay administration
-campaign. Portal CRUD/effective-source UI follows in Phase B.
+Decided (2026-10-17). Scope, persistence and resolution are implemented;
+Portal CRUD and effective-source views are separate work.
 
 ## Context
 
@@ -65,17 +65,30 @@ only the scope winner applies.
 document JSON, so the canonical document, the normalized
 `ConfigOverlayConfigurationFiles` rows, and `OverlaySha256` stay in sync and
 export/import round-trips the scope. Save paths (Portal and HostAgent) write
-document and file rows in one transaction and only reference the `HostScope`
-column when it exists. Legacy metadata-only documents are exported with
+document and file rows in one transaction. AllHosts saves fail with schema
+upgrade guidance when the `HostScope` column is missing, before looking up an
+identical import or changing any rows. Host-only saves remain compatible with
+the older schema. Runtime Ensure adds the column and the same trusted CHECK
+as setup, including repair of column-only upgrades. Without ALTER permission,
+reads retain the existing column shape and exact-host fallback when absent.
+Legacy metadata-only documents are exported with
 `configurationFiles` reconstructed from the normalized rows
 (`ConfigOverlayExportJson`); stored file entries are never replaced and no
 files are invented.
+
+Universal ZIP export keeps `hostScope: "AllHosts"` and `hostKey: "*"` in JSON,
+but uses `config-overlays/all-hosts/documents/all-hosts__<overlay-key>__overlay__<version>.json`
+for the entry path. Host-specific entries retain the host folder and filename
+pattern, with every identity field sanitized. Different path depths prevent
+a real host named `all-hosts` from colliding with the broadcast entry. Both
+readers continue to validate paths; the sentinel never becomes a filename.
 
 ## Consequences
 
 - Equivalent hosts share one AllHosts overlay; a host exception is one
   host-specific overlay that wins per file.
 - Existing host-only overlays, imports, and universal packages are unchanged.
-- Authoring AllHosts overlays in Portal (list/create/edit/effective view) is
-  Phase B; Phase A ships the contract, resolution, persistence, DTOs
-  (`ConfigOverlayAdminDtos`), and `GetConfigOverlaysApplicableToHostAsync`.
+- Portal authoring and effective-source views build on
+  `ConfigOverlayAdminDtos` and `GetConfigOverlaysApplicableToHostAsync`.
+  The [administration contract](../CONFIG_OVERLAY_ADMIN_CONTRACT.md) identifies
+  the available methods and the remaining service operations.

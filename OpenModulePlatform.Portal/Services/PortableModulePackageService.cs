@@ -1076,12 +1076,7 @@ public sealed class PortableModulePackageService
                 {
                     var row = await _repo.GetConfigOverlayExportJsonAsync(documentId, ct)
                         ?? throw new InvalidOperationException($"Config overlay {documentId} was not found.");
-                    var entryName = BuildHostSpecificEntryName(
-                        ConfigOverlaysFolder,
-                        row.HostKey,
-                        $"{row.HostKey}__{row.OverlayKey}__overlay__{row.OverlayVersion}.json");
-                    await AddTextEntryAsync(archive, usedEntryNames, entryName, row.Json, ct);
-                    items.Add(CreateUniversalPackageItem("config-overlay", entryName, row.OverlayVersion));
+                    items.Add(await AddConfigOverlayEntryAsync(archive, usedEntryNames, row, ct));
                 }
 
                 if (request.WidgetIds.Count > 0)
@@ -2522,7 +2517,26 @@ public sealed class PortableModulePackageService
         string fileName)
         => $"{objectFolder}/{SanitizePathSegment(hostKey)}/{Path.GetFileName(fileName)}";
 
-    private static async Task WriteUniversalPackageManifestAsync(
+    internal static async Task<JsonObject> AddConfigOverlayEntryAsync(
+        ZipArchive archive,
+        HashSet<string> usedEntryNames,
+        (string OverlayKey, string HostKey, string HostScope, string OverlayVersion, string Json) row,
+        CancellationToken ct)
+    {
+        // The stored '*' sentinel is JSON metadata, never a filesystem name.
+        // Keep AllHosts entries at a different depth so a real host named
+        // 'all-hosts' cannot collide with an installation-wide overlay.
+        var entryName = ConfigOverlayHostScopeNames.Parse(row.HostScope) == ConfigOverlayHostScope.AllHosts
+            ? $"{ConfigOverlaysFolder}/all-hosts/documents/all-hosts__{SanitizePathSegment(row.OverlayKey)}__overlay__{SanitizePathSegment(row.OverlayVersion)}.json"
+            : BuildHostSpecificEntryName(
+                ConfigOverlaysFolder,
+                row.HostKey,
+                $"{SanitizePathSegment(row.HostKey)}__{SanitizePathSegment(row.OverlayKey)}__overlay__{SanitizePathSegment(row.OverlayVersion)}.json");
+        await AddTextEntryAsync(archive, usedEntryNames, entryName, row.Json, ct);
+        return CreateUniversalPackageItem("config-overlay", entryName, row.OverlayVersion);
+    }
+
+    internal static async Task WriteUniversalPackageManifestAsync(
         ZipArchive archive,
         string packageKey,
         string packageVersion,

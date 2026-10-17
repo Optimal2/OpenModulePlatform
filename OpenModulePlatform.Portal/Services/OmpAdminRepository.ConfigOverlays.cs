@@ -362,6 +362,7 @@ WHERE OverlayKey = @OverlayKey
         try
         {
             var hasHostScopeColumn = await ColumnExistsAsync(conn, tx, "omp.ConfigOverlayDocuments", "HostScope", ct);
+            ConfigOverlayHostScopeNames.RequireWritableSchema(input.HostScope, hasHostScopeColumn);
             int? existingId = null;
             string? existingSha256 = null;
             await using (var find = new SqlCommand(findSql, conn, tx))

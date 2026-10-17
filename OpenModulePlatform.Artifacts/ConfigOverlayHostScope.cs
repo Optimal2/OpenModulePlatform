@@ -83,6 +83,20 @@ public static class ConfigOverlayHostScopeNames
         => scope == ConfigOverlayHostScope.AllHosts ? AllHostsHostKey : RequireHostKey(hostKey);
 
     /// <summary>
+    /// Host-only imports remain compatible with older schemas. An AllHosts
+    /// import must persist its explicit scope, including on identical re-imports.
+    /// Call before any document, sibling-state, or file-row writes.
+    /// </summary>
+    public static void RequireWritableSchema(ConfigOverlayHostScope scope, bool hasHostScopeColumn)
+    {
+        if (scope == ConfigOverlayHostScope.AllHosts && !hasHostScopeColumn)
+        {
+            throw new InvalidOperationException(
+                "Cannot save an AllHosts config overlay because omp.ConfigOverlayDocuments.HostScope is missing. Apply the platform schema upgrade before importing this overlay.");
+        }
+    }
+
+    /// <summary>
     /// Resolution priority per file: artifact base 0, AllHosts overlay 1,
     /// host-specific overlay 2. A host-specific overlay therefore wins over a
     /// matching AllHosts overlay even when its overlayVersion is older.
