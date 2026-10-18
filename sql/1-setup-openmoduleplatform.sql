@@ -750,25 +750,9 @@ BEGIN
 END
 GO
 
--- Existing installations: add HostScope without turning legacy rows into
--- broadcast overlays. The default 'Host' preserves exact-host semantics;
--- AllHosts is only ever written from an explicit hostScope 'AllHosts'.
-IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
-   AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
-BEGIN
-    ALTER TABLE omp.ConfigOverlayDocuments
-        ADD HostScope nvarchar(20) NOT NULL
-            CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
-END
-GO
-
-IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
-   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_ConfigOverlayDocuments_HostScope' AND parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments'))
-BEGIN
-    ALTER TABLE omp.ConfigOverlayDocuments WITH CHECK
-        ADD CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope CHECK(HostScope IN (N'Host', N'AllHosts'));
-END
-GO
+-- Existing installations receive HostScope and its trusted CHECK through the
+-- compiled PlatformConfigurationMigration before this portable setup runs.
+-- Platform-owned configuration tables cannot be altered by module SQL.
 
 IF OBJECT_ID(N'omp.ConfigOverlayConfigurationFiles', N'U') IS NULL
 BEGIN

@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="..\tests\shared\PlatformConfigurationImportContract.cs" Link="TestSupport\PlatformConfigurationImportContract.cs" />
     <Using Include="OpenModulePlatform.Installation" />
   </ItemGroup>
 

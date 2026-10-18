@@ -4,6 +4,18 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
 public sealed class ModuleDefinitionSqlSafetyTests
 {
+    [Fact]
+    public void PlatformMigration_OwnsHostScopeUpgrade()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.CompiledMigrationOwnsHostScope(typeof(OmpHostArtifactRepository));
+
+    [Fact]
+    public void CoreDefinitionImport_AcceptsActualEmbeddedScripts()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.AcceptsCoreDefinition(typeof(OmpHostArtifactRepository));
+
+    [Fact]
+    public void CoreDefinitionImport_RejectsModuleConfigurationMutations()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.RejectsModuleConfigurationMutations(typeof(OmpHostArtifactRepository));
+
     private static string? ValidateMaintenanceSql(string sql) => OmpHostArtifactRepository.ValidateSafeModuleDefinitionSql(sql);
 
     // Keep this maintenance matrix identical in all three executor suites.

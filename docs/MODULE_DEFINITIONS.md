@@ -166,9 +166,14 @@ Database-principal ownership options are described in
 
 The core overlay-history migration lives in compiled
 `shared/PlatformConfigurationMigration.cs`, outside portable module SQL.
-It also adds missing `PackageFileContent` and `MergeMode` columns to existing
-configuration tables without changing their content. Fresh databases create
-these columns directly in the table definitions.
+It also adds missing `PackageFileContent`, `MergeMode` and `HostScope` columns to
+existing configuration tables. Legacy overlay rows receive `HostScope = Host`,
+preserving exact-host selection; the migration never promotes them to `AllHosts`.
+It adds or re-trusts the HostScope CHECK using deferred constraint DDL so an
+upgrade from a table without that column compiles correctly. The runtime schema
+repair uses the same compiled HostScope SQL. Fresh databases create these columns
+and the CHECK directly in the table definitions. Portable core SQL has no special
+permission to alter platform-owned configuration tables.
 Before core schema setup, each executor preserves the highest semantic overlay
 version (then latest update and highest row id), disables duplicate enabled
 siblings, and retains all historical rows. Fresh databases need no row

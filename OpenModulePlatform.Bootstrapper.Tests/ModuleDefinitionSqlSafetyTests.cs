@@ -2,6 +2,18 @@ namespace OpenModulePlatform.Bootstrapper.Tests;
 
 public sealed class ModuleDefinitionSqlSafetyTests
 {
+    [Fact]
+    public void PlatformMigration_OwnsHostScopeUpgrade()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.CompiledMigrationOwnsHostScope(typeof(InstallationEngine));
+
+    [Fact]
+    public void CoreDefinitionImport_AcceptsActualEmbeddedScripts()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.AcceptsCoreDefinition(typeof(InstallationEngine));
+
+    [Fact]
+    public void CoreDefinitionImport_RejectsModuleConfigurationMutations()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.RejectsModuleConfigurationMutations(typeof(InstallationEngine));
+
     private static string? ValidateMaintenanceSql(string sql) => Program.ValidateSafeModuleDefinitionSql(sql);
 
     // Keep this maintenance matrix identical in all three executor suites.

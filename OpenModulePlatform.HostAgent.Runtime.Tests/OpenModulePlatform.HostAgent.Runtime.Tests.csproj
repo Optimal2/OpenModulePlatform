@@ -34,6 +34,7 @@
     <Compile Include="..\tests\shared\OmpTestDatabaseNames.cs" Link="TestSupport\OmpTestDatabaseNames.cs" />
     <Compile Include="..\tests\shared\OmpTestCleanupLog.cs" Link="TestSupport\OmpTestCleanupLog.cs" />
     <Compile Include="..\tests\shared\OmpRepositoryFiles.cs" Link="TestSupport\OmpRepositoryFiles.cs" />
+    <Compile Include="..\tests\shared\PlatformConfigurationImportContract.cs" Link="TestSupport\PlatformConfigurationImportContract.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- Exercise the dependency-free Sentinel policy without adding packages to the service. -->

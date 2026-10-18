@@ -3487,17 +3487,7 @@ END;",
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_hostScopeMigrationAttempted = new(StringComparer.OrdinalIgnoreCase);
 
-    internal const string ConfigOverlayHostScopeUpgradeSql = @"
-IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NOT NULL
-BEGIN
-    IF COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL
-        ALTER TABLE omp.ConfigOverlayDocuments ADD HostScope nvarchar(20) NOT NULL CONSTRAINT DF_omp_ConfigOverlayDocuments_HostScope DEFAULT(N'Host');
-
-    IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_ConfigOverlayDocuments_HostScope' AND parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments'))
-        EXEC(N'ALTER TABLE omp.ConfigOverlayDocuments WITH CHECK ADD CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope CHECK(HostScope IN (N''Host'', N''AllHosts''));');
-    ELSE
-        EXEC(N'ALTER TABLE omp.ConfigOverlayDocuments WITH CHECK CHECK CONSTRAINT CK_omp_ConfigOverlayDocuments_HostScope;');
-END;";
+    internal const string ConfigOverlayHostScopeUpgradeSql = OpenModulePlatform.ModuleDefinitions.PlatformConfigurationMigration.HostScopeMigrationSql;
 
     internal static Task<bool> EnsureConfigOverlayHostScopeColumnAsync(SqlConnection conn, CancellationToken ct)
         => EnsureConfigOverlayHostScopeColumnAsync(conn, null, ct);

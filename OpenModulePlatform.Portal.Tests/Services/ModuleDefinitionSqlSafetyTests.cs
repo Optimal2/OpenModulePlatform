@@ -5,6 +5,18 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 
 public sealed class ModuleDefinitionSqlSafetyTests
 {
+    [Fact]
+    public void PlatformMigration_OwnsHostScopeUpgrade()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.CompiledMigrationOwnsHostScope(typeof(OmpAdminRepository));
+
+    [Fact]
+    public void CoreDefinitionImport_AcceptsActualEmbeddedScripts()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.AcceptsCoreDefinition(typeof(OmpAdminRepository));
+
+    [Fact]
+    public void CoreDefinitionImport_RejectsModuleConfigurationMutations()
+        => OpenModulePlatform.TestSupport.PlatformConfigurationImportContract.RejectsModuleConfigurationMutations(typeof(OmpAdminRepository));
+
     private static string? ValidateMaintenanceSql(string sql) => OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql);
 
     // Keep this maintenance matrix identical in all three executor suites.
