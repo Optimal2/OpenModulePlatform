@@ -4,6 +4,7 @@ using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.TestSupport;
 using static OpenModulePlatform.HostAgent.Runtime.Services.OmpHostArtifactRepository;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
@@ -33,6 +34,19 @@ public sealed class ConfigOverlayAdministrationTests
     {
         new TSql160Parser(true).Parse(new StringReader(sql), out var errors);
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void AppInstancesRead_FailsSoftWhenTableIsMissing()
+    {
+        // Wiring guard for the schema-not-ready fallback: the AppInstances
+        // read must check the table before querying, without connecting to
+        // or altering any database.
+        var source = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Services", "OmpAdminRepository.cs");
+        var method = source[source.IndexOf("public async Task<IReadOnlyList<AppInstanceRow>> GetAppInstancesAsync", StringComparison.Ordinal)..];
+        var guard = method.IndexOf("TableExistsAsync(conn, \"omp.AppInstances\"", StringComparison.Ordinal);
+        Assert.True(guard >= 0);
+        Assert.True(guard < method.IndexOf("ExecuteReaderAsync", StringComparison.Ordinal));
     }
     internal static readonly DateTime Now = new(2026, 10, 18);
     internal static ConfigOverlayDocumentRow Overlay(int id = 1, string scope = "Host", bool enabled = true,

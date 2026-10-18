@@ -332,7 +332,9 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         if (omittedArtifacts > 0)
             diagnostics.Add($"{omittedArtifacts} further matching artifact(s) omitted by bound.");
         if (possible.Count == 0 && selectedDetail is not null)
-            diagnostics.Add("No unreferenced artifact matches this overlay's selectors; every matching artifact is either configured on an app context above or matches nothing.");
+            diagnostics.Add(omittedContexts > 0
+                ? $"No unreferenced artifact matches this overlay's selectors among the shown contexts; {omittedContexts} configured context(s) were omitted by bound, so a match on an omitted context is not ruled out."
+                : "No unreferenced artifact matches this overlay's selectors; every matching artifact is either configured on an app context above or matches nothing.");
 
         return new(documentId, selected.OverlayKey, selected.OverlayVersion, selected.HostScope, selected.HostKey,
             selected.IsEnabled, selectedDetail is null, contexts, shownPossible,
@@ -363,8 +365,15 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         if (!artifact.IsEnabled) notes.Add($"Artifact {artifact.ArtifactId} ({artifact.Version}) is disabled; this describes saved configuration only.");
         var candidates = BuildImpactCandidates(snapshot, host.HostKey, artifact,
             artifactFiles.GetValueOrDefault(artifact.ArtifactId, []), overlayDetails, notes, snapshot.Overlays);
-        var current = ResolveWithContent(candidates, notes);
-        var after = ResolveWithContent(candidates.Where(c => c.Overlay?.ConfigOverlayDocumentId != selected.ConfigOverlayDocumentId), notes);
+        // Same Contains-based dedup as the single-host preview: a
+        // merge-failure diagnostic occurring in both resolutions is emitted
+        // once per context, never twice.
+        var currentDiagnostics = new List<string>();
+        var current = ResolveWithContent(candidates, currentDiagnostics);
+        var afterDiagnostics = new List<string>();
+        var after = ResolveWithContent(candidates.Where(c => c.Overlay?.ConfigOverlayDocumentId != selected.ConfigOverlayDocumentId), afterDiagnostics);
+        foreach (var message in currentDiagnostics.Concat(afterDiagnostics))
+            if (!notes.Contains(message)) notes.Add(message);
         var files = new List<OverlayInstallationFileDto>();
         var location = $"on host '{host.HostKey}', app '{app.AppInstanceKey}', artifact {artifact.ArtifactId} ({artifact.Version})";
         if (ownedFiles is null)

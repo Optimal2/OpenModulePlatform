@@ -232,4 +232,95 @@ public sealed class ConfigOverlayInstallationImpactTests
         Assert.Contains(impact.Diagnostics, d => d.Contains("partial", StringComparison.Ordinal));
         Assert.DoesNotContain("Content", JsonSerializer.Serialize(impact));
     }
+
+    [Fact]
+    public async Task MergeFailureSharedByBothResolutionsIsEmittedOncePerContext()
+    {
+        var selected = ConfigOverlayAdministrationTests.Overlay(1);
+        var other = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([selected, other],
+            [Host("host-a")],
+            [Artifact(42)],
+            [App("host-a", "web-a", 42)]);
+        var store = Store(snapshot);
+        store.Details[1] = new(selected, "", [ConfigOverlayAdministrationTests.File(1, 1, "{}", path: "other.json")]);
+        store.Details[2] = new(other, "", [ConfigOverlayAdministrationTests.File(2, 2, "{}", path: "appsettings.json")]);
+        store.ArtifactFiles.Add(ConfigOverlayAdministrationTests.File(7, null, "not-a-json-object", path: "appsettings.json"));
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 1, default);
+
+        var context = Assert.Single(impact.Contexts);
+        Assert.Equal("Applicable", context.ContextState);
+        // The artifact/overlay merge fails identically before and after
+        // excluding the selected document: one note, never two, no content.
+        Assert.Equal(1, context.Notes.Count(n => n.Contains("merge failed", StringComparison.Ordinal)));
+        Assert.DoesNotContain("not-a-json-object", JsonSerializer.Serialize(impact));
+    }
+
+    [Fact]
+    public async Task ZeroPossibleMatchesSayWhenContextsWereTruncated()
+    {
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var apps = Enumerable.Range(0, 30).Select(i => App("host-a", $"web-{i:00}", 42)).ToArray();
+        var snapshot = Snapshot([overlay], [Host("host-a")], [Artifact(42)], apps);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Empty(impact.PossibleArtifacts);
+        Assert.True(impact.OmittedContexts > 0);
+        var diagnostic = Assert.Single(impact.Diagnostics, d => d.Contains("No unreferenced artifact matches", StringComparison.Ordinal));
+        Assert.Contains("omitted by bound", diagnostic, StringComparison.Ordinal);
+        Assert.DoesNotContain(impact.Diagnostics, d => d.Contains("configured on an app context above", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ZeroPossibleMatchesKeepOriginalWordingWhenNothingTruncated()
+    {
+        var (store, snapshot) = TwoHostFixture();
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Empty(impact.PossibleArtifacts);
+        Assert.Equal(0, impact.OmittedContexts);
+        Assert.Contains(impact.Diagnostics, d => d.Contains("configured on an app context above", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DuplicateHostRowsAreUnavailableInsteadOfResolved()
+    {
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([overlay],
+            [Host("host-a"), Host("HOST-A")],
+            [Artifact(42)],
+            [App("host-a", "web-a", 42)]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        var context = Assert.Single(impact.Contexts);
+        Assert.Equal("Unavailable", context.ContextState);
+        Assert.Empty(context.Files);
+        Assert.Contains(context.Notes, n => n.Contains("duplicate host keys", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MissingHostScopeFallsBackToExactHostPerContext()
+    {
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = new OverlayAdminSnapshot(true,
+            [Host("host-a")],
+            [Artifact(42)],
+            [overlay],
+            HasHostScope: false,
+            AppInstances: [App("host-a", "web-a", 42)]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Contains(impact.Diagnostics, d => d.Contains("exact-host fallback", StringComparison.Ordinal));
+        var context = Assert.Single(impact.Contexts);
+        Assert.Equal("NotApplicable", context.ContextState);
+        var unaffected = Assert.Single(context.Files);
+        Assert.Equal("Unchanged", unaffected.Outcome);
+        Assert.Contains(unaffected.Notes, n => n.Contains("another host", StringComparison.Ordinal));
+    }
 }
