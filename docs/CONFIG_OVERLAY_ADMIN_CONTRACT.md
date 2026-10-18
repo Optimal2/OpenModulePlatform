@@ -107,6 +107,38 @@ semantics, not label the host candidate list as an effective view. Keep this
 overlay result distinct from final deployment configuration, which also applies
 runtime connection-string protection and other deployment transformations.
 
+## Removal-impact preview
+
+`ConfigOverlayAdministration.PreviewRemovalAsync(snapshot, documentId, hostKey,
+artifactId, ct)` is a read-only pre-disable/pre-delete preview. It resolves the
+effective sources with the existing contracts above, then resolves them again
+excluding the selected document, and compares the winner per owned file path.
+It never enables, disables or deletes anything and never changes deletion
+persistence, schema or HostAgent behavior.
+
+- Input is a saved document ID plus the same concrete host key and artifact ID
+  as the effective-source calculation. Unknown documents, foreign hosts and
+  unknown artifacts throw `InvalidOperationException` before any source reads,
+  and the page maps them to the same registered host/artifact validation error.
+- The `OverlayRemovalPreview` carries document identity, the selected
+  host/artifact, the hash/timestamp the preview was computed against, a
+  `DetailUnavailable` flag and one `OverlayRemovalFilePreview` per enabled
+  owned file. File previews contain winner metadata only (`CurrentWinner`,
+  `WinnerAfterRemoval`); file content is never included.
+- `Outcome` is `Unchanged` (another source still wins, or the document does not
+  contribute to this host/artifact), `FallsBack` (a named artifact, AllHosts or
+  exact-host source becomes the winner), `NoEffectiveFile` (no saved source
+  remains for the path) or `Unknown` (no saved effective file; genuinely
+  unknown coverage). The preview covers only the selected host and artifact;
+  other hosts or artifacts using the document are not enumerated, and the
+  response states the saved-rows-only boundary explicitly.
+- The page renders the preview token (`OverlayEditToken` over the preview
+  hash/timestamp, identical to the Disable/Delete form token). Mutations keep
+  the exact optimistic token binding: `ChangeStateAsync` rejects a stale token,
+  so a preview computed against older rows cannot silently mutate. The page
+  requires Portal administration and antiforgery exactly like the existing
+  handlers.
+
 ## Schema and validation limits
 
 Runtime HostScope Ensure uses a guarded column addition plus the setup CHECK
