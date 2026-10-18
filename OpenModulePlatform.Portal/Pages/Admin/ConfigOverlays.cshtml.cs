@@ -16,6 +16,7 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
     public OverlayAdminSnapshot Snapshot { get; private set; } = new(false, [], [], []);
     public OverlayAdminDetail? Detail { get; private set; }
     public OverlayEffectiveReadback? Effective { get; private set; }
+    public OverlayRemovalPreview? RemovalPreview { get; private set; }
     [BindProperty] public DraftInput Draft { get; set; } = new();
     [BindProperty(SupportsGet = true)] public string? HostKey { get; set; }
     [BindProperty(SupportsGet = true)] public int? ArtifactId { get; set; }
@@ -46,6 +47,15 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         if (ArtifactId.HasValue && !string.IsNullOrWhiteSpace(requestedHostKey))
         {
             try { Effective = await administration.ReadEffectiveAsync(Snapshot, requestedHostKey, ArtifactId.Value, ct); }
+            catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a registered host and artifact in this installation.")); }
+        }
+        if (id.HasValue && ArtifactId.HasValue && !string.IsNullOrWhiteSpace(requestedHostKey)
+            && Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == id.Value))
+        {
+            // Read-only removal preview for the opened overlay on the selected
+            // host and artifact. Disable/Delete still re-check the document
+            // token, so a stale preview cannot silently mutate.
+            try { RemovalPreview = await administration.PreviewRemovalAsync(Snapshot, id.Value, requestedHostKey, ArtifactId.Value, ct); }
             catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a registered host and artifact in this installation.")); }
         }
         return Page();
@@ -116,6 +126,11 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
     }
 
     public static string Token(Models.ConfigOverlayDocumentRow row) => OmpAdminRepository.OverlayEditToken(row.OverlaySha256, row.UpdatedUtc);
+
+    // Token the preview was computed against; identical to the token the
+    // Disable/Delete forms submit, so operators can see when a preview is stale.
+    public string? PreviewToken() => RemovalPreview is null
+        ? null : OmpAdminRepository.OverlayEditToken(RemovalPreview.OverlaySha256, RemovalPreview.UpdatedUtc);
 
     public sealed class DraftInput
     {

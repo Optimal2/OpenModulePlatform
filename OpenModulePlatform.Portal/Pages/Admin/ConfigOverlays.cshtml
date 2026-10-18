@@ -129,3 +129,24 @@
         }
     }
 </section>
+@if (Model.RemovalPreview is not null)
+{
+<section class="card top-gap">
+    <h3>@L["Removal impact preview"]</h3>
+    <p>@L["Read-only preview for disabling or deleting the opened overlay on the selected host and artifact. Saved rows only: never live files, disk contents or final deployment configuration. Other hosts or artifacts using this document are not enumerated. Computed against token:"] @Model.PreviewToken(). @L["Disable and Delete re-check this token and reject a stale preview; reload before changing."]</p>
+    @if (Model.RemovalPreview.DetailUnavailable)
+    {
+        <p role="alert">@L["Saved detail for this overlay is currently unavailable, so owned files cannot be listed and this preview is partial."]</p>
+    }
+    @foreach (var file in Model.RemovalPreview.Files)
+    {
+        <h4>@file.RelativePath — @file.Outcome</h4>
+        <ul>
+            <li>@L["Now"]: @(file.CurrentWinner is null ? L["no saved source"].Value : $"{file.CurrentWinner.SourceKind} {file.CurrentWinner.HostScope} {file.CurrentWinner.OverlayKey} {file.CurrentWinner.OverlayVersion}")</li>
+            <li>@L["After removal"]: @(file.WinnerAfterRemoval is null ? L["no saved source"].Value : $"{file.WinnerAfterRemoval.SourceKind} {file.WinnerAfterRemoval.HostScope} {file.WinnerAfterRemoval.OverlayKey} {file.WinnerAfterRemoval.OverlayVersion}")</li>
+            @foreach (var note in file.Notes) { <li>@note</li> }
+        </ul>
+    }
+    @foreach (var diagnostic in Model.RemovalPreview.Diagnostics) { <p role="status">@diagnostic</p> }
+</section>
+}

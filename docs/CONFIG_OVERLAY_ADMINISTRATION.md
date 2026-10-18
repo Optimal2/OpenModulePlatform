@@ -83,6 +83,17 @@ transformations afterwards. Nothing on this page reads or writes live files.
 Readback spans several repository reads; reload if another operator imports or
 changes configuration concurrently.
 
+## Preview before disabling or deleting
+
+Open the overlay (`?id=<document-id>`), choose the same host and artifact as
+the saved-source view, and read the **Removal impact preview**. It lists each
+enabled file owned by the overlay, the current winner, and the winner that
+would remain after removal: a fallback source, no saved source, or no change
+when the overlay does not decide that path. The preview covers only the
+selected host and artifact and shows the token it was computed against.
+Disable and Delete re-check that token and reject a stale preview, so reload
+before changing when another administrator may have edited the overlay.
+
 ## Older schemas and local acceptance
 
 Schema readiness is read-only. When required overlay tables/columns are absent,

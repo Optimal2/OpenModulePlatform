@@ -247,6 +247,51 @@ public sealed class ConfigOverlaysPageTests
     }
 
     [Fact]
+    public async Task PreviewGetDeniesNonAdminBeforeStoreReads()
+    {
+        var store = new OverlayAdminFakeStore
+        { Snapshot = ConfigOverlayAdministrationTests.Snapshot(ConfigOverlayAdministrationTests.Overlay(1)) };
+        using var server = Server(store, admin: false);
+        using var client = server.CreateClient();
+        var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(0, store.Reads);
+        Assert.Empty(store.DetailReads);
+    }
+
+    [Fact]
+    public async Task RenderedPreviewShowsFallbackWinnerAndPreviewTokenWithoutContent()
+    {
+        var host = ConfigOverlayAdministrationTests.Overlay(1);
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(host, allHosts) };
+        store.Details[1] = new(host, "", [ConfigOverlayAdministrationTests.File(1, 1, """{"host":true}""")]);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);
+        using var server = Server(store, renderPage: true);
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Removal impact preview", html);
+        Assert.Contains("FallsBack", html);
+        Assert.Contains("overlay-2", html);
+        Assert.Contains(ConfigOverlaysModel.Token(host), html);
+        Assert.DoesNotContain("\"host\":true", html);
+        Assert.DoesNotContain("{\"shared\":true}", html);
+    }
+
+    [Fact]
+    public async Task PreviewTokenMatchesActionTokenForSameRow()
+    {
+        var row = ConfigOverlayAdministrationTests.Overlay(1);
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(row) };
+        store.Details[1] = new(row, "", [ConfigOverlayAdministrationTests.File(1, 1)]);
+        var preview = await new ConfigOverlayAdministration(store).PreviewRemovalAsync(store.Snapshot, 1, "host-a", 42, default);
+        Assert.Equal(ConfigOverlaysModel.Token(row),
+            OmpAdminRepository.OverlayEditToken(preview.OverlaySha256, preview.UpdatedUtc));
+    }
+
+    [Fact]
     public void CompiledPageAndNavigationKeepDraftAndReadbackSeparate()
     {
         var markup = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Admin", "ConfigOverlays.cshtml");
