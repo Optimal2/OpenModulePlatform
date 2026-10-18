@@ -415,7 +415,7 @@ public sealed class ServiceAppDeploymentService
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, message)),
+                    WithDeploySetWarning(WithOverlayWarning(AppDeploymentResult.Warning(targetPath, serviceName, message))),
                     cancellationToken);
                 return;
             }
@@ -424,8 +424,8 @@ public sealed class ServiceAppDeploymentService
                 string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
             {
                 await _repository.PublishAppDeploymentResultAsync(deployment,
-                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, deploymentCycle.WaitingMessage!)
-                        .WithDiagnosticWarning(deploymentCycle.WaitingMessage)), cancellationToken);
+                    WithDeploySetWarning(WithOverlayWarning(AppDeploymentResult.Warning(targetPath, serviceName, deploymentCycle.WaitingMessage!)
+                        .WithDiagnosticWarning(deploymentCycle.WaitingMessage))), cancellationToken);
                 return;
             }
             enteredDeployment = true;
@@ -456,7 +456,7 @@ public sealed class ServiceAppDeploymentService
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, message)),
+                    WithDeploySetWarning(WithOverlayWarning(AppDeploymentResult.Warning(targetPath, serviceName, message))),
                     cancellationToken);
                 return;
             }
@@ -749,7 +749,7 @@ public sealed class ServiceAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                WithDeploySetWarning(AppDeploymentResult.Failed(targetPath, serviceName, ex.Message)),
+                WithDeploySetWarning(WithOverlayWarning(AppDeploymentResult.Failed(targetPath, serviceName, ex.Message))),
                 cancellationToken);
         }
         catch (Exception ex)
