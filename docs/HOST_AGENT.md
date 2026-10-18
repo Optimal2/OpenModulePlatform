@@ -324,6 +324,12 @@ inventory so the warning repeats until an operator resolves it (edit the file
 back, remove it manually, or remove the stale inventory entry by deleting the
 inventory file and letting a full deployment recreate it). Removal logs and
 results report the number of files actually deleted, not the planned count.
+When the artifact payload inventory is unavailable or incomplete (missing or
+unreadable artifact source), a payload collision cannot be ruled out: removal
+is skipped for that cycle with an actionable warning while the deployment
+itself proceeds, and the entry is retained so a later healthy cycle retries.
+A trusted inventory whose host binding does not match names the recorded host
+in its warning rather than blaming the app instance.
 
 The legacy inventory location, `App_Data/omp-applied-overlay-files.json` in the
 web app's target directory, is app-pool writable and is therefore never trusted

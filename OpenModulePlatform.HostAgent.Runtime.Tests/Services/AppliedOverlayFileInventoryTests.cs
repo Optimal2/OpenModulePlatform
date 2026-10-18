@@ -119,6 +119,49 @@ public sealed class AppliedOverlayFileInventoryTests : IDisposable
     }
 
     [Fact]
+    public void TryRead_EntryMissingContentLength_IsRejected()
+    {
+        var target = NewTarget();
+        var stateRoot = NewStateRoot();
+        // A missing ContentLength must not silently default to 0 (which would accept
+        // any file the length check is meant to gate).
+        WriteRawTrusted(stateRoot, target, ValidJson(target, $$"""[{ "RelativePath": "odv.site.config.js", "ContentSha256": "{{new string('a', 64)}}" }]"""));
+
+        Assert.Null(AppliedOverlayFileInventory.TryRead(stateRoot, target, _appInstanceId, out var diagnostic));
+        Assert.NotNull(diagnostic);
+        Assert.Contains("No file was removed", diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_EntryCaseVariantContentLength_IsRejected()
+    {
+        var target = NewTarget();
+        var stateRoot = NewStateRoot();
+        // "contentlength" (wrong case) must not stand in for the exact property.
+        WriteRawTrusted(stateRoot, target, ValidJson(target, $$"""[{ "RelativePath": "odv.site.config.js", "contentlength": 3, "ContentSha256": "{{new string('a', 64)}}" }]"""));
+
+        Assert.Null(AppliedOverlayFileInventory.TryRead(stateRoot, target, _appInstanceId, out var diagnostic));
+        Assert.NotNull(diagnostic);
+        Assert.Contains("No file was removed", diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_ExplicitZeroContentLength_IsAccepted()
+    {
+        var target = NewTarget();
+        var stateRoot = NewStateRoot();
+        // An explicitly recorded zero length (a genuinely empty file) stays valid.
+        WriteRawTrusted(stateRoot, target, ValidJson(target, """[{ "RelativePath": "empty.js", "ContentLength": 0, "ContentSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }]"""));
+
+        var inventory = AppliedOverlayFileInventory.TryRead(stateRoot, target, _appInstanceId, out var diagnostic);
+
+        Assert.Null(diagnostic);
+        Assert.NotNull(inventory);
+        var entry = Assert.Single(inventory.Files);
+        Assert.Equal(0, entry.ContentLength);
+    }
+
+    [Fact]
     public void TryRead_MissingSchemaName_IsRejected()
     {
         var target = NewTarget();

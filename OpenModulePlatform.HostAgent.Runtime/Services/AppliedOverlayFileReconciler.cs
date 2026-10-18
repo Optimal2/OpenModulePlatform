@@ -40,10 +40,11 @@ internal static class OverlayReservedPaths
 ///
 /// This type closes that gap without guessing: it only removes a file recorded in the trusted
 /// applied-overlay-file inventory (HostAgent-owned state outside the web root, bound to the
-/// app instance and target path), only when the path is not owned by the artifact payload and
-/// is not a reserved runtime control path, and only when the on-disk file is still
-/// byte-identical to what HostAgent wrote. A modified, unreadable, reparse-point, payload-owned
-/// or foreign-inventory path fails safe and is reported, never deleted.
+/// app instance and target path), only when the path is provably not owned by the artifact
+/// payload (a complete payload inventory) and is not a reserved runtime control path, and
+/// only when the on-disk file is still byte-identical to what HostAgent wrote. A modified,
+/// unreadable, reparse-point, payload-owned, foreign-inventory or unknown-payload path fails
+/// safe and is reported, never deleted.
 /// </summary>
 internal static class AppliedOverlayFileReconciler
 {
@@ -92,29 +93,51 @@ internal static class AppliedOverlayFileReconciler
         return entries;
     }
 
-    /// <summary>Relative paths of every regular file the artifact payload ships, or an empty set.</summary>
-    internal static IReadOnlySet<string> EnumeratePayloadPaths(string? sourceLocalPath)
+    /// <summary>
+    /// Artifact payload inventory: the relative paths of every regular file the artifact
+    /// payload ships, plus whether the enumeration completed. An incomplete inventory
+    /// (missing source, unreadable entry) proves nothing about the paths it missed, so
+    /// callers must not infer "no payload collision" from it: deletion stays disabled
+    /// until a complete inventory is available. Ordinary deployment (mirror plus file
+    /// apply) proceeds regardless.
+    /// </summary>
+    internal sealed record PayloadPathInventory(IReadOnlySet<string> Paths, bool IsComplete);
+
+    /// <summary>
+    /// Relative paths of every regular file the artifact payload ships, with an explicit
+    /// completeness flag. A missing source or a mid-enumeration I/O failure yields an
+    /// incomplete inventory, never an implicit "no payload" claim. The optional enumerator
+    /// is a deterministic test seam; production always enumerates the file system.
+    /// </summary>
+    internal static PayloadPathInventory EnumeratePayloadPaths(
+        string? sourceLocalPath,
+        Func<string, IEnumerable<string>>? enumerateFiles = null)
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(sourceLocalPath) || !Directory.Exists(sourceLocalPath))
         {
-            return paths;
+            return new PayloadPathInventory(paths, IsComplete: false);
         }
 
         try
         {
-            foreach (var file in Directory.EnumerateFiles(sourceLocalPath, "*", OmpReparsePointGuard.RecursiveNoFollow))
+            var files = enumerateFiles is not null
+                ? enumerateFiles(sourceLocalPath)
+                : Directory.EnumerateFiles(sourceLocalPath, "*", OmpReparsePointGuard.RecursiveNoFollow);
+            foreach (var file in files)
             {
                 paths.Add(NormalizeRelative(Path.GetRelativePath(sourceLocalPath, file)));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // An unreadable payload cannot prove ownership; stay fail-closed by returning what
-            // was enumerated (possibly empty) and let the hash check remain the second gate.
+            // An unreadable payload cannot prove ownership of the paths it missed, and a
+            // partial set must never authorize a deletion the missing entries would have
+            // vetoed. Mark the inventory incomplete so planning stays fail-closed.
+            return new PayloadPathInventory(paths, IsComplete: false);
         }
 
-        return paths;
+        return new PayloadPathInventory(paths, IsComplete: true);
     }
 
     internal static string NormalizeRelative(string relativePath)
@@ -125,14 +148,17 @@ internal static class AppliedOverlayFileReconciler
     /// to remove (and no warning unless a legacy untrusted file is present); an unreadable,
     /// foreign-schema or foreign-instance inventory warns and plans nothing. A recorded file
     /// that is no longer desired is removable only when it still exists as a regular file, is
-    /// not a reparse point, is not payload-owned or reserved, and hashes to the recorded content.
+    /// not a reparse point, is provably not payload-owned or reserved, and hashes to the
+    /// recorded content. A null or incomplete payload inventory cannot prove the absence of
+    /// a collision, so it plans no removal: the entries are retained (the inventory is
+    /// preserved, the warning repeats) and the deployment itself proceeds.
     /// </summary>
     internal static OverlayRemovalPlan Plan(
         string stateRoot,
         string targetPath,
         WebAppDeploymentDescriptor deployment,
         IReadOnlyList<AppliedOverlayFileEntry> desiredFiles,
-        IReadOnlySet<string>? payloadPaths = null)
+        PayloadPathInventory? payload = null)
     {
         var inventory = AppliedOverlayFileInventory.TryRead(stateRoot, targetPath, deployment.AppInstanceId, out var readDiagnostic);
         if (inventory is null)
@@ -152,13 +178,25 @@ internal static class AppliedOverlayFileReconciler
                 RetainedEntries: []);
         }
 
-        if (inventory.AppInstanceId != deployment.AppInstanceId
-            || !string.Equals(inventory.HostKey ?? string.Empty, deployment.HostKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+        // Name the binding that actually mismatched: the app-instance id is already
+        // enforced by TryRead, so the reachable mismatch here is the host key, and
+        // blaming the app instance for it would misdirect the operator.
+        if (inventory.AppInstanceId != deployment.AppInstanceId)
         {
             return new OverlayRemovalPlan(
                 HasRemovals: false,
                 RemoveEntries: [],
                 Warning: $"Applied overlay file inventory belongs to app instance '{inventory.AppInstanceId}' and was not used for removal.",
+                ShouldRefreshInventory: false,
+                RetainedEntries: []);
+        }
+
+        if (!string.Equals(inventory.HostKey ?? string.Empty, deployment.HostKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+        {
+            return new OverlayRemovalPlan(
+                HasRemovals: false,
+                RemoveEntries: [],
+                Warning: $"Applied overlay file inventory belongs to host '{inventory.HostKey}' and was not used for removal.",
                 ShouldRefreshInventory: false,
                 RetainedEntries: []);
         }
@@ -169,6 +207,7 @@ internal static class AppliedOverlayFileReconciler
         var removals = new List<AppliedOverlayFileEntry>();
         var retained = new List<AppliedOverlayFileEntry>();
         var warnings = new List<string>();
+        var payloadUnknownWarned = false;
 
         // Defensive: TryRead validates, but never let a null list/member become a
         // NullReferenceException (not a recordable fault) that aborts the sweep.
@@ -185,10 +224,32 @@ internal static class AppliedOverlayFileReconciler
                 continue;
             }
 
-            // Payload-owned and reserved paths are never overlay-owned: drop the record
-            // without deleting. The artifact mirror owns the payload file's content.
-            if (OverlayReservedPaths.IsReserved(entry.RelativePath)
-                || (payloadPaths is not null && payloadPaths.Contains(NormalizeRelative(entry.RelativePath))))
+            // Reserved paths are never overlay-owned: drop the record without
+            // deleting. The artifact mirror owns the reserved file's content.
+            if (OverlayReservedPaths.IsReserved(entry.RelativePath))
+            {
+                continue;
+            }
+
+            // Without a complete payload inventory a collision cannot be ruled out,
+            // so no removal is authorized for this entry: retain it (the inventory
+            // is preserved, the warning repeats) and let a later cycle retry. This
+            // says the inventory is unknown -- never that the file is protected.
+            if (payload is null || !payload.IsComplete)
+            {
+                if (!payloadUnknownWarned)
+                {
+                    warnings.Add("Artifact payload inventory is unavailable or incomplete, so an artifact payload collision cannot be ruled out; overlay-owned file removal was skipped for this cycle. Check the HostAgent artifact cache permissions and let a later deployment retry. No file was removed.");
+                    payloadUnknownWarned = true;
+                }
+
+                retained.Add(entry);
+                continue;
+            }
+
+            // Payload-owned paths are never overlay-owned: drop the record without
+            // deleting. The artifact mirror owns the payload file's content.
+            if (payload.Paths.Contains(NormalizeRelative(entry.RelativePath)))
             {
                 continue;
             }

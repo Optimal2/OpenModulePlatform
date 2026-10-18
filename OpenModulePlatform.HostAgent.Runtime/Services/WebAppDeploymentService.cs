@@ -340,17 +340,17 @@ public sealed class WebAppDeploymentService
             // so a removed overlay file persisted forever. Resolve the desired set and plan any
             // reconciliation before the fast path so the decision is made on the same cycle.
             var overlayStateRoot = settings.LocalArtifactCacheRoot;
-            var payloadPaths = AppliedOverlayFileReconciler.EnumeratePayloadPaths(deployment.SourceLocalPath);
+            var payload = AppliedOverlayFileReconciler.EnumeratePayloadPaths(deployment.SourceLocalPath);
             var desiredOverlayFiles = AppliedOverlayFileReconciler.ResolveDesiredOverlayFiles(
                 configurationFiles,
                 configurationVariables,
-                payloadPaths);
+                payload.Paths);
             var overlayRemovalPlan = AppliedOverlayFileReconciler.Plan(
                 overlayStateRoot,
                 targetPath,
                 deployment,
                 desiredOverlayFiles,
-                payloadPaths);
+                payload);
             var overlayRemovalWarning = overlayRemovalPlan.Warning;
 
             var alreadyApplied = IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)

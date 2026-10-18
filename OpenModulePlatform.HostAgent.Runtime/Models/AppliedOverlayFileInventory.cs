@@ -332,7 +332,12 @@ public sealed class AppliedOverlayFileInventory
                         entryNames.Add(property.Name);
                     }
 
-                    if (!entryNames.Contains("RelativePath") || !entryNames.Contains("ContentSha256"))
+                    // ContentLength is required explicitly: a missing entry must not
+                    // silently default to 0 and pass the length gate for free, and a
+                    // case-variant name must not stand in for the exact property.
+                    if (!entryNames.Contains("RelativePath")
+                        || !entryNames.Contains("ContentLength")
+                        || !entryNames.Contains("ContentSha256"))
                     {
                         return false;
                     }

@@ -179,6 +179,11 @@ with a diagnostic warning and stays in the inventory, so cleanup is retried
 instead of forgotten. Paths the artifact owns (configuration rows or payload
 files), files merged onto an artifact base, the built-in `appsettings.json`,
 and operator files that were never recorded are never removed by this mechanism.
+When the artifact payload inventory is unavailable or incomplete (missing or
+unreadable artifact source), a payload collision cannot be ruled out, so
+removal is skipped for that cycle with an actionable warning while the
+deployment itself proceeds; the entry is retained so a later healthy cycle
+retries instead of forgetting it.
 
 The legacy `App_Data/omp-applied-overlay-files.json` location is app-pool
 writable and is never trusted as proof of ownership: it is treated as UNKNOWN,
