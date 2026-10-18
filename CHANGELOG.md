@@ -586,7 +586,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   OK while the focus is where the dialog put it, and presses the focused
   button once the user has moved it (Tab to Don't save, then Enter).
 - **Period picker: `omp-daterange-restore`.** A page that writes the
-  picker's hidden values itself (the search-lock Cancel on the IbsPackager
+  picker's hidden values itself (the search-lock Cancel on a consumer module
   jobs and history pages restores what it stashed) dispatches the event on
   the container, and the field's label and active look follow the values
   (an open popup closes first), the counterpart of `omp-datetime-restore`
