@@ -227,6 +227,20 @@ reconcile removed overlay-owned whole files, so such a file can persist after
 its overlay is removed. This is a known, separate follow-up; do not assume
 universal whole-file removal across app kinds.
 
+### Previous inventories and concurrent writers
+
+An older agent may have omitted payload-owned overlay paths from its inventory.
+An upgrade cannot reconstruct the missing ownership/hash proof. Those legacy
+files are retained on the fast path rather than inferred to be safe to restore.
+A normal reviewed full deployment may be needed to establish the current
+artifact/overlay state; never manufacture inventory records or delete unknown files.
+
+The deployment lease coordinates HostAgent operations. Final content checks and
+atomic replacement reduce races, but do not provide an operating-system
+compare-and-swap against an uncoordinated external writer. External changes must
+respect that deployment boundary; modified or unprovable files remain diagnostic
+cases rather than being claimed as safely reconciled.
+
 ## The other layer: artifact-owned configuration
 
 Overlays are only half of the model, and the other half is easy to miss because

@@ -375,6 +375,16 @@ classification, with a diagnostic warning. Generic user `App_Data` files remain
 allowed. Service apps do not reconcile removed overlay-owned whole files yet;
 see `docs/CONFIG_OVERLAYS.md`.
 
+### Legacy proof and external writers
+
+Payload overlay paths absent from an older inventory have no historical hash
+proof. The fast path preserves them; use a reviewed full deployment when the
+current artifact/overlay state must be re-established, never fabricated ownership.
+The HostAgent lease and final hash checks coordinate its own operations and
+reduce races. Atomic replacement is not a filesystem compare-and-swap against
+an external writer that ignores that lease; such concurrency is outside the
+automatic reconciliation guarantee.
+
 ## Rolling upgrades in multi-host installations
 
 Cross-host deployment coordination is controlled by the global configuration
