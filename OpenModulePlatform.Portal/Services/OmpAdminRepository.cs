@@ -335,6 +335,13 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.SortOrder, ai.AppInstanceKey;";
         var rows = new List<AppInstanceRow>();
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+        // Schema-not-ready fallback: fail soft like the other optional reads,
+        // never throw when the table predates the installation schema.
+        if (!await TableExistsAsync(conn, "omp.AppInstances", ct))
+        {
+            return rows;
+        }
+
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
