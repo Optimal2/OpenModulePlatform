@@ -493,6 +493,40 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeployDesiredWebAppsAsync_FullApply_RemovesOverlayOwnedFileUnderAppData_WhenOverlayRemoved()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out var moduleInstanceKey, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        // App_Data is in the default mirror exclusions, so the generic mirror keeps stale files
+        // there; only the planned removal reaches this path through the exclusion.
+        const string relativePath = @"App_Data\feature-flag-overrides.json";
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, relativePath, """{ "Feature": true }"""));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, relativePath);
+        Assert.True(File.Exists(overlayPath));
+
+        repository.ArtifactConfigurationFiles.Clear();
+        var next = CreateSuccessorDescriptor(descriptor, moduleInstanceKey);
+        repository.DesiredWebAppDeployments.Clear();
+        repository.DesiredWebAppDeployments.Add(next);
+
+        await service.DeployDesiredWebAppsAsync(next.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(overlayPath));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.Result.State);
+        Assert.True(last.Result.Applied);
+        // The inventory itself lives in App_Data; the removal must not disturb it.
+        var inventory = AppliedOverlayFileInventory.TryRead(descriptor.InstallPath!, out var diagnostic);
+        Assert.Null(diagnostic);
+        Assert.NotNull(inventory);
+        Assert.Empty(inventory.Files);
+    }
+
+    [Fact]
     public async Task DeployDesiredWebAppsAsync_FullApply_ModifiedOverlayOwnedExcludedFile_IsLeftAndOwnershipPreserved()
     {
         var (service, repository, _) = CreateServiceWithFakeRepository();
