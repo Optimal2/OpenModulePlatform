@@ -9,6 +9,7 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
     private readonly string root;
     private readonly string configPath;
     private readonly string definitionPath;
+    private readonly string expectedCoreVersion;
 
     public PlatformCoreMaintenanceTests()
     {
@@ -29,11 +30,12 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
         Assert.NotNull(repository);
         definitionPath = Path.Combine(definitions, "omp_core.module-definition.json");
         File.Copy(Path.Combine(repository.FullName, "omp_core.module-definition.json"), definitionPath);
+        expectedCoreVersion = JsonNode.Parse(File.ReadAllText(definitionPath))!["definitionVersion"]!.GetValue<string>();
     }
 
     private CliOptions Options(params string[] extra)
         => CliOptions.Parse(["--maintain-platform-core", "--config", configPath, "--payload-root", root,
-            "--expected-core-version", "0.3.270", .. extra]);
+            "--expected-core-version", expectedCoreVersion, .. extra]);
 
     [Fact]
     public async Task OfflinePlanAndRefusedConfirmation_DoNotInvokeAnyDatabaseOperationOrWriteFiles()
@@ -62,7 +64,7 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
             var core = Assert.Single(selected);
             Assert.Equal(definitionPath, core.DefinitionPath);
             Assert.Equal("omp_core", core.Definition.ModuleKey);
-            Assert.Equal("0.3.270", core.Definition.DefinitionVersion);
+            Assert.Equal(expectedCoreVersion, core.Definition.DefinitionVersion);
             return Task.CompletedTask;
         }));
         Assert.Equal(1, calls);
@@ -106,7 +108,7 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
             case "wrong-key": json["moduleKey"] = "other_module"; break;
             case "case-key": json["moduleKey"] = "OMP_CORE"; break;
             case "padded-key": json["moduleKey"] = "omp_core "; break;
-            case "padded-version": json["definitionVersion"] = "0.3.270 "; break;
+            case "padded-version": json["definitionVersion"] = expectedCoreVersion + " "; break;
             case "wrong-type": json["definitionType"] = "module"; break;
             case "wrong-format": json["formatVersion"] = 2; break;
             case "missing-format": json.AsObject().Remove("formatVersion"); break;
@@ -151,10 +153,12 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
     public async Task ExistingInstallationGuard_RefusesWithoutStoreOrRepair(string problem)
     {
         var core = await ReadModuleDefinitionAsync(definitionPath);
+        var version = Version.Parse(core.DefinitionVersion);
+        var newerVersion = new Version(version.Major, version.Minor, version.Build + 1).ToString();
         AppliedModuleDefinition? current = problem switch
         {
             "missing" => null,
-            "newer" => new(1, "0.3.271", core.DefinitionSha256),
+            "newer" => new(1, newerVersion, core.DefinitionSha256),
             _ => new(1, core.DefinitionVersion, "wrong-hash")
         };
         Assert.Throws<InvalidOperationException>(() => ValidateExistingCoreTransition(core, current));

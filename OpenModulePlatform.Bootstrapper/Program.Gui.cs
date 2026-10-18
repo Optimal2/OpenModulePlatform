@@ -4909,6 +4909,7 @@ internal static partial class Program
                     BuildNodeWebArtifactPayload(component, nodeProjectDirectory, publishRoot, lines);
                 }
 
+                OpenDocViewerArtifactIntegrity.Apply(publishRoot);
                 RemoveRuntimeConfigurationFiles(publishRoot);
                 var configurationFiles = ReadArtifactConfigurationFilesForBuild(component);
                 new ArtifactPackageWriter().CreateFromPayloadDirectory(
