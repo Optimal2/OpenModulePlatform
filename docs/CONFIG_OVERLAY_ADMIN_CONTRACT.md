@@ -155,9 +155,11 @@ anything and never changes deletion persistence, schema or HostAgent behavior.
   transaction before writing, so a fallback, contributor, sibling or artifact
   change after the preview rejects instead of mutating. The existing selected
   row token (`OverlayEditToken`) is still checked in the same transaction.
-  The Disable/Delete forms in the saved-overlays list deliberately remain
-  direct operations bound only to that selected-row token. The page requires
-  Portal administration and antiforgery exactly like the existing handlers.
+  Disable and Delete are only offered through this preview workflow: the
+  saved-overlays list keeps Enable as a direct operation bound to the
+  selected-row token and links rows to the preview instead of direct
+  disable/delete. The page requires Portal administration and antiforgery
+  exactly like the existing handlers.
 - When an overlay is opened without a host/artifact selection, the page shows
   guidance to choose a host and artifact in the saved-source view, and that
   view's form keeps the opened document ID, so choosing a selection does not
@@ -200,6 +202,44 @@ delete, HostAgent or runtime behavior changes.
 - The page renders this aggregate in its own `Installation impact` section
   whenever an overlay is opened. The existing selected detailed preview and
   its preview-bound transactional mutation guarantees are unchanged.
+
+## Saved-list filters and deleted history
+
+The saved-overlays list is filtered by host, module, app, package type, target,
+enabled state and scope. A host filter matches the concrete host and AllHosts
+defaults. Rows show origin (`SourceName`) and per-file metadata (`OverlayFileSummaryRow`:
+relative path, stored merge mode and enabled state); content is never listed.
+Deletion leaves a metadata-only tombstone in `omp.AuditLog`
+(`TargetType = 'ConfigOverlay'`, `Action = 'Delete'`) with the before metadata
+in `BeforeJson`; `DeletedHistoryAsync` reconstructs `OverlayDeletedHistoryRow`
+from those entries. Deleted rows are exposed only as historical records, never
+as applicable overlays or editable live documents.
+
+## Base/effective content comparison
+
+`ConfigOverlayAdministration.CompareContentAsync(snapshot, hostKey, artifactId,
+ct)` is a read-only, admin-only comparison of the artifact-owned base content
+against the resolved effective content per path. Content is bounded
+(`MaxCompareDisplayChars`) and the diff is bounded (`MaxDiffSourceLines`,
+`MaxDiffResultLines`); both are rendered as inert, HTML-encoded text and are
+never stored, cached or written to logs. The response notes when an overlay
+supersedes the artifact base. The page sets `Cache-Control: no-store`.
+
+## Upload and audit
+
+The editor accepts a bounded single UTF-8 text file (at most 1 MiB) or a zip
+containing one such file, written into a chosen relative path via
+`ConfigOverlayAdministration.SetDraftFileContent`, which preserves existing
+per-file metadata (merge mode and extension keys) and defaults merge mode by
+extension. The upload only edits the draft; persistence still goes through the
+save transaction.
+
+Create, update, enable, disable and delete write a metadata-only audit entry
+to the existing `omp.AuditLog` (actor, action, `TargetType = 'ConfigOverlay'`,
+`TargetId`, before/after metadata). Audit JSON never contains configuration
+content, file content, secrets or hashes. Delete records the before metadata
+before the cascading delete, providing the deleted-history tombstone. No
+schema or `definitionVersion` change is required.
 
 ## Schema and validation limits
 

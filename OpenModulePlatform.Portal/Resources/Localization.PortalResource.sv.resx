@@ -3277,6 +3277,28 @@
   <data name="When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it." xml:space="preserve"><value>När detta är på öppnar Ctrl+F (Cmd+F på Mac) sidsökningen i stället för webbläsarens sökning, på sidor som har den. Ctrl+Skift+F öppnar den alltid.</value></data>
   <data name="Preview before disabling or deleting" xml:space="preserve"><value>Förhandsgranska före inaktivering eller borttagning</value></data>
   <data name="No removal preview is shown yet for the opened overlay. To preview before disabling or deleting, choose a host and artifact in Saved effective sources above and read the saved sources: the opened overlay is kept, so the preview is computed for this document on that host and artifact." xml:space="preserve"><value>Ingen förhandsgranskning av borttagning visas ännu för det öppnade konfigurationslagret. För att förhandsgranska före inaktivering eller borttagning: välj en värd och en artefakt under Sparade effektiva källor ovan och läs de sparade källorna. Det öppnade lagret behålls, så förhandsgranskningen beräknas för detta dokument på den värden och artefakten.</value></data>
-  <data name="The Disable and Delete forms in this preview section re-validate every saved row this preview depends on and reject a stale preview; the forms in Saved overlays remain direct operations bound only to the selected row. Reload before changing." xml:space="preserve"><value>Formulären Inaktivera och Ta bort i den här förhandsgranskningsdelen kontrollerar på nytt varje sparad rad som förhandsgranskningen beror på och avvisar en inaktuell förhandsgranskning. Formulären under Sparade konfigurationslager förblir direktåtgärder som bara är bundna till den valda raden. Ladda om före ändring.</value></data>
+  <data name="The Disable and Delete forms in this preview section re-validate every saved row this preview depends on and reject a stale preview. Disable and Delete are only offered here, never as direct operations on the saved list. Reload before changing." xml:space="preserve"><value>Formulären Inaktivera och Ta bort i den här förhandsgranskningsdelen kontrollerar på nytt varje sparad rad som förhandsgranskningen beror på och avvisar en inaktuell förhandsgranskning. Inaktivera och Ta bort erbjuds bara här, aldrig som direktåtgärder i den sparade listan. Ladda om före ändring.</value></data>
   <data name="Schema not ready. Upgrade the platform schema before editing." xml:space="preserve"><value>Schemat är inte redo. Uppgradera plattformsschemat före redigering.</value></data>
+  <data name="All" xml:space="preserve"><value>Alla</value></data>
+  <data name="One exact host" xml:space="preserve"><value>En enskild värd</value></data>
+  <data name="All hosts in this installation" xml:space="preserve"><value>Alla värdar i denna installation</value></data>
+  <data name="Minimum artifact version" xml:space="preserve"><value>Lägsta artefaktversion</value></data>
+  <data name="State" xml:space="preserve"><value>Tillstånd</value></data>
+  <data name="Selectors" xml:space="preserve"><value>Väljare</value></data>
+  <data name="Origin" xml:space="preserve"><value>Ursprung</value></data>
+  <data name="Preview removal" xml:space="preserve"><value>Förhandsgranska borttagning</value></data>
+  <data name="Deleted overlays" xml:space="preserve"><value>Borttagna overlay</value></data>
+  <data name="No deleted overlays recorded." xml:space="preserve"><value>Inga borttagna overlay har registrerats.</value></data>
+  <data name="Deleted by" xml:space="preserve"><value>Borttagen av</value></data>
+  <data name="Deleted at" xml:space="preserve"><value>Borttagen vid</value></data>
+  <data name="Base vs effective content" xml:space="preserve"><value>Bas jämfört med effektivt innehåll</value></data>
+  <data name="Base content" xml:space="preserve"><value>Basinnehåll</value></data>
+  <data name="Effective content" xml:space="preserve"><value>Effektivt innehåll</value></data>
+  <data name="Content truncated for display." xml:space="preserve"><value>Innehåll avkortat för visning.</value></data>
+  <data name="Deleted overlays are historical records only. They are never applicable overlays and never editable live documents." xml:space="preserve"><value>Borttagna overlay är endast historiska poster. De är aldrig tillämpliga overlay och aldrig redigerbara live-dokument.</value></data>
+  <data name="Enter a safe relative path for the uploaded file." xml:space="preserve"><value>Ange en säker relativ sökväg för den uppladdade filen.</value></data>
+  <data name="Uploaded file content added to the draft at the chosen relative path. Save to persist." xml:space="preserve"><value>Uppladdad fil har lagts till i utkastet på vald relativ sökväg. Spara för att göra ändringen bestående.</value></data>
+  <data name="The uploaded file was not read. It must be a single UTF-8 text file of at most 1 MB, or a .zip containing one such file." xml:space="preserve"><value>Den uppladdade filen kunde inte läsas. Den måste vara en enda UTF-8-textfil på högst 1 MB, eller en .zip med en sådan fil.</value></data>
+  <data name="Preview the removal impact before disabling or deleting this overlay." xml:space="preserve"><value>Förhandsgranska borttagningspåverkan innan du inaktiverar eller tar bort denna overlay.</value></data>
+  <data name="Configuration overlays" xml:space="preserve"><value>Konfigurationslager</value></data>
 </root>

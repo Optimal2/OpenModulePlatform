@@ -44,7 +44,13 @@ public sealed record EffectiveConfigurationSourceDto(
     string? MergeMode,
     string EffectiveMergeMode,
     bool IsWinner,
-    bool IsShadowed);
+    bool IsShadowed,
+    // Stable source identities for editor links. Artifact sources carry the
+    // artifact configuration file id; overlay sources carry the overlay
+    // document id and configuration file row id. Null when not applicable.
+    int? ArtifactConfigurationFileId = null,
+    int? ConfigOverlayDocumentId = null,
+    int? ConfigOverlayConfigurationFileId = null);
 
 public sealed record EffectiveConfigurationFileDto(
     string RelativePath,
@@ -94,3 +100,40 @@ public sealed record OverlayPossibleArtifactDto(
     string Version,
     string PackageType,
     string? TargetName);
+
+/// <summary>
+/// Read-only base-vs-effective content comparison for one host and artifact.
+/// Content is carried as plain text and must be HTML-encoded (inert) by the
+/// view; it is never stored, cached or written to logs.
+/// </summary>
+public sealed record OverlayContentComparison(
+    string HostKey,
+    int ArtifactId,
+    string ArtifactVersion,
+    IReadOnlyList<OverlayContentComparisonFile> Files,
+    IReadOnlyList<string> Diagnostics);
+
+/// <summary>
+/// Per-path comparison between the artifact-owned base content and the
+/// resolved effective content. <see cref="Sources"/> lists every matching
+/// candidate in deterministic precedence order; <see cref="Diff"/> is a
+/// bounded line diff between base and effective.
+/// </summary>
+public sealed record OverlayContentComparisonFile(
+    string RelativePath,
+    bool BaseAvailable,
+    bool EffectiveAvailable,
+    bool EffectiveDiffers,
+    string? BaseContent,
+    string? EffectiveContent,
+    bool ContentTruncated,
+    IReadOnlyList<EffectiveConfigurationSourceDto> Sources,
+    IReadOnlyList<OverlayDiffLine> Diff,
+    IReadOnlyList<string> Notes);
+
+/// <summary>
+/// One line of a bounded base/effective diff. <see cref="Kind"/> is "context",
+/// "removed" (present in the base only) or "added" (present in the effective
+/// content only). <see cref="Text"/> is inert plain text; the view encodes it.
+/// </summary>
+public sealed record OverlayDiffLine(string Kind, int? BaseLine, int? EffectiveLine, string Text);

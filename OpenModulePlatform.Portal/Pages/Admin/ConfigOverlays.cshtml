@@ -24,16 +24,48 @@
 }
 <section class="card top-gap">
     <h3>@L["Saved overlays"]</h3>
-    @if (Model.Snapshot.Overlays.Count == 0)
+    <form method="get" autocomplete="off">
+        @if (Model.Detail is not null)
+        {
+            <input type="hidden" name="id" value="@Model.Detail.Summary.ConfigOverlayDocumentId" />
+        }
+        <label>@L["Host"]
+            <select asp-for="FilterHost">
+                <option value="">@L["All"]</option>
+                @foreach (var host in Model.Snapshot.Hosts) { <option value="@host.HostKey">@host.HostKey</option> }
+            </select>
+        </label>
+        <label>@L["Module"]<input asp-for="FilterModule" /></label>
+        <label>@L["App"]<input asp-for="FilterApp" /></label>
+        <label>@L["Package type"]<input asp-for="FilterPackage" /></label>
+        <label>@L["Target"]<input asp-for="FilterTarget" /></label>
+        <label>@L["State"]
+            <select asp-for="FilterEnabled">
+                <option value="">@L["All"]</option>
+                <option value="enabled">@L["Enabled"]</option>
+                <option value="disabled">@L["Disabled"]</option>
+            </select>
+        </label>
+        <label>@L["Scope"]
+            <select asp-for="FilterScope">
+                <option value="">@L["All"]</option>
+                <option value="Host">@L["One exact host"]</option>
+                <option value="AllHosts">@L["All hosts in this installation"]</option>
+            </select>
+        </label>
+        <button type="submit">@L["Filter"]</button>
+        <a asp-page="/Admin/ConfigOverlays">@L["Clear filters"]</a>
+    </form>
+    @if (Model.FilteredOverlays.Count == 0)
     {
-        <p>@L["No saved overlays in this installation."]</p>
+        <p>@L[Model.Snapshot.Overlays.Count == 0 ? "No saved overlays in this installation." : "No rows match the current filters."]</p>
     }
     else
     {
         <table class="grid">
-            <thead><tr><th>@L["Overlay"]</th><th>@L["Scope"]</th><th>@L["Selectors"]</th><th>@L["Files"]</th><th>@L["State"]</th><th>@L["Actions"]</th></tr></thead>
+            <thead><tr><th>@L["Overlay"]</th><th>@L["Scope"]</th><th>@L["Selectors"]</th><th>@L["Origin"]</th><th>@L["Files"]</th><th>@L["State"]</th><th>@L["Actions"]</th></tr></thead>
             <tbody>
-            @foreach (var row in Model.Snapshot.Overlays)
+            @foreach (var row in Model.FilteredOverlays)
             {
                 <tr>
                     <td><a asp-page="/Admin/ConfigOverlays" asp-route-id="@row.ConfigOverlayDocumentId">@row.OverlayKey @row.OverlayVersion</a></td>
@@ -43,14 +75,32 @@
                         { <span class="pill">@L["Host missing from this installation"]</span> }
                     </td>
                     <td>@row.ModuleKey / @row.AppKey / @row.PackageType / @row.TargetName / @L["Minimum artifact version"]: @row.ArtifactVersion</td>
-                    <td>@row.ConfigurationFileCount</td>
+                    <td>@row.SourceName</td>
+                    <td>
+                        @if (Model.FileSummariesByDocument.TryGetValue(row.ConfigOverlayDocumentId, out var files) && files.Count > 0)
+                        {
+                            <ul>
+                            @foreach (var file in files)
+                            {
+                                <li>@file.RelativePath — @(file.IsEnabled ? L["Enabled"] : L["Disabled"]) — @OpenModulePlatform.Portal.Services.ConfigOverlayAdministration.Mode(file.MergeMode, file.RelativePath)</li>
+                            }
+                            </ul>
+                        }
+                        else
+                        {
+                            @row.ConfigurationFileCount
+                        }
+                    </td>
                     <td>@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</td>
                     <td>
                         <form method="post" data-omp-confirm="@L["Change this saved overlay? Enabling disables other versions of the same key and scope. Delete removes the document and its files. No other version is automatically selected after disable or delete."]">
                             <input type="hidden" name="id" value="@row.ConfigOverlayDocumentId" />
                             <input type="hidden" name="token" value="@ConfigOverlaysModel.Token(row)" />
-                            <button asp-page-handler="@(row.IsEnabled ? "Disable" : "Enable")" disabled="@(!Model.Snapshot.SchemaReady)">@(row.IsEnabled ? L["Disable"] : L["Enable"])</button>
-                            <button asp-page-handler="Delete" class="btn btn-danger" disabled="@(!Model.Snapshot.SchemaReady)">@L["Delete"]</button>
+                            @if (!row.IsEnabled)
+                            {
+                                <button asp-page-handler="Enable" disabled="@(!Model.Snapshot.SchemaReady)">@L["Enable"]</button>
+                            }
+                            <a class="action-link" asp-page="/Admin/ConfigOverlays" asp-route-id="@row.ConfigOverlayDocumentId">@L["Preview removal"]</a>
                         </form>
                     </td>
                 </tr>
@@ -60,10 +110,37 @@
     }
 </section>
 <section class="card top-gap">
+    <h3>@L["Deleted overlays"]</h3>
+    @if (Model.DeletedHistory.Count == 0)
+    {
+        <p>@L["No deleted overlays recorded."]</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>@L["Overlay"]</th><th>@L["Scope"]</th><th>@L["Selectors"]</th><th>@L["Files"]</th><th>@L["Deleted by"]</th><th>@L["Deleted at"]</th></tr></thead>
+            <tbody>
+            @foreach (var row in Model.DeletedHistory)
+            {
+                <tr>
+                    <td>@row.OverlayKey @row.OverlayVersion</td>
+                    <td>@(row.HostScope == "AllHosts" ? L["All hosts in this installation"].Value : row.HostKey)</td>
+                    <td>@row.ModuleKey / @row.AppKey / @row.PackageType / @row.TargetName / @L["Minimum artifact version"]: @row.ArtifactVersion</td>
+                    <td>@row.ConfigurationFileCount</td>
+                    <td>@row.DeletedBy</td>
+                    <td>@row.DeletedUtc</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <p>@L["Deleted overlays are historical records only. They are never applicable overlays and never editable live documents."]</p>
+    }
+</section>
+<section class="card top-gap">
     <h3>@(Model.Draft.Id.HasValue ? L["Edit saved overlay draft"] : L["Add overlay draft"])</h3>
     <p>@L["Saving persists configuration for a future deployment; it never writes live files. Editing preserves enabled state and disabled file paths. New versions follow import version selection. Scope, key and version are immutable during edit."]</p>
     <p>@L["Choose scope and host below; these controls set hostScope and hostKey in JSON. Keep module/app/package/target selectors and moduleDefinitionVersion as needed. artifactVersion is a minimum, not an exact version. Files must use inline fileContent and safe relative deployment paths; filesystem references are unavailable."]</p>
-    <form method="post" asp-page-handler="Save" autocomplete="off">
+    <form method="post" asp-page-handler="Save" autocomplete="off" enctype="multipart/form-data">
         <input type="hidden" asp-for="Draft.Id" />
         <input type="hidden" asp-for="Draft.Token" />
         <div class="form-field">
@@ -94,6 +171,18 @@
             }
             </ul>
         }
+        <div class="form-field">
+            <label asp-for="DraftFileRelativePath">@L["Relative path"]</label>
+            <input asp-for="DraftFileRelativePath" />
+            <span asp-validation-for="DraftFileRelativePath"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="UploadedFile">@L["Upload configuration file"]</label>
+            <input asp-for="UploadedFile" type="file" accept=".txt,.json,.config,.xml,.yaml,.yml,.ini,.zip,application/zip" />
+            <span asp-validation-for="UploadedFile"></span>
+        </div>
+        <button asp-page-handler="UploadFile" disabled="@(!Model.Snapshot.SchemaReady)">@L["Upload file content"]</button>
+        <p>@L["Upload a text file or a zip file containing exactly one text file. Zip upload is useful when request filters block script-like text content."]</p>
         <button type="submit" disabled="@(!Model.Snapshot.SchemaReady)">@L["Save overlay"]</button>
         <a asp-page="/Admin/ConfigOverlays">@L["New overlay / discard draft"]</a>
     </form>
@@ -133,6 +222,34 @@
         }
     }
 </section>
+@if (Model.ContentComparison is not null)
+{
+<section class="card top-gap">
+    <h3>@L["Base vs effective content"]</h3>
+    @foreach (var diagnostic in Model.ContentComparison.Diagnostics) { <p role="status">@diagnostic</p> }
+    @foreach (var file in Model.ContentComparison.Files)
+    {
+        <h4>@file.RelativePath</h4>
+        @foreach (var note in file.Notes) { <p role="status">@note</p> }
+        @if (file.BaseAvailable && file.EffectiveAvailable && file.EffectiveDiffers)
+        {
+            <p><strong>@L["Differences"]</strong></p>
+            <pre>@string.Join("\n", file.Diff.Select(line => (line.Kind == "removed" ? "- " : line.Kind == "added" ? "+ " : "  ") + line.Text))</pre>
+            <details>
+                <summary>@L["Base content"] / @L["Effective content"]</summary>
+                <p><strong>@L["Base content"]</strong></p>
+                <pre>@file.BaseContent</pre>
+                <p><strong>@L["Effective content"]</strong></p>
+                <pre>@file.EffectiveContent</pre>
+            </details>
+        }
+        @if (file.ContentTruncated)
+        {
+            <p role="status">@L["Content truncated for display."]</p>
+        }
+    }
+</section>
+}
 @if (Model.Detail is not null && Model.RemovalPreview is null)
 {
 <section class="card top-gap">
@@ -144,7 +261,7 @@
 {
 <section class="card top-gap">
     <h3>@L["Removal impact preview"]</h3>
-    <p>@L["Read-only preview for disabling or deleting the opened overlay on the selected host and artifact. Saved rows only: never live files, disk contents or final deployment configuration. Other hosts or artifacts using this document are not enumerated. Computed against token:"] @Model.PreviewToken(). @L["The Disable and Delete forms in this preview section re-validate every saved row this preview depends on and reject a stale preview; the forms in Saved overlays remain direct operations bound only to the selected row. Reload before changing."]</p>
+    <p>@L["Read-only preview for disabling or deleting the opened overlay on the selected host and artifact. Saved rows only: never live files, disk contents or final deployment configuration. Other hosts or artifacts using this document are not enumerated. Computed against token:"] @Model.PreviewToken(). @L["The Disable and Delete forms in this preview section re-validate every saved row this preview depends on and reject a stale preview. Disable and Delete are only offered here, never as direct operations on the saved list. Reload before changing."]</p>
     @{
         var previewRow = Model.Snapshot.Overlays.FirstOrDefault(o => o.ConfigOverlayDocumentId == Model.RemovalPreview.DocumentId);
     }

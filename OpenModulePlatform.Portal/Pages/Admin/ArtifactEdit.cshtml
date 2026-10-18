@@ -93,6 +93,7 @@
                 <p class="muted">@L["Optional files that HostAgent writes after deploying this artifact. Use this for site-specific runtime configuration that should not be packaged in the artifact zip."]</p>
             </div>
             <a class="action-link" href="~/admin/artifactconfigfileedit?artifactId=@Model.Input.ArtifactId">@L["Add configuration file"]</a>
+            <a class="action-link" asp-page="/Admin/ConfigOverlays" asp-route-FilterPackage="@Model.Input.PackageType" asp-route-FilterTarget="@Model.Input.TargetName">@L["Configuration overlays"]</a>
         </div>
 
         @if (Model.ConfigurationFiles.Count == 0)

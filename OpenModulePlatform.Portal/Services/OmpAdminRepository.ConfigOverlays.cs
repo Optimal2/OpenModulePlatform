@@ -350,7 +350,7 @@ WHERE HostKey = @HostKey
     {
         const string findSql = @"
 SELECT ConfigOverlayDocumentId,
-       OverlaySha256, IsEnabled, UpdatedUtc
+       OverlaySha256, IsEnabled, UpdatedUtc, SourceName
 FROM omp.ConfigOverlayDocuments WITH (UPDLOCK, HOLDLOCK)
 WHERE OverlayKey = @OverlayKey
   AND HostKey = @HostKey
@@ -368,6 +368,7 @@ WHERE OverlayKey = @OverlayKey
             string? existingSha256 = null;
             var existingEnabled = true;
             DateTime existingUpdated = default;
+            string? existingSourceName = null;
             await using (var find = new SqlCommand(findSql, conn, tx))
             {
                 Add(find, "@OverlayKey", input.OverlayKey);
@@ -380,6 +381,7 @@ WHERE OverlayKey = @OverlayKey
                     existingSha256 = rdr.GetString(1);
                     existingEnabled = rdr.GetBoolean(2);
                     existingUpdated = rdr.GetDateTime(3);
+                    existingSourceName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
                 }
             }
 
@@ -403,24 +405,45 @@ WHERE OverlayKey = @OverlayKey
                     "A config overlay with the same overlay key, host key, and version already exists, but the imported JSON is different.");
             }
 
+            // Portal edits keep the imported origin (SourceName) so the list can
+            // still show where the overlay came from; the editing actor is
+            // recorded separately in the audit log, never by overwriting origin.
+            var saveInput = editor is not null && existingId.HasValue && existingSourceName is not null
+                ? input with { SourceName = existingSourceName }
+                : input;
+
+            // Capture the pre-write metadata for the audit before any mutation
+            // changes or cascades the normalized rows.
+            ConfigOverlayDocumentRow? beforeRow = null;
+            IReadOnlyList<OverlayFileMetaRow>? beforeFiles = null;
+            if (editor is not null && !isIdentical && existingId.HasValue)
+            {
+                beforeRow = await ReadOverlayRowInTxAsync(conn, tx, existingId.Value, hasHostScopeColumn, ct);
+                beforeFiles = await ReadOverlayFileMetaInTxAsync(conn, tx, existingId.Value,
+                    await ColumnExistsAsync(conn, tx, "omp.ConfigOverlayConfigurationFiles", "MergeMode", ct), ct);
+            }
+
             int documentId;
+            var finalEnabled = true;
             if (isIdentical)
             {
                 // Fully idempotent re-import: no writes at all and never toggle IsEnabled
                 // (must not re-enable a manually disabled row nor disable siblings).
                 documentId = existingId!.Value;
+                finalEnabled = existingEnabled;
             }
             else if (existingId.HasValue)
             {
                 documentId = existingId.Value;
+                finalEnabled = editor is null || existingEnabled;
                 // Disable the enabled siblings BEFORE this row is re-enabled: SQL Server
                 // checks the filtered unique index per statement, so setting IsEnabled = 1
                 // while a sibling is still enabled fails with 2601 mid-transaction.
-                if (editor is null || existingEnabled)
-                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
-                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, hasHostScopeColumn, ct,
-                    editor is null || existingEnabled);
-                await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
+                if (finalEnabled)
+                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, saveInput, documentId, ct);
+                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, saveInput, hasHostScopeColumn, ct,
+                    finalEnabled);
+                await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, saveInput.ConfigurationFiles, ct);
                 foreach (var path in disabledPaths)
                 {
                     await using var disable = new SqlCommand("UPDATE omp.ConfigOverlayConfigurationFiles SET IsEnabled = 0 WHERE ConfigOverlayDocumentId = @id AND RelativePath = @path;", conn, tx);
@@ -430,16 +453,27 @@ WHERE OverlayKey = @OverlayKey
             }
             else
             {
-                var enableImported = await ShouldEnableImportedConfigOverlayAsync(conn, tx, input, ct);
+                var enableImported = await ShouldEnableImportedConfigOverlayAsync(conn, tx, saveInput, ct);
                 if (enableImported)
                 {
                     // The new row does not exist yet, so -1 excludes nothing and disables
                     // ALL currently enabled siblings before the enabled insert below.
-                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, -1, ct);
+                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, saveInput, -1, ct);
                 }
 
-                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, hasHostScopeColumn, ct);
-                await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
+                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, saveInput, enableImported, hasHostScopeColumn, ct);
+                await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, saveInput.ConfigurationFiles, ct);
+                finalEnabled = enableImported;
+            }
+
+            if (editor is not null && !isIdentical)
+            {
+                var before = beforeRow is not null && beforeFiles is not null
+                    ? OverlayMetadataJson(beforeRow, beforeFiles)
+                    : null;
+                var after = OverlayMetadataJson(saveInput, documentId, finalEnabled);
+                await WriteOverlayAuditInTxAsync(conn, tx, editor.Actor ?? string.Empty,
+                    existingId.HasValue ? "Update" : "Create", documentId, before, after, ct);
             }
 
             await tx.CommitAsync(ct);

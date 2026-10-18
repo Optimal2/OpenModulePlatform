@@ -255,6 +255,43 @@ public sealed class ConfigOverlayAdministrationTests
         Assert.Empty(store.DetailReads);
         Assert.Contains(result.Diagnostics, d => d.Contains("exact-host fallback", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void SetDraftFileContentAddsFilesAndPreservesExistingMetadata()
+    {
+        const string json = """{"overlayKey":"k","overlayVersion":"1","configurationFiles":[{"relativePath":"a.json","fileContent":"{}","mergeMode":"merge","custom":"keep"}]}""";
+        var replaced = ConfigOverlayAdministration.SetDraftFileContent(json, "a.json", """{"x":1}""");
+        using var doc = JsonDocument.Parse(replaced);
+        var files = doc.RootElement.GetProperty("configurationFiles").EnumerateArray().ToList();
+        Assert.Single(files);
+        Assert.Equal("""{"x":1}""", files[0].GetProperty("fileContent").GetString());
+        Assert.Equal("merge", files[0].GetProperty("mergeMode").GetString());
+        Assert.Equal("keep", files[0].GetProperty("custom").GetString());
+
+        var added = ConfigOverlayAdministration.SetDraftFileContent(json, "b.txt", "hi");
+        using var doc2 = JsonDocument.Parse(added);
+        var files2 = doc2.RootElement.GetProperty("configurationFiles").EnumerateArray().ToList();
+        Assert.Equal(2, files2.Count);
+        Assert.Equal("b.txt", files2[1].GetProperty("relativePath").GetString());
+        Assert.Equal("replace", files2[1].GetProperty("mergeMode").GetString());
+    }
+
+    [Fact]
+    public async Task ContentComparisonReportsSupersedingOverlayAndKeepsContentOutOfDiagnostics()
+    {
+        var store = new OverlayAdminFakeStore { Snapshot = Snapshot(Overlay(1)) };
+        store.ArtifactFilesById[42] = [File(content: """{"base":"secret-base"}""", mode: "merge")];
+        store.Details[1] = new(Overlay(1), "", [File(1, 1, """{"overlay":"secret-overlay"}""", mode: "merge")]);
+        var comparison = await new ConfigOverlayAdministration(store).CompareContentAsync(store.Snapshot, "host-a", 42, default);
+        var file = comparison.Files.Single(f => f.RelativePath == "appsettings.json");
+        Assert.True(file.BaseAvailable);
+        Assert.True(file.EffectiveAvailable);
+        Assert.True(file.EffectiveDiffers);
+        Assert.Contains(file.Notes, n => n.Contains("supersedes", StringComparison.Ordinal));
+        // Content belongs only in the inert display fields, never in diagnostics
+        // that could be surfaced to logs or status messages.
+        Assert.DoesNotContain(comparison.Diagnostics, d => d.Contains("secret-", StringComparison.Ordinal));
+    }
 }
 
 internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
@@ -265,8 +302,11 @@ internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
     public int Reads { get; private set; }
     public int SourceReads { get; private set; }
     public List<(int Id, string Token, bool? Enabled)> Changes { get; } = [];
+    public List<string> ChangeActors { get; } = [];
+    public List<OverlayDeletedHistoryRow> DeletedHistory { get; set; } = [];
     public PortableConfigOverlayDocument? Saved { get; private set; }
     public string? SavedToken { get; private set; }
+    public string? SavedActor { get; private set; }
     public bool RejectSave { get; set; }
     public Task<OverlayAdminSnapshot> ReadAsync(CancellationToken ct) { Reads++; return Task.FromResult(Snapshot); }
     public Task<OverlayAdminDetail?> DetailAsync(int id, CancellationToken ct) { DetailReads.Add(id); return Task.FromResult(Details.GetValueOrDefault(id)); }
@@ -277,15 +317,17 @@ internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
         SourceReads++;
         return Task.FromResult<IReadOnlyList<OverlaySourceRow>>(ArtifactFilesById.GetValueOrDefault(artifactId, ArtifactFiles));
     }
-    public Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, CancellationToken ct)
+    public Task<IReadOnlyList<OverlayDeletedHistoryRow>> DeletedHistoryAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<OverlayDeletedHistoryRow>>(DeletedHistory);
+    public Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, string actor, CancellationToken ct)
     {
         if (RejectSave) throw new InvalidOperationException("private-secret SQL content");
-        Saved = document; SavedToken = expectedHash; return Task.FromResult(id ?? 1);
+        Saved = document; SavedToken = expectedHash; SavedActor = actor; return Task.FromResult(id ?? 1);
     }
-    public Task ChangeStateAsync(int id, string expectedHash, bool? enabled, CancellationToken ct)
-    { Changes.Add((id, expectedHash, enabled)); return Task.CompletedTask; }
+    public Task ChangeStateAsync(int id, string expectedHash, bool? enabled, string actor, CancellationToken ct)
+    { Changes.Add((id, expectedHash, enabled)); ChangeActors.Add(actor); return Task.CompletedTask; }
     public async Task ChangeStateFromPreviewAsync(int id, string expectedHash, bool? enabled, string hostKey, int artifactId,
-        string previewToken, CancellationToken ct)
+        string previewToken, string actor, CancellationToken ct)
     {
         // In-memory equivalent of the transactional store: re-derive the
         // preview from current rows and reject a stale token before recording.
@@ -293,6 +335,6 @@ internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
         if (preview.DetailUnavailable
             || ConfigOverlayAdministration.PreviewActionToken(preview.PreviewFingerprint, enabled) != previewToken)
             throw new InvalidOperationException("The preview is stale.");
-        Changes.Add((id, expectedHash, enabled));
+        Changes.Add((id, expectedHash, enabled)); ChangeActors.Add(actor);
     }
 }

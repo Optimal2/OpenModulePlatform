@@ -56,3 +56,49 @@ public sealed class ConfigOverlayDocumentRow
 
     public DateTime UpdatedUtc { get; init; }
 }
+
+/// <summary>
+/// Metadata-only file row for the saved-overlays list: relative path, stored
+/// merge mode and enabled state. Never carries file content.
+/// </summary>
+public sealed record OverlayFileSummaryRow(
+    int ConfigOverlayDocumentId,
+    string RelativePath,
+    string? MergeMode,
+    bool IsEnabled);
+
+/// <summary>
+/// Metadata-only historical tombstone for a deleted overlay, reconstructed
+/// from omp.AuditLog. Never an applicable overlay and never an editable live
+/// document; exposed only as deleted history.
+/// </summary>
+public sealed class OverlayDeletedHistoryRow
+{
+    public int ConfigOverlayDocumentId { get; init; }
+
+    public string OverlayKey { get; init; } = string.Empty;
+
+    public string OverlayVersion { get; init; } = string.Empty;
+
+    public string HostKey { get; init; } = string.Empty;
+
+    public string HostScope { get; init; } = "Host";
+
+    public string? ModuleKey { get; init; }
+
+    public string? AppKey { get; init; }
+
+    public string? PackageType { get; init; }
+
+    public string? TargetName { get; init; }
+
+    public string? ArtifactVersion { get; init; }
+
+    public string? SourceName { get; init; }
+
+    public int ConfigurationFileCount { get; init; }
+
+    public DateTime DeletedUtc { get; init; }
+
+    public string? DeletedBy { get; init; }
+}

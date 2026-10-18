@@ -1,4 +1,6 @@
 using System.Data;
+using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
@@ -6,7 +8,7 @@ using OpenModulePlatform.Portal.Models;
 
 namespace OpenModulePlatform.Portal.Services;
 
-public sealed record OverlayEditorSave(int? DocumentId, string? ExpectedHash);
+public sealed record OverlayEditorSave(int? DocumentId, string? ExpectedHash, string? Actor = null);
 
 public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
 {
@@ -27,7 +29,8 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
         var hasScope = await ColumnExistsAsync(conn, "omp.ConfigOverlayDocuments", "HostScope", ct);
         return new(ready, await GetHostsAsync(ct), await GetArtifactsAsync(ct),
             documentsExist ? await GetConfigOverlayDocumentsAsync(ct) : [], hasScope,
-            AppInstances: await GetAppInstancesAsync(ct));
+            AppInstances: await GetAppInstancesAsync(ct),
+            FileSummaries: documentsExist ? await GetOverlayFileSummariesAsync(ct) : []);
     }
 
     async Task<OverlayAdminDetail?> IConfigOverlayAdminStore.DetailAsync(int id, CancellationToken ct)
@@ -37,15 +40,58 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
         var document = await GetConfigOverlayJsonAsync(id, ct);
         if (document is null) return null;
         var files = await ReadOverlaySourceRowsAsync(id, true, ct);
-        // Normalized rows are authoritative, including disabled rows. Preserve every other selector/field.
+        // Normalized rows are authoritative, including disabled rows. Rebuild
+        // configurationFiles from those rows while preserving any extra per-file
+        // metadata (extension keys) the stored document still carries, and hydrate
+        // selectors that legacy metadata-only documents never wrote to JSON from
+        // the authoritative stored columns.
         var root = JsonNode.Parse(document.Value.Json) as JsonObject ?? new JsonObject();
-        root["configurationFiles"] = new JsonArray(files.Select(f => (JsonNode)new JsonObject
+        var storedFiles = root["configurationFiles"] as JsonArray;
+        var storedByPath = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+        if (storedFiles is not null)
+            foreach (var node in storedFiles.OfType<JsonObject>())
+            {
+                var path = node["relativePath"]?.GetValue<string>();
+                if (!string.IsNullOrWhiteSpace(path)) storedByPath[path.Trim()] = node;
+            }
+        var rebuilt = new JsonArray();
+        foreach (var file in files)
         {
-            ["relativePath"] = f.RelativePath, ["fileContent"] = f.Content, ["mergeMode"] = f.MergeMode
-        }).ToArray());
-        root["hostScope"] = summary.HostScope;
-        root["hostKey"] = summary.HostKey;
+            JsonObject entry;
+            if (storedByPath.TryGetValue(file.RelativePath, out var existing))
+            {
+                entry = (JsonObject)existing.DeepClone();
+            }
+            else
+            {
+                entry = new JsonObject();
+                storedByPath[file.RelativePath] = entry;
+            }
+            entry["relativePath"] = file.RelativePath;
+            entry["fileContent"] = file.Content;
+            entry["mergeMode"] = file.MergeMode;
+            rebuilt.Add(entry);
+        }
+        root["configurationFiles"] = rebuilt;
+        HydrateSelector(root, "hostScope", summary.HostScope);
+        HydrateSelector(root, "hostKey", summary.HostKey);
+        HydrateSelector(root, "moduleKey", summary.ModuleKey);
+        HydrateSelector(root, "moduleDefinitionVersion", summary.ModuleDefinitionVersion);
+        HydrateSelector(root, "appKey", summary.AppKey);
+        HydrateSelector(root, "packageType", summary.PackageType);
+        HydrateSelector(root, "targetName", summary.TargetName);
+        HydrateSelector(root, "artifactVersion", summary.ArtifactVersion);
         return new(summary, root.ToJsonString(new() { WriteIndented = true }), files);
+    }
+
+    // Fills a selector from the authoritative stored column only when the
+    // document JSON is missing it, so legacy metadata-only rows round-trip
+    // without silently dropping selectors on the next save.
+    private static void HydrateSelector(JsonObject root, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var current = root[name]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(current)) root[name] = value;
     }
 
     Task<IReadOnlyList<OverlaySourceRow>> IConfigOverlayAdminStore.SourcesAsync(int artifactId, CancellationToken ct)
@@ -73,8 +119,8 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
     }
 
     async Task<int> IConfigOverlayAdminStore.SaveAsync(PortableConfigOverlayDocument document, int? id,
-        string? expectedHash, CancellationToken ct)
-        => (await SaveImportedConfigOverlayAsync(document, id.HasValue, ct, new(id, expectedHash))).DocumentId;
+        string? expectedHash, string actor, CancellationToken ct)
+        => (await SaveImportedConfigOverlayAsync(document, id.HasValue, ct, new(id, expectedHash, actor))).DocumentId;
 
     internal const string OverlayStateSql = """
         SELECT OverlayKey, HostKey, OverlaySha256, UpdatedUtc
@@ -89,29 +135,33 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
     internal const string OverlayUpdateStateSql = "UPDATE omp.ConfigOverlayDocuments SET IsEnabled = @enabled, UpdatedUtc = SYSUTCDATETIME() WHERE ConfigOverlayDocumentId = @id;";
     internal const string OverlayDeleteSql = "DELETE FROM omp.ConfigOverlayDocuments WHERE ConfigOverlayDocumentId = @id;";
 
-    async Task IConfigOverlayAdminStore.ChangeStateAsync(int id, string expectedHash, bool? enabled, CancellationToken ct)
+    async Task IConfigOverlayAdminStore.ChangeStateAsync(int id, string expectedHash, bool? enabled, string actor, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         try
         {
-            string key, host, hash;
-            DateTime updated;
-            await using (var read = new SqlCommand(OverlayStateSql, conn, tx))
-            {
-                Add(read, "@id", id);
-                await using var reader = await read.ExecuteReaderAsync(ct);
-                if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("Overlay no longer exists.");
-                key = reader.GetString(0); host = reader.GetString(1); hash = reader.GetString(2); updated = reader.GetDateTime(3);
-            }
-            if (expectedHash != OverlayEditToken(hash, updated)) throw new InvalidOperationException("Overlay changed. Reload before saving.");
+            var hasHostScope = await ColumnExistsAsync(conn, tx, "omp.ConfigOverlayDocuments", "HostScope", ct);
+            var hasMerge = await ColumnExistsAsync(conn, tx, "omp.ConfigOverlayConfigurationFiles", "MergeMode", ct);
+            var row = await ReadOverlayRowInTxAsync(conn, tx, id, hasHostScope, ct);
+            if (expectedHash != OverlayEditToken(row.OverlaySha256, row.UpdatedUtc)) throw new InvalidOperationException("Overlay changed. Reload before saving.");
+            var files = await ReadOverlayFileMetaInTxAsync(conn, tx, id, hasMerge, ct);
+            IReadOnlyList<int> disabledSiblings = [];
             if (enabled == true)
             {
+                disabledSiblings = await ReadEnabledSiblingIdsAsync(conn, tx, row.OverlayKey, row.HostKey, id, ct);
                 await using var siblings = new SqlCommand(OverlayEnableSiblingsSql, conn, tx);
-                Add(siblings, "@key", key); Add(siblings, "@host", host); Add(siblings, "@id", id);
+                Add(siblings, "@key", row.OverlayKey); Add(siblings, "@host", row.HostKey); Add(siblings, "@id", id);
                 await siblings.ExecuteNonQueryAsync(ct);
             }
+            // Audit before the mutation: a delete tombstone survives the
+            // cascading file-row removal because it is written first. Metadata
+            // only; configuration content is never recorded.
+            var before = OverlayMetadataJson(row, files);
+            var after = enabled.HasValue ? OverlayMetadataJson(row, files, enabled.Value, disabledSiblings) : null;
+            await WriteOverlayAuditInTxAsync(conn, tx, actor,
+                enabled is null ? "Delete" : enabled.Value ? "Enable" : "Disable", id, before, after, ct);
             var sql = enabled.HasValue ? OverlayUpdateStateSql : OverlayDeleteSql;
             await using var write = new SqlCommand(sql, conn, tx);
             Add(write, "@id", id);
@@ -150,7 +200,7 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
     // rejects instead of mutating. No schema or store beyond the existing
     // overlay/artifact tables is involved.
     async Task IConfigOverlayAdminStore.ChangeStateFromPreviewAsync(int id, string expectedHash, bool? enabled,
-        string hostKey, int artifactId, string previewToken, CancellationToken ct)
+        string hostKey, int artifactId, string previewToken, string actor, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -262,12 +312,21 @@ GROUP BY overlay.ConfigOverlayDocumentId, overlay.OverlayKey, overlay.OverlayVer
             if (!string.Equals(expectedToken, previewToken, StringComparison.Ordinal))
                 throw new InvalidOperationException("The preview is stale. Reload and preview again before changing.");
 
+            IReadOnlyList<int> disabledSiblings = [];
             if (enabled == true)
             {
+                disabledSiblings = await ReadEnabledSiblingIdsAsync(conn, tx, key, host, id, ct);
                 await using var siblings = new SqlCommand(OverlayEnableSiblingsSql, conn, tx);
                 Add(siblings, "@key", key); Add(siblings, "@host", host); Add(siblings, "@id", id);
                 await siblings.ExecuteNonQueryAsync(ct);
             }
+            // Audit before the mutation; a delete tombstone survives the
+            // cascading file-row removal. Metadata only, never content.
+            var files = await ReadOverlayFileMetaInTxAsync(conn, tx, id, hasMerge, ct);
+            var before = OverlayMetadataJson(selected, files);
+            var after = enabled.HasValue ? OverlayMetadataJson(selected, files, enabled.Value, disabledSiblings) : null;
+            await WriteOverlayAuditInTxAsync(conn, tx, actor,
+                enabled is null ? "Delete" : enabled.Value ? "Enable" : "Disable", id, before, after, ct);
             var sql = enabled.HasValue ? OverlayUpdateStateSql : OverlayDeleteSql;
             await using var write = new SqlCommand(sql, conn, tx);
             Add(write, "@id", id);
@@ -286,4 +345,241 @@ GROUP BY overlay.ConfigOverlayDocumentId, overlay.OverlayKey, overlay.OverlayVer
     }
 
     public static string OverlayEditToken(string hash, DateTime updated) => $"{hash}:{updated.Ticks}";
+
+    // Metadata-only per-file row for the saved-overlays list and the audit
+    // tombstone. Content is deliberately absent from both.
+    private sealed record OverlayFileMetaRow(string RelativePath, string? MergeMode, bool IsEnabled);
+
+    private async Task<IReadOnlyList<OverlayFileSummaryRow>> GetOverlayFileSummariesAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await TableExistsAsync(conn, "omp.ConfigOverlayConfigurationFiles", ct)) return [];
+        var hasMerge = await ColumnExistsAsync(conn, "omp.ConfigOverlayConfigurationFiles", "MergeMode", ct);
+        var merge = hasMerge ? "MergeMode" : "CAST(NULL AS nvarchar(20))";
+        // Only the fixed identifiers above are interpolated; the requested identity is a parameter.
+        var sql = $"SELECT ConfigOverlayDocumentId, RelativePath, {merge}, IsEnabled FROM omp.ConfigOverlayConfigurationFiles ORDER BY ConfigOverlayDocumentId, RelativePath;";
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<OverlayFileSummaryRow>();
+        while (await reader.ReadAsync(ct))
+            rows.Add(new(reader.GetInt32(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetBoolean(3)));
+        return rows;
+    }
+
+    // Full document row for one id, locked for the mutation transaction. Used
+    // by ChangeStateAsync to check the concurrency token and build the audit
+    // metadata. Throws when the row is gone.
+    private static async Task<ConfigOverlayDocumentRow> ReadOverlayRowInTxAsync(
+        SqlConnection conn, SqlTransaction tx, int id, bool hasHostScope, CancellationToken ct)
+    {
+        var hostScopeExpr = hasHostScope ? "overlay.HostScope" : "CAST(N'Host' AS nvarchar(20))";
+        var sql = $@"
+SELECT overlay.ConfigOverlayDocumentId, overlay.OverlayKey, overlay.OverlayVersion, overlay.HostKey,
+       {hostScopeExpr}, overlay.ModuleKey, overlay.ModuleDefinitionVersion, overlay.AppKey, overlay.PackageType,
+       overlay.TargetName, overlay.ArtifactVersion, overlay.OverlaySha256, overlay.SourceName,
+       overlay.IsEnabled, overlay.UpdatedUtc
+FROM omp.ConfigOverlayDocuments overlay WITH (UPDLOCK, HOLDLOCK)
+WHERE overlay.ConfigOverlayDocumentId = @id;";
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) throw new InvalidOperationException("Overlay no longer exists.");
+        return new()
+        {
+            ConfigOverlayDocumentId = reader.GetInt32(0),
+            OverlayKey = reader.GetString(1),
+            OverlayVersion = reader.GetString(2),
+            HostKey = reader.GetString(3),
+            HostScope = reader.IsDBNull(4) ? "Host" : reader.GetString(4),
+            ModuleKey = reader.IsDBNull(5) ? null : reader.GetString(5),
+            ModuleDefinitionVersion = reader.IsDBNull(6) ? null : reader.GetString(6),
+            AppKey = reader.IsDBNull(7) ? null : reader.GetString(7),
+            PackageType = reader.IsDBNull(8) ? null : reader.GetString(8),
+            TargetName = reader.IsDBNull(9) ? null : reader.GetString(9),
+            ArtifactVersion = reader.IsDBNull(10) ? null : reader.GetString(10),
+            OverlaySha256 = reader.GetString(11),
+            SourceName = reader.IsDBNull(12) ? null : reader.GetString(12),
+            ConfigurationFileCount = 0,
+            IsEnabled = reader.GetBoolean(13),
+            UpdatedUtc = reader.GetDateTime(14),
+        };
+    }
+
+    // Metadata-only file rows for one document, locked for the mutation
+    // transaction. Content is never read: the audit tombstone must not carry
+    // configuration content, only paths, modes and enabled state.
+    private static async Task<IReadOnlyList<OverlayFileMetaRow>> ReadOverlayFileMetaInTxAsync(
+        SqlConnection conn, SqlTransaction tx, int id, bool hasMerge, CancellationToken ct)
+    {
+        var merge = hasMerge ? "MergeMode" : "CAST(NULL AS nvarchar(20))";
+        var sql = $"SELECT RelativePath, {merge}, IsEnabled FROM omp.ConfigOverlayConfigurationFiles WITH (UPDLOCK, HOLDLOCK) WHERE ConfigOverlayDocumentId = @id ORDER BY RelativePath;";
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<OverlayFileMetaRow>();
+        while (await reader.ReadAsync(ct))
+            rows.Add(new(reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetBoolean(2)));
+        return rows;
+    }
+
+    // Enabled sibling ids, read BEFORE the disable statement runs so enabling
+    // this row can record exactly which siblings it switched off.
+    private static async Task<IReadOnlyList<int>> ReadEnabledSiblingIdsAsync(
+        SqlConnection conn, SqlTransaction tx, string key, string host, int id, CancellationToken ct)
+    {
+        const string sql = """
+            SELECT ConfigOverlayDocumentId
+            FROM omp.ConfigOverlayDocuments WITH (UPDLOCK, HOLDLOCK)
+            WHERE OverlayKey = @key AND HostKey = @host AND ConfigOverlayDocumentId <> @id AND IsEnabled = 1;
+            """;
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@key", key); Add(cmd, "@host", host); Add(cmd, "@id", id);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var ids = new List<int>();
+        while (await reader.ReadAsync(ct)) ids.Add(reader.GetInt32(0));
+        return ids;
+    }
+
+    private static async Task WriteOverlayAuditInTxAsync(SqlConnection conn, SqlTransaction tx, string actor,
+        string action, int documentId, string? beforeJson, string? afterJson, CancellationToken ct)
+    {
+        const string sql = """
+            INSERT INTO omp.AuditLog(Actor, Action, TargetType, TargetId, BeforeJson, AfterJson)
+            VALUES(@actor, @action, @target_type, @target_id, @before_json, @after_json);
+            """;
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@actor", TruncateForAudit(string.IsNullOrWhiteSpace(actor) ? "PortalAdmin" : actor.Trim(), 256));
+        Add(cmd, "@action", TruncateForAudit(action, 200));
+        Add(cmd, "@target_type", "ConfigOverlay");
+        Add(cmd, "@target_id", TruncateForAudit(documentId.ToString(CultureInfo.InvariantCulture), 200));
+        Add(cmd, "@before_json", beforeJson);
+        Add(cmd, "@after_json", afterJson);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // Audit metadata is identity + selectors + source + enabled state + the
+    // file list (paths, modes, enabled). No configuration content, hashes or
+    // secrets are ever recorded. The delete tombstone is the "before" shape
+    // written before the cascading file-row removal.
+    private static string OverlayMetadataJson(ConfigOverlayDocumentRow row, IReadOnlyList<OverlayFileMetaRow> files)
+        => JsonSerializer.Serialize(Metadata(row, row.IsEnabled, null, files));
+
+    private static string OverlayMetadataJson(ConfigOverlayDocumentRow row, IReadOnlyList<OverlayFileMetaRow> files,
+        bool enabled, IReadOnlyList<int> disabledSiblings)
+        => JsonSerializer.Serialize(Metadata(row, enabled, disabledSiblings, files));
+
+    private static object Metadata(ConfigOverlayDocumentRow row, bool enabled, IReadOnlyList<int>? disabledSiblings,
+        IReadOnlyList<OverlayFileMetaRow> files)
+        => new
+        {
+            documentId = row.ConfigOverlayDocumentId,
+            overlayKey = row.OverlayKey,
+            overlayVersion = row.OverlayVersion,
+            hostKey = row.HostKey,
+            hostScope = row.HostScope,
+            moduleKey = row.ModuleKey,
+            moduleDefinitionVersion = row.ModuleDefinitionVersion,
+            appKey = row.AppKey,
+            packageType = row.PackageType,
+            targetName = row.TargetName,
+            artifactVersion = row.ArtifactVersion,
+            sourceName = row.SourceName,
+            isEnabled = enabled,
+            configurationFileCount = files.Count,
+            disabledSiblingDocumentIds = disabledSiblings,
+            files = files.Select(f => new { relativePath = f.RelativePath, mergeMode = f.MergeMode, isEnabled = f.IsEnabled }).ToArray(),
+        };
+
+    // Save-path audit metadata built from the portable document before the
+    // normalized rows exist. Identity + selectors + source + enabled state +
+    // the file list (paths, modes). No file content or hashes.
+    private static string OverlayMetadataJson(PortableConfigOverlayDocument input, int documentId, bool isEnabled)
+        => JsonSerializer.Serialize(new
+        {
+            documentId,
+            overlayKey = input.OverlayKey,
+            overlayVersion = input.OverlayVersion,
+            hostKey = input.HostKey,
+            hostScope = ConfigOverlayHostScopeNames.ToName(input.HostScope),
+            moduleKey = input.ModuleKey,
+            moduleDefinitionVersion = input.ModuleDefinitionVersion,
+            appKey = input.AppKey,
+            packageType = input.PackageType,
+            targetName = input.TargetName,
+            artifactVersion = input.ArtifactVersion,
+            sourceName = input.SourceName,
+            isEnabled,
+            configurationFileCount = input.ConfigurationFiles.Count,
+            disabledSiblingDocumentIds = (int[]?)null,
+            files = input.ConfigurationFiles.Select(f => new { relativePath = f.RelativePath, mergeMode = f.MergeMode, isEnabled = true }).ToArray(),
+        });
+
+    async Task<IReadOnlyList<OverlayDeletedHistoryRow>> IConfigOverlayAdminStore.DeletedHistoryAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await TableExistsAsync(conn, "omp.AuditLog", ct)) return [];
+        const string sql = """
+            SELECT TargetId, BeforeJson, CreatedUtc, Actor
+            FROM omp.AuditLog
+            WHERE TargetType = 'ConfigOverlay' AND Action = 'Delete' AND BeforeJson IS NOT NULL
+            ORDER BY CreatedUtc DESC, AuditLogId DESC;
+            """;
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<OverlayDeletedHistoryRow>();
+        while (await reader.ReadAsync(ct))
+        {
+            var parsed = ParseDeletedHistoryRow(reader.GetString(0), reader.GetString(1), reader.GetDateTime(2), reader.GetString(3));
+            if (parsed is not null) rows.Add(parsed);
+        }
+        return rows;
+    }
+
+    // Reconstructs the metadata-only tombstone from the audit "before" JSON.
+    // Returns null for rows that are not a valid overlay tombstone, so a
+    // malformed legacy audit row is skipped rather than surfaced as a live row.
+    private static OverlayDeletedHistoryRow? ParseDeletedHistoryRow(string targetId, string beforeJson, DateTime deletedUtc, string actor)
+    {
+        try
+        {
+            var root = JsonNode.Parse(beforeJson) as JsonObject;
+            if (root is null) return null;
+            var documentId = Int(root, "documentId");
+            if (!documentId.HasValue && int.TryParse(targetId, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedId)) documentId = parsedId;
+            if (!documentId.HasValue) return null;
+            var files = root["files"] as JsonArray;
+            return new OverlayDeletedHistoryRow
+            {
+                ConfigOverlayDocumentId = documentId.Value,
+                OverlayKey = Str(root, "overlayKey") ?? string.Empty,
+                OverlayVersion = Str(root, "overlayVersion") ?? string.Empty,
+                HostKey = Str(root, "hostKey") ?? string.Empty,
+                HostScope = Str(root, "hostScope") ?? "Host",
+                ModuleKey = Str(root, "moduleKey"),
+                AppKey = Str(root, "appKey"),
+                PackageType = Str(root, "packageType"),
+                TargetName = Str(root, "targetName"),
+                ArtifactVersion = Str(root, "artifactVersion"),
+                SourceName = Str(root, "sourceName"),
+                ConfigurationFileCount = files?.Count ?? Int(root, "configurationFileCount") ?? 0,
+                DeletedUtc = deletedUtc,
+                DeletedBy = string.IsNullOrWhiteSpace(actor) ? null : actor,
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static int? Int(JsonObject root, string name)
+        => root[name]?.GetValue<int?>();
+
+    private static string? Str(JsonObject root, string name)
+    {
+        var node = root[name];
+        return node is null || node.GetValueKind() == JsonValueKind.Null ? null : node.GetValue<string>();
+    }
 }

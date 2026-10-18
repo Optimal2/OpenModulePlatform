@@ -22,6 +22,27 @@ rows register the same key more than once, the page warns and refuses ambiguous
 exact-host saves/readback. Resolve that inventory ambiguity first; existing
 runtime matching and stored overlays are unchanged.
 
+## Saved list, filters and deleted history
+
+The saved list shows every saved overlay: enabled and disabled versions,
+exact-host and AllHosts. Columns cover identity, scope, selectors, origin
+(source name), per-file relative paths with their stored merge mode and
+enabled state, state, and actions. Filters narrow by host, module, app,
+package type, target, state and scope; a host filter also lists AllHosts rows
+because they are the defaults that apply to that host. A host key that no
+longer exists in this installation is marked in the list, never silently
+dropped. Context links from the Artifact and app instance editors open this
+page; the artifact link pre-filters by package type and target. The list
+shows metadata only; file content and secrets stay in the authorized detail
+editor.
+
+**Deleted overlays** is a separate read-only section listing overlays that were
+deleted. Each row is a metadata-only tombstone from the audit log: overlay
+identity, scope, selectors, file count, who deleted it and when. Deleted rows
+are historical records only — they are never applicable overlays and never
+editable live documents. Deletion keeps this metadata before the cascading
+delete removes the document and its files.
+
 ## Add, edit and remove
 
 1. Open a saved overlay or choose **New overlay / discard draft**.
@@ -35,7 +56,11 @@ runtime matching and stored overlays are unchanged.
 4. Supply configuration files with safe `relativePath`, inline `fileContent`
    and optional `mergeMode`. Referenced sidecar paths cannot be resolved in the
    editor. Use Import/export for portable packages with sidecars. The editor
-   accepts at most 1,048,576 characters and a 2 MiB request body.
+   accepts at most 1,048,576 characters and a 2 MiB request body. Alternatively
+   upload a single UTF-8 text file of at most 1 MiB, or a zip containing one
+   such file, into a chosen relative path; the content is added to the draft
+   and must still be saved to persist. The upload control is useful when
+   request filters block script-like inline text.
 5. Save, then reload the saved-source view. Saving never edits a live file.
 
 The authorized detail editor contains configuration content and may contain
@@ -83,6 +108,17 @@ transformations afterwards. Nothing on this page reads or writes live files.
 Readback spans several repository reads; reload if another operator imports or
 changes configuration concurrently.
 
+## Compare base and effective content
+
+When a host and artifact are selected, the **Base vs effective content** section
+shows, per relative path, whether an overlay changes the artifact-owned base
+content. The base and resolved effective content are displayed as inert,
+HTML-encoded text with a bounded line diff, and content is truncated for
+display when it exceeds the display limit. This section is admin-only and
+responses are never cached. It compares saved rows only — never live files,
+disk contents or final deployment configuration — and notes when an overlay
+supersedes the artifact base for a path.
+
 ## Preview before disabling or deleting
 
 Open the overlay (`?id=<document-id>`), choose the same host and artifact as
@@ -99,8 +135,20 @@ The preview section's own Disable and Delete buttons re-validate every saved
 row the preview depends on — the selected document, contributing and fallback
 overlays, and the artifact and its files — and reject a stale preview, so
 reload before changing when another administrator may have edited any of
-them. The Disable and Delete buttons in the saved-overlays list remain direct
-operations that check only the selected row's token, as before.
+them. Disable and Delete are only offered in this preview section. The
+saved-overlays list keeps Enable as a direct operation bound to the selected
+row's token and offers a **Preview removal** link instead of direct
+disable/delete, so the installation impact is visible before any removal.
+
+## Audit and deletion history
+
+Create, update, enable, disable and delete write a metadata-only entry to the
+existing `omp.AuditLog`: actor, action, overlay identity and safe before/after
+metadata (identity, scope, selectors, file count, enabled state and disabled
+sibling ids). No configuration content, file content, secrets or hashes are
+written to the audit log. Delete records the before metadata as a tombstone
+before the cascading delete removes the document and its files; the same entry
+feeds the **Deleted overlays** section.
 
 ## Older schemas and local acceptance
 

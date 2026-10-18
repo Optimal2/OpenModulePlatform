@@ -14,18 +14,21 @@ public interface IConfigOverlayAdminStore
     Task<OverlayAdminSnapshot> ReadAsync(CancellationToken ct);
     Task<OverlayAdminDetail?> DetailAsync(int id, CancellationToken ct);
     Task<IReadOnlyList<OverlaySourceRow>> SourcesAsync(int artifactId, CancellationToken ct);
-    Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, CancellationToken ct);
-    Task ChangeStateAsync(int id, string expectedHash, bool? enabled, CancellationToken ct);
+    Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, string actor, CancellationToken ct);
+    Task ChangeStateAsync(int id, string expectedHash, bool? enabled, string actor, CancellationToken ct);
     // Preview-bound mutation: the store re-derives the preview fingerprint
     // from the rows it locks in the same transaction as the mutation and
     // rejects when it no longer matches the submitted preview token.
     Task ChangeStateFromPreviewAsync(int id, string expectedHash, bool? enabled, string hostKey, int artifactId,
-        string previewToken, CancellationToken ct);
+        string previewToken, string actor, CancellationToken ct);
+    // Metadata-only tombstones of deleted overlays, read from omp.AuditLog.
+    Task<IReadOnlyList<OverlayDeletedHistoryRow>> DeletedHistoryAsync(CancellationToken ct);
 }
 
 public sealed record OverlayAdminSnapshot(bool SchemaReady, IReadOnlyList<HostRow> Hosts,
     IReadOnlyList<ArtifactRow> Artifacts, IReadOnlyList<ConfigOverlayDocumentRow> Overlays, bool HasHostScope = true,
-    IReadOnlyList<AppInstanceRow>? AppInstances = null);
+    IReadOnlyList<AppInstanceRow>? AppInstances = null,
+    IReadOnlyList<OverlayFileSummaryRow>? FileSummaries = null);
 public sealed record OverlayAdminDetail(ConfigOverlayDocumentRow Summary, string Json, IReadOnlyList<OverlaySourceRow> Files);
 // Content stays inside the service; effective-source responses contain metadata only.
 public sealed record OverlaySourceRow(int RowId, int? DocumentId, string RelativePath, string Content,
@@ -117,11 +120,200 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         return document;
     }
 
+    // Replaces or adds one configuration file's content in a draft document,
+    // preserving existing per-file metadata (mergeMode and any extension keys)
+    // when the path already exists. Returns the whole draft as JSON.
+    public static string SetDraftFileContent(string json, string relativePath, string content)
+    {
+        var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidOperationException("Enter a JSON object.");
+        var files = root["configurationFiles"] as JsonArray;
+        if (files is null)
+        {
+            files = [];
+            root["configurationFiles"] = files;
+        }
+        var path = relativePath.Trim();
+        var existing = files.OfType<JsonObject>().FirstOrDefault(node =>
+            string.Equals(node["relativePath"]?.GetValue<string>()?.Trim(), path, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            existing["fileContent"] = content;
+        }
+        else
+        {
+            files.Add(new JsonObject
+            {
+                ["relativePath"] = path,
+                ["fileContent"] = content,
+                ["mergeMode"] = path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? "merge" : "replace",
+            });
+        }
+        return root.ToJsonString(new() { WriteIndented = true });
+    }
+
     public async Task<OverlayEffectiveReadback> ReadEffectiveAsync(OverlayAdminSnapshot snapshot,
         string hostKey, int artifactId, CancellationToken ct)
     {
         var collected = await CollectCandidatesAsync(snapshot, hostKey, artifactId, ct);
         return Resolve(collected.Candidates, collected.Diagnostics);
+    }
+
+    // Output bounds for the base/effective content comparison. Content is
+    // displayed as inert text (HTML-encoded by the view) and the diff is
+    // bounded, so a large merge cannot blow up the response. Nothing is stored.
+    public const int MaxCompareDisplayChars = 64 * 1024;
+    public const int MaxDiffSourceLines = 1000;
+    public const int MaxDiffResultLines = 400;
+
+    // Read-only base-vs-effective comparison for one concrete host and
+    // artifact. Compares the artifact-owned base content with the resolved
+    // effective content per path, with a bounded line diff. Content never
+    // leaves the service except as inert text and a bounded diff.
+    public async Task<OverlayContentComparison> CompareContentAsync(OverlayAdminSnapshot snapshot,
+        string hostKey, int artifactId, CancellationToken ct)
+    {
+        var collected = await CollectCandidatesAsync(snapshot, hostKey, artifactId, ct);
+        var diagnostics = new List<string>
+        {
+            "Base/effective comparison is read-only and never stored. Saved rows only: never live files or final deployment configuration.",
+        };
+        foreach (var diagnostic in collected.Diagnostics)
+            if (!diagnostics.Contains(diagnostic)) diagnostics.Add(diagnostic);
+
+        var resolveDiagnostics = new List<string>();
+        var resolved = ResolveWithContent(collected.Candidates, resolveDiagnostics);
+        foreach (var diagnostic in resolveDiagnostics)
+            if (!diagnostics.Contains(diagnostic)) diagnostics.Add(diagnostic);
+        var resolvedByPath = resolved.ToDictionary(r => r.File.RelativePath, StringComparer.OrdinalIgnoreCase);
+
+        // Effective content per path (same layering as the saved-source view).
+        var effectiveContent = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in collected.Candidates.GroupBy(c => c.File.RelativePath, StringComparer.OrdinalIgnoreCase))
+        {
+            var (content, valid, _) = ResolveLayer(Layers(group), group.Key, resolveDiagnostics);
+            if (valid) effectiveContent[group.Key] = content ?? string.Empty;
+        }
+
+        // Base = enabled artifact-owned content for the path.
+        var baseByPath = collected.ArtifactFiles
+            .Where(f => f.IsEnabled)
+            .GroupBy(f => f.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key,
+                g => g.OrderByDescending(f => f.UpdatedUtc).ThenByDescending(f => f.RowId).First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var paths = collected.Candidates.Select(c => c.File.RelativePath)
+            .Concat(collected.ArtifactFiles.Select(f => f.RelativePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var files = new List<OverlayContentComparisonFile>();
+        foreach (var path in paths)
+        {
+            var baseFile = baseByPath.GetValueOrDefault(path);
+            var baseAvailable = baseFile is not null;
+            var baseContent = baseFile?.Content;
+            var effectiveAvailable = effectiveContent.TryGetValue(path, out var effective);
+            var effectiveDiffers = baseAvailable && effectiveAvailable
+                && !string.Equals(baseContent, effective, StringComparison.Ordinal);
+            var baseShown = TruncateDisplayContent(baseContent, out var baseTruncated);
+            var effectiveShown = TruncateDisplayContent(effective, out var effectiveTruncated);
+            var diffTruncated = false;
+            var diff = baseAvailable && effectiveAvailable
+                ? DiffLines(baseContent!, effective!, out diffTruncated)
+                : [];
+            if (diffTruncated) diagnostics.Add($"{path}: diff truncated to {MaxDiffResultLines} lines.");
+
+            var notes = new List<string>();
+            var sources = resolvedByPath.TryGetValue(path, out var resolvedFile)
+                ? OrderSources(resolvedFile.File.Sources)
+                : [];
+            var winner = sources.FirstOrDefault(s => s.IsWinner);
+            var baseSource = sources.FirstOrDefault(s => s.SourceKind == "Artifact");
+            if (baseSource is not null && winner is not null && winner.SourceKind != "Artifact")
+                notes.Add("An overlay supersedes the artifact base for this path.");
+            else if (baseSource is not null && baseSource.IsShadowed)
+                notes.Add("The artifact base is shadowed by a later overlay for this path.");
+            if (effectiveAvailable && !effectiveDiffers)
+                notes.Add("Effective content matches the artifact base for this path.");
+            if (baseTruncated || effectiveTruncated)
+                notes.Add("Content truncated for display; the comparison covers saved content only.");
+
+            files.Add(new(path, baseAvailable, effectiveAvailable, effectiveDiffers,
+                baseShown, effectiveShown, baseTruncated || effectiveTruncated, sources, diff, notes));
+        }
+
+        return new(hostKey, artifactId, collected.Artifact.Version, files, diagnostics);
+    }
+
+    private static string? TruncateDisplayContent(string? content, out bool truncated)
+    {
+        truncated = content is not null && content.Length > MaxCompareDisplayChars;
+        return truncated ? content![..MaxCompareDisplayChars] : content;
+    }
+
+    // Bounded line diff between two bodies of text. Falls back to a coarse
+    // "differs" outcome (empty diff + truncated flag) when either side exceeds
+    // the source-line bound, and truncates the emitted diff to the result bound.
+    internal static List<OverlayDiffLine> DiffLines(string baseText, string effectiveText, out bool truncated)
+    {
+        truncated = false;
+        var a = SplitLines(baseText);
+        var b = SplitLines(effectiveText);
+        if (a.Count > MaxDiffSourceLines || b.Count > MaxDiffSourceLines)
+        {
+            truncated = true;
+            return [];
+        }
+
+        var n = a.Count;
+        var m = b.Count;
+        var dp = new int[n + 1, m + 1];
+        for (var i = n - 1; i >= 0; i--)
+            for (var j = m - 1; j >= 0; j--)
+                dp[i, j] = string.Equals(a[i], b[j], StringComparison.Ordinal)
+                    ? dp[i + 1, j + 1] + 1
+                    : Math.Max(dp[i + 1, j], dp[i, j + 1]);
+
+        var lines = new List<OverlayDiffLine>();
+        var x = 0;
+        var y = 0;
+        while (x < n && y < m)
+        {
+            if (string.Equals(a[x], b[y], StringComparison.Ordinal))
+            {
+                lines.Add(new("context", x + 1, y + 1, a[x]));
+                x++; y++;
+            }
+            else if (dp[x + 1, y] >= dp[x, y + 1])
+            {
+                lines.Add(new("removed", x + 1, null, a[x]));
+                x++;
+            }
+            else
+            {
+                lines.Add(new("added", null, y + 1, b[y]));
+                y++;
+            }
+        }
+        while (x < n) { lines.Add(new("removed", x + 1, null, a[x])); x++; }
+        while (y < m) { lines.Add(new("added", null, y + 1, b[y])); y++; }
+
+        if (lines.Count > MaxDiffResultLines)
+        {
+            truncated = true;
+            lines = lines.Take(MaxDiffResultLines).ToList();
+        }
+        return lines;
+    }
+
+    private static List<string> SplitLines(string text)
+    {
+        var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n').ToList();
+        if (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
+        return lines;
     }
 
     // Action-bound token over a preview fingerprint: a token minted for
@@ -141,7 +333,7 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
     // store, which re-derives and compares the same fingerprint inside its
     // mutation transaction before writing.
     public async Task ChangeStateFromPreviewAsync(OverlayAdminSnapshot snapshot, int documentId,
-        string hostKey, int artifactId, string expectedHash, bool? enabled, string previewToken, CancellationToken ct)
+        string hostKey, int artifactId, string expectedHash, bool? enabled, string previewToken, string actor, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(previewToken) || artifactId <= 0 || string.IsNullOrWhiteSpace(hostKey))
             throw new InvalidOperationException("A removal preview is required before this change. Reload and preview again.");
@@ -152,7 +344,7 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             throw new InvalidOperationException("Preview detail is unavailable. Reload and preview again.");
         if (!TokenEquals(PreviewActionToken(preview.PreviewFingerprint, enabled), previewToken))
             throw new InvalidOperationException("The preview is stale. Reload and preview again before changing.");
-        await store.ChangeStateFromPreviewAsync(documentId, expectedHash, enabled, preview.TargetHostKey, artifactId, previewToken, ct);
+        await store.ChangeStateFromPreviewAsync(documentId, expectedHash, enabled, preview.TargetHostKey, artifactId, previewToken, actor, ct);
     }
 
     // Removal preview excludes one saved document and compares, per owned
@@ -588,41 +780,73 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         var results = new List<ResolvedFile>();
         foreach (var group in candidates.GroupBy(c => c.File.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
-            var layers = group.GroupBy(c => c.Priority).Select(g => g.Aggregate((a, b) => Wins(b, a) ? b : a))
-                .OrderBy(c => c.Priority).ToList();
+            var layers = Layers(group);
             var winner = layers[^1];
-            var contributing = new HashSet<Candidate>();
-            string? content = null;
-            var valid = true;
-            foreach (var layer in layers)
-            {
-                if (layer.Priority == 0 || Mode(layer.File.MergeMode, group.Key) == "replace")
-                {
-                    content = layer.File.Content;
-                    contributing.Clear();
-                }
-                else if (content is null) content = layer.File.Content;
-                else
-                {
-                    try { content = Merge(content, layer.File.Content); }
-                    catch (Exception ex) when (ex is JsonException or InvalidOperationException)
-                    {
-                        diagnostics.Add($"{group.Key}: merge failed; both inputs must be JSON objects. No effective result.");
-                        valid = false;
-                        break;
-                    }
-                }
-                contributing.Add(layer);
-            }
+            var (content, valid, contributing) = ResolveLayer(layers, group.Key, diagnostics);
             if (!valid) continue;
             EffectiveConfigurationSourceDto Dto(Candidate c) => new(c.File.RelativePath, c.Priority,
                 c.Overlay is null ? "Artifact" : "ConfigOverlay", c.Overlay?.OverlayKey, c.Overlay?.OverlayVersion,
                 c.Overlay?.HostScope, c.File.MergeMode, Mode(c.File.MergeMode, c.File.RelativePath),
-                ReferenceEquals(c, winner), !contributing.Contains(c));
+                ReferenceEquals(c, winner), !contributing.Contains(c),
+                c.Overlay is null ? c.File.RowId : null,
+                c.Overlay?.ConfigOverlayDocumentId,
+                c.Overlay is null ? null : c.File.RowId);
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content ?? string.Empty)));
-            results.Add(new(new(group.Key, Dto(winner), group.OrderBy(c => c.Priority).Select(Dto).ToArray()), hash));
+            results.Add(new(new(group.Key, Dto(winner), group.Select(Dto).ToArray()), hash));
         }
         return results;
+    }
+
+    // One scope winner per priority, in ascending priority order.
+    private static List<Candidate> Layers(IEnumerable<Candidate> group)
+        => group.GroupBy(c => c.Priority).Select(g => g.Aggregate((a, b) => Wins(b, a) ? b : a))
+            .OrderBy(c => c.Priority).ToList();
+
+    // Resolves the layered effective content for one path. Returns null content
+    // plus valid=false on a merge failure; content never leaves the service.
+    private static (string? Content, bool Valid, HashSet<Candidate> Contributing) ResolveLayer(
+        List<Candidate> layers, string path, List<string> diagnostics)
+    {
+        var contributing = new HashSet<Candidate>();
+        string? content = null;
+        foreach (var layer in layers)
+        {
+            if (layer.Priority == 0 || Mode(layer.File.MergeMode, path) == "replace")
+            {
+                content = layer.File.Content;
+                contributing.Clear();
+            }
+            else if (content is null) content = layer.File.Content;
+            else
+            {
+                try { content = Merge(content, layer.File.Content); }
+                catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+                {
+                    diagnostics.Add($"{path}: merge failed; both inputs must be JSON objects. No effective result.");
+                    return (null, false, contributing);
+                }
+            }
+            contributing.Add(layer);
+        }
+        return (content, true, contributing);
+    }
+
+    // Deterministic display order for one path's source list: priority, then
+    // version (descending), then file row id (descending). Stable across reloads.
+    private static IReadOnlyList<EffectiveConfigurationSourceDto> OrderSources(IEnumerable<EffectiveConfigurationSourceDto> sources)
+    {
+        var list = sources.ToList();
+        list.Sort((a, b) =>
+        {
+            var priority = a.SourcePriority.CompareTo(b.SourcePriority);
+            if (priority != 0) return priority;
+            var version = ArtifactVersionComparer.Compare(a.OverlayVersion, b.OverlayVersion);
+            if (version != 0) return -version;
+            var rowId = (a.ConfigOverlayConfigurationFileId ?? a.ArtifactConfigurationFileId ?? 0)
+                .CompareTo(b.ConfigOverlayConfigurationFileId ?? b.ArtifactConfigurationFileId ?? 0);
+            return rowId != 0 ? -rowId : 0;
+        });
+        return list;
     }
 
     private static bool Wins(Candidate a, Candidate b)

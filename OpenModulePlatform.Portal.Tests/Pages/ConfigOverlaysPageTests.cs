@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Antiforgery;
@@ -103,9 +104,9 @@ public sealed class ConfigOverlaysPageTests
     }
 
     [Theory]
-    [InlineData("host-a", false, "host-a", 1)]
-    [InlineData("HOST-A", false, "host-a", 1)]
-    [InlineData("HoSt-A", false, "host-a", 1)]
+    [InlineData("host-a", false, "host-a", 2)]
+    [InlineData("HOST-A", false, "host-a", 2)]
+    [InlineData("HoSt-A", false, "host-a", 2)]
     [InlineData("unknown-host", false, "", 0)]
     [InlineData("other-installation-host", false, "", 0)]
     [InlineData("host-a", true, "", 0)]
@@ -196,13 +197,28 @@ public sealed class ConfigOverlaysPageTests
         Assert.Contains("id=1", response.Headers.Location!.ToString());
         Assert.Equal("*", store.Saved!.HostKey);
         Assert.Equal("3.4.5", store.Saved.ModuleDefinitionVersion);
+        Assert.Equal("overlay-admin-test", store.SavedActor);
+    }
+
+    [Fact]
+    public async Task AuthorizedEnableUsesDocumentIdentityConcurrencyTokenAndActor()
+    {
+        var row = ConfigOverlayAdministrationTests.Overlay();
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(row) };
+        using var server = Server(store);
+        using var client = server.CreateClient();
+        var form = await TokenForm(client);
+        form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(row);
+        var response = await client.PostAsync("/admin/configoverlays?handler=Enable", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal((1, ConfigOverlaysModel.Token(row), true), Assert.Single(store.Changes));
+        Assert.Equal("overlay-admin-test", Assert.Single(store.ChangeActors));
     }
 
     [Theory]
-    [InlineData("Enable", true)]
-    [InlineData("Disable", false)]
-    [InlineData("Delete", null)]
-    public async Task AuthorizedActionsUseDocumentIdentityAndConcurrencyToken(string handler, bool? enabled)
+    [InlineData("Disable")]
+    [InlineData("Delete")]
+    public async Task DisableAndDeleteRequireRemovalPreviewBeforeChangingState(string handler)
     {
         var row = ConfigOverlayAdministrationTests.Overlay();
         var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(row) };
@@ -211,8 +227,8 @@ public sealed class ConfigOverlaysPageTests
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(row);
         var response = await client.PostAsync($"/admin/configoverlays?handler={handler}", new FormUrlEncodedContent(form));
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal((1, ConfigOverlaysModel.Token(row), enabled), Assert.Single(store.Changes));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(store.Changes);
     }
 
     [Fact]
@@ -362,7 +378,7 @@ public sealed class ConfigOverlaysPageTests
     }
 
     [Fact]
-    public async Task DirectDisableWithoutPreviewFieldsStillUsesOnlySelectedToken()
+    public async Task DirectDisableWithoutPreviewFieldsIsRejected()
     {
         var (store, server, client, _) = await PreviewPage();
         using var _ = server;
@@ -371,8 +387,8 @@ public sealed class ConfigOverlaysPageTests
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
         var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Single(store.Changes);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(store.Changes);
     }
 
     [Fact]
@@ -422,6 +438,81 @@ public sealed class ConfigOverlaysPageTests
         Assert.DoesNotContain("{\"host\":true}", html);
         Assert.DoesNotContain("{\"shared\":true}", html);
         Assert.Empty(store.Changes);
+    }
+
+    [Fact]
+    public async Task HostFilterKeepsAllHostsDefaultsAndExcludesForeignHost()
+    {
+        var host = ConfigOverlayAdministrationTests.Overlay(1);
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts");
+        var foreign = ConfigOverlayAdministrationTests.Overlay(3, host: "foreign-host");
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(host, allHosts, foreign) };
+        using var server = Server(store, renderPage: true);
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync("/admin/configoverlays?FilterHost=host-a");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("overlay-1", html);
+        Assert.Contains("overlay-2", html);
+        Assert.DoesNotContain("overlay-3", html);
+    }
+
+    [Fact]
+    public async Task DeletedHistoryRendersAsHistoricalRecordsNotLiveOverlays()
+    {
+        var host = ConfigOverlayAdministrationTests.Overlay(1);
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(host) };
+        store.DeletedHistory =
+        [
+            new OverlayDeletedHistoryRow { ConfigOverlayDocumentId = 9, OverlayKey = "deleted-overlay", OverlayVersion = "1.0.0",
+                HostKey = "host-a", HostScope = "Host", ConfigurationFileCount = 2,
+                DeletedUtc = ConfigOverlayAdministrationTests.Now, DeletedBy = "removed-by-admin" }
+        ];
+        using var server = Server(store, renderPage: true);
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync("/admin/configoverlays");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Deleted overlays", html);
+        Assert.Contains("deleted-overlay", html);
+        Assert.Contains("removed-by-admin", html);
+        Assert.Contains("historical records", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UploadFileAddsContentToDraftAtChosenRelativePath()
+    {
+        var store = new OverlayAdminFakeStore();
+        using var server = Server(store);
+        using var client = server.CreateClient();
+        var form = await TokenForm(client);
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(form["__RequestVerificationToken"]), "__RequestVerificationToken");
+        content.Add(new StringContent("nested/appsettings.json"), "DraftFileRelativePath");
+        content.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("""{"uploaded":true}""")), "UploadedFile", "appsettings.json");
+        using var response = await client.PostAsync("/admin/configoverlays?handler=UploadFile", content);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var draftJson = body.RootElement.GetProperty("draft").GetProperty("json").GetString();
+        Assert.Contains("nested/appsettings.json", draftJson);
+        Assert.Contains("uploaded", draftJson);
+    }
+
+    [Fact]
+    public async Task UploadFileRequiresNonEmptyRelativePath()
+    {
+        var store = new OverlayAdminFakeStore();
+        using var server = Server(store);
+        using var client = server.CreateClient();
+        var form = await TokenForm(client);
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(form["__RequestVerificationToken"]), "__RequestVerificationToken");
+        content.Add(new StringContent("   "), "DraftFileRelativePath");
+        content.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("x")), "UploadedFile", "x.txt");
+        using var response = await client.PostAsync("/admin/configoverlays?handler=UploadFile", content);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.GetProperty("errors").EnumerateArray().Any());
     }
 
     private static string ExtractPreviewToken(string html, string action)
@@ -494,7 +585,8 @@ public sealed class ConfigOverlaysPageTests
         {
             app.Use((context, next) =>
             {
-                context.User = new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "overlay-admin-test")], "test"));
+                context.User = new(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, "overlay-admin-test"), new Claim(ClaimTypes.Name, "overlay-admin-test")], "test"));
                 context.Items["OMP.RbacService.RoleContext"] = new UserRoleContext
                 { EffectivePermissions = admin ? new() { "OMP.Portal.Admin" } : new() };
                 return next();
