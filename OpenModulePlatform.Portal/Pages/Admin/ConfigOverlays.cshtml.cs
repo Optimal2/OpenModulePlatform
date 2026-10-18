@@ -225,8 +225,20 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         var entries = archive.Entries.Where(entry => !string.IsNullOrEmpty(entry.Name)).ToArray();
         if (entries.Length != 1 || entries[0].Length > MaxUploadedFileBytes)
             throw new InvalidDataException();
+        // Bound the ACTUAL decompressed bytes, not the archive's declared entry length:
+        // a forged header must not let a small upload inflate into an unbounded string.
         await using var entryStream = entries[0].Open();
-        return await ReadTextStreamAsync(entryStream, ct);
+        var bounded = new MemoryStream();
+        var buffer = new byte[81920];
+        int read;
+        while ((read = await entryStream.ReadAsync(buffer, ct)) > 0)
+        {
+            if (bounded.Length + read > MaxUploadedFileBytes)
+                throw new InvalidDataException();
+            bounded.Write(buffer, 0, read);
+        }
+        bounded.Position = 0;
+        return await ReadTextStreamAsync(bounded, ct);
     }
 
     private static async Task<string> ReadTextStreamAsync(Stream stream, CancellationToken ct)

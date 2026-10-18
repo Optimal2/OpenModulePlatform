@@ -90,7 +90,7 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
     private static void HydrateSelector(JsonObject root, string name, string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
-        var current = root[name]?.GetValue<string>();
+        var current = root[name] is JsonValue existing && existing.TryGetValue<string>(out var text) ? text : null;
         if (string.IsNullOrWhiteSpace(current)) root[name] = value;
     }
 
@@ -521,7 +521,7 @@ WHERE overlay.ConfigOverlayDocumentId = @id;";
         await conn.OpenAsync(ct);
         if (!await TableExistsAsync(conn, "omp.AuditLog", ct)) return [];
         const string sql = """
-            SELECT TargetId, BeforeJson, CreatedUtc, Actor
+            SELECT TOP (200) TargetId, BeforeJson, CreatedUtc, Actor
             FROM omp.AuditLog
             WHERE TargetType = 'ConfigOverlay' AND Action = 'Delete' AND BeforeJson IS NOT NULL
             ORDER BY CreatedUtc DESC, AuditLogId DESC;
@@ -580,6 +580,7 @@ WHERE overlay.ConfigOverlayDocumentId = @id;";
     private static string? Str(JsonObject root, string name)
     {
         var node = root[name];
-        return node is null || node.GetValueKind() == JsonValueKind.Null ? null : node.GetValue<string>();
+        // A non-string stored node is an anomalous document, reported as unreadable, never a 500.
+        return node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
     }
 }
