@@ -326,6 +326,273 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         Assert.True(published[1].Result.Applied);
     }
 
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_OverlayOwnedFileRemoved_WhenOverlayRemovedAndArtifactUnchanged()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        // First cycle: full deploy writes the overlay-owned file and records it.
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, "odv.site.config.js");
+        Assert.True(File.Exists(overlayPath));
+
+        // Overlay removed while the artifact and its content hash are unchanged: the
+        // already-applied fast path must reconcile (remove) the recorded overlay file.
+        repository.ArtifactConfigurationFiles.Clear();
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(overlayPath));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.Result.State);
+        Assert.True(last.Result.Applied);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_OverlayOwnedFile_ReplacedWhenArtifactNowOwnsThePath()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out var moduleInstanceKey, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, relativePath, "// overlay"));
+        var overlayPath = Path.Join(descriptor.InstallPath!, relativePath);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        Assert.Equal("// overlay", File.ReadAllText(overlayPath));
+
+        // The artifact changes and now owns the same path; the overlay goes away. The path
+        // is still desired, so it must be restored to the artifact's content, not removed.
+        // Build a successor descriptor that keeps the same app instance/target but a new id.
+        var nextSource = Path.Join(Path.GetDirectoryName(descriptor.InstallPath!)!, "source-v2");
+        Directory.CreateDirectory(nextSource);
+        File.WriteAllText(Path.Join(nextSource, "app.txt"), "content");
+        var next = new WebAppDeploymentDescriptor
+        {
+            HostId = descriptor.HostId,
+            HostKey = descriptor.HostKey,
+            AppInstanceId = descriptor.AppInstanceId,
+            AppInstanceKey = descriptor.AppInstanceKey,
+            AppKey = descriptor.AppKey,
+            ModuleInstanceKey = moduleInstanceKey,
+            DisplayName = descriptor.DisplayName,
+            ArtifactId = 2,
+            Version = "1.0.1",
+            SourceLocalPath = nextSource,
+            ContentSha256 = "bb22",
+            InstallPath = descriptor.InstallPath,
+            DeploymentState = HostDeploymentStatuses.Succeeded,
+            DeployedArtifactId = 1,
+            DeployedSourceLocalPath = descriptor.SourceLocalPath,
+            DeployedTargetPath = descriptor.InstallPath,
+            DeployedRuntimeName = "TestSite/",
+            DeployedContentSha256 = "AA11"
+        };
+        repository.DesiredWebAppDeployments.Clear();
+        repository.DesiredWebAppDeployments.Add(next);
+        repository.ArtifactConfigurationFiles.Clear();
+        repository.ArtifactConfigurationFiles.Add(new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 200,
+            ArtifactId = 2,
+            RelativePath = relativePath,
+            FileContent = "// artifact v2"
+        });
+
+        await service.DeployDesiredWebAppsAsync(next.HostKey, CancellationToken.None);
+        Assert.Equal("// artifact v2", File.ReadAllText(overlayPath));
+
+        // A subsequent already-applied cycle must not reconcile (remove) the now artifact-owned file.
+        await service.DeployDesiredWebAppsAsync(next.HostKey, CancellationToken.None);
+        Assert.True(File.Exists(overlayPath));
+        Assert.Equal("// artifact v2", File.ReadAllText(overlayPath));
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_UnrelatedManualFile_IsPreservedDuringOverlayReconcile()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var manualPath = Path.Join(descriptor.InstallPath!, "operator-notes.txt");
+        File.WriteAllText(manualPath, "operator");
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(Path.Join(descriptor.InstallPath!, "odv.site.config.js")));
+        Assert.True(File.Exists(manualPath));
+        Assert.Equal("operator", File.ReadAllText(manualPath));
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_ModifiedOverlayOwnedFile_IsLeftInPlaceAndWarns()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, "odv.site.config.js");
+        File.WriteAllText(overlayPath, "// operator modified");
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(overlayPath));
+        Assert.Equal("// operator modified", File.ReadAllText(overlayPath));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.Result.State);
+        Assert.False(last.Result.Applied);
+        Assert.Contains("modified", last.Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_ForeignInventory_IsNotUsedForRemoval()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, "odv.site.config.js");
+        Assert.True(File.Exists(overlayPath));
+
+        // A foreign app instance owns the inventory on disk; it must not authorize removal.
+        AppliedOverlayFileInventory.Write(
+            descriptor.InstallPath!,
+            Guid.NewGuid(),
+            "other-app",
+            "other-host",
+            []);
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(overlayPath));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.False(last.Result.Applied);
+        Assert.Contains("app instance", last.Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_ReparsePointOverlayOwnedFile_IsLeftInPlaceAndWarns()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, "odv.site.config.js");
+        File.Delete(overlayPath);
+        var victim = Path.Join(descriptor.InstallPath!, "victim.txt");
+        File.WriteAllText(victim, "victim");
+        if (!TryCreateFileSymlink(overlayPath, victim))
+        {
+            return; // Symlink privilege unavailable; the guard is covered by its own tests.
+        }
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(victim));
+        Assert.Equal("victim", File.ReadAllText(victim));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.False(last.Result.Applied);
+        Assert.Contains("reparse point", last.Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_OverlayReconcile_IsIdempotentAcrossCycles()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, "odv.site.config.js");
+        Assert.True(File.Exists(overlayPath));
+
+        repository.ArtifactConfigurationFiles.Clear();
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        Assert.False(File.Exists(overlayPath));
+        Assert.True(repository.PublishedWebAppResults.Last().Result.Applied);
+
+        // A restart-safe retry reports applied:false and changes nothing further.
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        Assert.False(File.Exists(overlayPath));
+        Assert.False(repository.PublishedWebAppResults.Last().Result.Applied);
+    }
+
+    [Fact]
+    public async Task DeploymentLease_BusyLeavesOverlayFileUntouched()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        repository.EnabledHostCount = 2;
+        repository.DeploymentSettings["DeploymentLockScope"] = "app";
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, "odv.site.config.js", "// overlay"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, "odv.site.config.js");
+        Assert.True(File.Exists(overlayPath));
+
+        repository.ArtifactConfigurationFiles.Clear();
+        var owner = Guid.NewGuid();
+        await repository.AcquireAppDeploymentLeaseAsync("app:" + descriptor.AppKey, owner, "Other host", 600, default);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, default);
+
+        Assert.True(File.Exists(overlayPath));
+        Assert.Equal(HostDeploymentStatuses.Warning, repository.PublishedWebAppResults.Last().Result.State);
+    }
+
+    private static ArtifactConfigurationFileDescriptor CreateOverlayOwnedFile(
+        int artifactId,
+        string relativePath,
+        string fileContent)
+        => new()
+        {
+            ArtifactConfigurationFileId = 100,
+            ArtifactId = artifactId,
+            RelativePath = relativePath,
+            FileContent = fileContent,
+            IsOverlayOwnedWholeFile = true
+        };
+
+    private static bool TryCreateFileSymlink(string linkPath, string targetPath)
+    {
+        try
+        {
+            File.CreateSymbolicLink(linkPath, targetPath);
+            return File.Exists(linkPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return false;
+        }
+    }
+
     private static void ApplyConfigurationForAlreadyAppliedDeployment(
         FakeOmpHostArtifactRepository repository,
         HostAgentSettings settings,

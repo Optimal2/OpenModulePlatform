@@ -311,14 +311,34 @@ public sealed class WebAppDeploymentService
                 return;
             }
 
-            if (IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)
-                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
+            // Overlay-owned whole files the overlay no longer supplies are the one class of
+            // content the fast path below leaves behind: AreApplied only looks at desired files,
+            // so a removed overlay file persisted forever. Resolve the desired set and plan any
+            // reconciliation before the fast path so the decision is made on the same cycle.
+            var desiredOverlayFiles = AppliedOverlayFileReconciler.ResolveDesiredOverlayFiles(
+                configurationFiles,
+                configurationVariables);
+            var overlayRemovalPlan = AppliedOverlayFileReconciler.Plan(
+                targetPath,
+                deployment,
+                desiredOverlayFiles);
+            var overlayRemovalWarning = overlayRemovalPlan.Warning;
+
+            var alreadyApplied = IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)
+                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables);
+
+            if (alreadyApplied && !overlayRemovalPlan.HasRemovals)
             {
+                if (overlayRemovalWarning is null && overlayRemovalPlan.ShouldRefreshInventory)
+                {
+                    AppliedOverlayFileReconciler.WriteInventory(targetPath, deployment, desiredOverlayFiles);
+                }
+
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
                     WithExtractedOmpAuth(
                         AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false)
-                            .WithDiagnosticWarning(diagnosticWarning)),
+                            .WithDiagnosticWarning(CombineWarnings(diagnosticWarning, overlayRemovalWarning))),
                     cancellationToken);
                 return;
             }
@@ -396,60 +416,84 @@ public sealed class WebAppDeploymentService
                         .WithDiagnosticWarning(diagnosticWarning)),
                 cancellationToken);
 
-            if (UseAppCmdAppPoolControl(settings)
-                && settings.StopIisAppPoolForWebAppDeployment
-                && settings.StartIisAppPoolAfterWebAppDeployment
-                && !string.IsNullOrWhiteSpace(runtimeName))
+            if (alreadyApplied)
             {
-                var initialAppPoolState = IisAppCmd.GetAppPoolState(runtimeName);
-                if (string.Equals(initialAppPoolState, "Started", StringComparison.OrdinalIgnoreCase))
+                // Targeted reconciliation: only files recorded as overlay-owned whole files are
+                // removed. The generic full mirror is not an owned-path proof and would delete
+                // unrelated operator files, so it is deliberately not used here.
+                var removalWarning = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, removalWarning);
+                if (overlayRemovalWarning is null)
                 {
-                    DeploymentRuntimeStopMarker.Write(
-                        targetPath,
-                        "web-app",
+                    AppliedOverlayFileReconciler.WriteInventory(targetPath, deployment, desiredOverlayFiles);
+                }
+
+                _logger.LogInformation(
+                    "Web app overlay-owned files reconciled. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Removed={Removed}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    overlayRemovalPlan.RemoveEntries.Count);
+            }
+            else
+            {
+                if (UseAppCmdAppPoolControl(settings)
+                    && settings.StopIisAppPoolForWebAppDeployment
+                    && settings.StartIisAppPoolAfterWebAppDeployment
+                    && !string.IsNullOrWhiteSpace(runtimeName))
+                {
+                    var initialAppPoolState = IisAppCmd.GetAppPoolState(runtimeName);
+                    if (string.Equals(initialAppPoolState, "Started", StringComparison.OrdinalIgnoreCase))
+                    {
+                        DeploymentRuntimeStopMarker.Write(
+                            targetPath,
+                            "web-app",
+                            runtimeName,
+                            deployment.AppInstanceId,
+                            deployment.AppInstanceKey,
+                            deployment.HostKey);
+                        stopMarkerWritten = true;
+                    }
+
+                    appPoolStopped = await StopAppPoolIfRunningAsync(
                         runtimeName,
-                        deployment.AppInstanceId,
-                        deployment.AppInstanceKey,
-                        deployment.HostKey);
-                    stopMarkerWritten = true;
+                        settings.IisAppPoolStopTimeoutSeconds,
+                        initialAppPoolState,
+                        cancellationToken);
+                    if (!appPoolStopped && stopMarkerWritten)
+                    {
+                        DeploymentRuntimeStopMarker.Delete(targetPath);
+                        stopMarkerWritten = false;
+                    }
                 }
 
-                appPoolStopped = await StopAppPoolIfRunningAsync(
-                    runtimeName,
-                    settings.IisAppPoolStopTimeoutSeconds,
-                    initialAppPoolState,
-                    cancellationToken);
-                if (!appPoolStopped && stopMarkerWritten)
+                await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
+
+                if (UseAppCmdAppPoolControl(settings)
+                    && settings.StartIisAppPoolAfterWebAppDeployment
+                    && !string.IsNullOrWhiteSpace(runtimeName))
                 {
-                    DeploymentRuntimeStopMarker.Delete(targetPath);
-                    stopMarkerWritten = false;
+                    StartAppPoolIfStopped(runtimeName);
+                    appPoolStopped = false;
+                    if (stopMarkerWritten)
+                    {
+                        DeploymentRuntimeStopMarker.Delete(targetPath);
+                        stopMarkerWritten = false;
+                    }
                 }
+
+                if (deploymentCycle.IsCoordinated)
+                    await _deploymentHealthCheck(settings, deployment, runtimeName, cancellationToken);
+
+                AppliedOverlayFileReconciler.WriteInventory(targetPath, deployment, desiredOverlayFiles);
             }
 
-            await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
-
-            if (UseAppCmdAppPoolControl(settings)
-                && settings.StartIisAppPoolAfterWebAppDeployment
-                && !string.IsNullOrWhiteSpace(runtimeName))
-            {
-                StartAppPoolIfStopped(runtimeName);
-                appPoolStopped = false;
-                if (stopMarkerWritten)
-                {
-                    DeploymentRuntimeStopMarker.Delete(targetPath);
-                    stopMarkerWritten = false;
-                }
-            }
-
-            if (deploymentCycle.IsCoordinated)
-                await _deploymentHealthCheck(settings, deployment, runtimeName, cancellationToken);
             deploymentHealthy = true;
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
                 WithExtractedOmpAuth(
                     AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: true)
-                        .WithDiagnosticWarning(diagnosticWarning)),
+                        .WithDiagnosticWarning(CombineWarnings(diagnosticWarning, overlayRemovalWarning))),
                 cancellationToken);
 
             _logger.LogInformation(
@@ -600,6 +644,21 @@ public sealed class WebAppDeploymentService
             && ArtifactHash.MatchesDeployedContent(deployment.ContentSha256, deployment.DeployedContentSha256)
             && Directory.Exists(targetPath)
             && IisApplicationIsPresentOrNotManaged(settings, iisAppName);
+    }
+
+    private static string? CombineWarnings(string? first, string? second)
+    {
+        if (string.IsNullOrWhiteSpace(first))
+        {
+            return second;
+        }
+
+        if (string.IsNullOrWhiteSpace(second))
+        {
+            return first;
+        }
+
+        return first + Environment.NewLine + second;
     }
 
     /// <summary>

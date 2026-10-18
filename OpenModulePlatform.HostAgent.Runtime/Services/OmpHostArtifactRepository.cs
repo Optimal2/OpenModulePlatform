@@ -3586,6 +3586,14 @@ WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
             group.Add(candidate);
         }
 
+        // A relative path is owned by the artifact when any row supplying it has
+        // SourcePriority 0 (the artifact base). Overlay rows merged onto such a base still
+        // count as artifact-owned: the merged file is not a standalone overlay file.
+        var artifactOwnedPaths = rows
+            .Where(static pair => pair.Value.Any(static candidate => candidate.SourcePriority == 0))
+            .Select(static pair => pair.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var resolved = new List<ArtifactConfigurationFileDescriptor>(rows.Count);
         foreach (var group in rows.Values)
         {
@@ -3622,7 +3630,17 @@ WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
                 }
             }
 
-            resolved.Add(winner.Descriptor);
+            resolved.Add(new ArtifactConfigurationFileDescriptor
+            {
+                ArtifactConfigurationFileId = winner.Descriptor.ArtifactConfigurationFileId,
+                ArtifactId = winner.Descriptor.ArtifactId,
+                RelativePath = winner.Descriptor.RelativePath,
+                FileContent = winner.Descriptor.FileContent,
+                IsOverlayOwnedWholeFile = IsOverlayOwnedWholeFile(
+                    winner.SourcePriority,
+                    winner.Descriptor.RelativePath,
+                    artifactOwnedPaths)
+            });
         }
 
         return resolved
@@ -3725,6 +3743,20 @@ WHERE ar.ArtifactId = @artifactId;";
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
         return (await cmd.ExecuteScalarAsync(ct)) as string;
     }
+
+    /// <summary>
+    /// A resolved configuration file is overlay-owned as a whole when an overlay row supplied it
+    /// and the artifact owns no file at the same relative path. Such a file stands alone on disk,
+    /// so when the overlay stops supplying it the already-applied fast path must reconcile
+    /// (remove) it instead of leaving it behind. A path the artifact owns -- including one an
+    /// overlay merged into -- is never overlay-owned; the built-in appsettings.json is likewise
+    /// excluded because it is constructed later without this flag.
+    /// </summary>
+    internal static bool IsOverlayOwnedWholeFile(
+        int sourcePriority,
+        string relativePath,
+        IReadOnlySet<string> artifactOwnedPaths)
+        => sourcePriority > 0 && !artifactOwnedPaths.Contains(relativePath);
 
     /// <summary>
     /// Deterministic winner selection when several rows supply the same relative path:
