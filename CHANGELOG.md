@@ -6,14 +6,6 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ## [Unreleased]
 
-### Fixed
-
-- Selective installer builds of document-viewer artifacts now inject the default
-  runtime configuration integrity hash, matching repository-script builds.
-- Renew the WorkerManager artifact identity after its published binary content changed.
-- Core-maintenance tests derive the expected version from their actual payload so
-  routine module-definition version bumps preserve the newer-version refusal checks.
-
 ### Added
 
 - **Search on this page, with depth, in the top bar.** A find bar the size
@@ -250,6 +242,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   suites or carries a copy of either.
 
 ### Fixed
+
+- Selective installer builds of document-viewer artifacts now inject the default
+  runtime configuration integrity hash, matching repository-script builds.
+- Renew the WorkerManager artifact identity after its published binary content changed.
+- Core-maintenance tests derive the expected version from their actual payload so
+  routine module-definition version bumps preserve the newer-version refusal checks.
 
 - **The theme menu opens on hover like the top bar's other menus.** The
   theme switch opened only on a click; on a pointer that can hover it now
