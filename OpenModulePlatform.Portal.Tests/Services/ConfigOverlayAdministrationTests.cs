@@ -257,7 +257,12 @@ internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
     public Task<OverlayAdminSnapshot> ReadAsync(CancellationToken ct) { Reads++; return Task.FromResult(Snapshot); }
     public Task<OverlayAdminDetail?> DetailAsync(int id, CancellationToken ct) { DetailReads.Add(id); return Task.FromResult(Details.GetValueOrDefault(id)); }
     public List<OverlaySourceRow> ArtifactFiles { get; } = [];
-    public Task<IReadOnlyList<OverlaySourceRow>> SourcesAsync(int artifactId, CancellationToken ct) { SourceReads++; return Task.FromResult<IReadOnlyList<OverlaySourceRow>>(ArtifactFiles); }
+    public Dictionary<int, List<OverlaySourceRow>> ArtifactFilesById { get; } = [];
+    public Task<IReadOnlyList<OverlaySourceRow>> SourcesAsync(int artifactId, CancellationToken ct)
+    {
+        SourceReads++;
+        return Task.FromResult<IReadOnlyList<OverlaySourceRow>>(ArtifactFilesById.GetValueOrDefault(artifactId, ArtifactFiles));
+    }
     public Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, CancellationToken ct)
     {
         if (RejectSave) throw new InvalidOperationException("private-secret SQL content");

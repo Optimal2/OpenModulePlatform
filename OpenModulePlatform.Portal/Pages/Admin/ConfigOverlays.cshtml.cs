@@ -17,6 +17,7 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
     public OverlayAdminDetail? Detail { get; private set; }
     public OverlayEffectiveReadback? Effective { get; private set; }
     public OverlayRemovalPreview? RemovalPreview { get; private set; }
+    public OverlayInstallationImpact? InstallationImpact { get; private set; }
     [BindProperty] public DraftInput Draft { get; set; } = new();
     [BindProperty(SupportsGet = true)] public string? HostKey { get; set; }
     [BindProperty(SupportsGet = true)] public int? ArtifactId { get; set; }
@@ -57,6 +58,13 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
             // token, so a stale preview cannot silently mutate.
             try { RemovalPreview = await administration.PreviewRemovalAsync(Snapshot, id.Value, requestedHostKey, ArtifactId.Value, ct); }
             catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a registered host and artifact in this installation.")); }
+        }
+        if (id.HasValue && Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == id.Value))
+        {
+            // Installation-wide read-only impact for the opened overlay. No
+            // selection needed and no mutation is offered from this section.
+            try { InstallationImpact = await administration.PreviewInstallationImpactAsync(Snapshot, id.Value, ct); }
+            catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a saved overlay in this installation.")); }
         }
         return Page();
     }

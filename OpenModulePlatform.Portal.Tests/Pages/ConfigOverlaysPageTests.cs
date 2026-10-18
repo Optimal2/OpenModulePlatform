@@ -20,6 +20,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using OpenModulePlatform.Portal.Localization;
+using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Pages.Admin;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Portal.Tests.Services;
@@ -388,6 +389,39 @@ public sealed class ConfigOverlaysPageTests
         Assert.Contains("choose a host and artifact", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("name=\"id\" value=\"1\"", html);
         Assert.DoesNotContain("Removal impact preview", html);
+    }
+
+    [Fact]
+    public async Task RenderedInstallationImpactListsConfiguredContextsWithoutContent()
+    {
+        var host = ConfigOverlayAdministrationTests.Overlay(1);
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = new OverlayAdminSnapshot(true,
+            [new HostRow { HostKey = "host-a", IsEnabled = true }, new HostRow { HostKey = "host-b", IsEnabled = true }],
+            [new ArtifactRow { ArtifactId = 42, ModuleKey = "module", AppKey = "app", Version = "1.10.0", PackageType = "web-app", IsEnabled = true }],
+            [host, allHosts], true,
+            [new AppInstanceRow { AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
+                AppKey = "app", AppInstanceKey = "web-a", DisplayName = "web-a", AppType = "web", HostKey = "host-a", ArtifactId = 42 },
+             new AppInstanceRow { AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
+                AppKey = "app", AppInstanceKey = "web-b", DisplayName = "web-b", AppType = "web", HostKey = "host-b", ArtifactId = 42 }]);
+        var store = new OverlayAdminFakeStore { Snapshot = snapshot };
+        store.Details[1] = new(host, "", [ConfigOverlayAdministrationTests.File(1, 1, """{"host":true}""")]);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);
+        using var server = Server(store, renderPage: true);
+        using var client = server.CreateClient();
+        // No host/artifact selection: the installation impact needs none.
+        using var response = await client.GetAsync("/admin/configoverlays?id=1");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Installation impact", html);
+        Assert.Contains("host-a", html);
+        Assert.Contains("host-b", html);
+        Assert.Contains("FallsBack", html);
+        Assert.Contains("NotApplicable", html);
+        Assert.Contains("1.10.0", html);
+        Assert.DoesNotContain("{\"host\":true}", html);
+        Assert.DoesNotContain("{\"shared\":true}", html);
+        Assert.Empty(store.Changes);
     }
 
     private static string ExtractPreviewToken(string html, string action)

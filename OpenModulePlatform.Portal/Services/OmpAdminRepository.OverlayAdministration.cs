@@ -26,7 +26,8 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
             && await TableExistsAsync(conn, "omp.ConfigOverlayConfigurationFiles", ct);
         var hasScope = await ColumnExistsAsync(conn, "omp.ConfigOverlayDocuments", "HostScope", ct);
         return new(ready, await GetHostsAsync(ct), await GetArtifactsAsync(ct),
-            documentsExist ? await GetConfigOverlayDocumentsAsync(ct) : [], hasScope);
+            documentsExist ? await GetConfigOverlayDocumentsAsync(ct) : [], hasScope,
+            AppInstances: await GetAppInstancesAsync(ct));
     }
 
     async Task<OverlayAdminDetail?> IConfigOverlayAdminStore.DetailAsync(int id, CancellationToken ct)

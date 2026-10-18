@@ -190,3 +190,58 @@
     @foreach (var diagnostic in Model.RemovalPreview.Diagnostics) { <p role="status">@diagnostic</p> }
 </section>
 }
+@if (Model.InstallationImpact is not null)
+{
+<section class="card top-gap">
+    <h3>@L["Installation impact"]</h3>
+    <p>@L["Read-only impact of disabling or deleting the opened overlay across the configured app contexts of this installation. Saved rows only: never live files, disk contents or final deployment configuration. A context is one configured app on one concrete host with the exact artifact version it runs. No change is offered here."]</p>
+    @if (Model.InstallationImpact.Contexts.Count == 0)
+    {
+        <p>@L["No configured app contexts in this installation."]</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>@L["Host"]</th><th>@L["App context"]</th><th>@L["Artifact"]</th><th>@L["State"]</th><th>@L["Files"]</th></tr></thead>
+            <tbody>
+            @foreach (var context in Model.InstallationImpact.Contexts)
+            {
+                <tr>
+                    <td>@context.HostKey</td>
+                    <td>@context.AppInstanceKey (@context.AppKey)</td>
+                    <td>@(context.ArtifactId is null ? L["no registered artifact"].Value : $"{context.ArtifactId} / {context.ArtifactVersion}")</td>
+                    <td>@context.ContextState</td>
+                    <td>
+                        @if (context.Files.Count == 0)
+                        {
+                            <span>@L["No owned files apply."]</span>
+                        }
+                        else
+                        {
+                            <ul>
+                            @foreach (var file in context.Files)
+                            {
+                                <li>@file.RelativePath — @file.Outcome — @(file.CurrentWinner is null ? L["no saved source"].Value : $"{file.CurrentWinner.SourceKind} {file.CurrentWinner.HostScope} {file.CurrentWinner.OverlayKey} {file.CurrentWinner.OverlayVersion}") → @(file.WinnerAfterRemoval is null ? L["no saved source"].Value : $"{file.WinnerAfterRemoval.SourceKind} {file.WinnerAfterRemoval.HostScope} {file.WinnerAfterRemoval.OverlayKey} {file.WinnerAfterRemoval.OverlayVersion}")</li>
+                            }
+                            </ul>
+                        }
+                        @foreach (var note in context.Notes) { <p role="status">@note</p> }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+    @if (Model.InstallationImpact.PossibleArtifacts.Count > 0)
+    {
+        <h4>@L["Possible artifact matches (not deployments)"]</h4>
+        <ul>
+        @foreach (var artifact in Model.InstallationImpact.PossibleArtifacts)
+        {
+            <li>@artifact.ArtifactId / @artifact.ModuleKey / @artifact.AppKey / @artifact.PackageType / @artifact.TargetName / @artifact.Version</li>
+        }
+        </ul>
+    }
+    @foreach (var diagnostic in Model.InstallationImpact.Diagnostics) { <p role="status">@diagnostic</p> }
+</section>
+}

@@ -31,7 +31,9 @@ or explicit export responses. Do not copy content into status messages or logs.
 The DTO declarations are in
 `OpenModulePlatform.Portal/Models/ConfigOverlayAdminDtos.cs`:
 `ConfigOverlayListItemDto`, `ConfigOverlayFileDto`, `ConfigOverlayDetailDto`,
-`EffectiveConfigurationSourceDto` and `EffectiveConfigurationFileDto`.
+`EffectiveConfigurationSourceDto`, `EffectiveConfigurationFileDto`,
+`OverlayInstallationContextDto`, `OverlayInstallationFileDto` and
+`OverlayPossibleArtifactDto`.
 The saved-source view uses these metadata contracts; the authorized editor
 loads canonical JSON and normalized rows through `IConfigOverlayAdminStore`.
 
@@ -160,6 +162,44 @@ anything and never changes deletion persistence, schema or HostAgent behavior.
   guidance to choose a host and artifact in the saved-source view, and that
   view's form keeps the opened document ID, so choosing a selection does not
   silently drop the opened overlay.
+
+## Installation-wide impact preview
+
+`ConfigOverlayAdministration.PreviewInstallationImpactAsync(snapshot,
+documentId, ct)` is a read-only aggregate over the whole connected
+installation for one saved overlay. It needs no host/artifact selection and
+offers no mutation: no per-action tokens, no store writes, no schema, audit,
+delete, HostAgent or runtime behavior changes.
+
+- A deployment context is one `AppInstanceRow`: a concrete host plus the
+  exact artifact version it is configured to run, ordered by host key, app
+  instance key and artifact ID. Host-only overlays affect only their concrete
+  host; AllHosts overlays apply to every registered compatible context,
+  obeying module/app/package/target selectors, the artifact minimum version
+  and enabled state. Duplicate app keys on two hosts remain separate
+  contexts. A host/artifact cross-product is never labelled a deployment.
+- Each context classifies every enabled owned file with the same
+  winner-plus-merged-content comparison as the single host/artifact removal
+  preview (shared `ClassifyRemovalFile`, including lower-layer merge
+  contributions); `ContextState` is `Applicable`, `NotApplicable` (saved
+  selectors or state exclude the overlay; owned files stay listed as
+  `Unchanged` with the reason) or `Unavailable` (absent host or artifact
+  row, so nothing can resolve).
+- Artifacts that match the overlay selectors but are referenced by no
+  configured app are listed separately as possible matches with exact
+  versions, never as deployments. Registered hosts without any configured
+  app context, truncation (`MaxInstallationContexts`,
+  `MaxPossibleArtifacts` with omitted counts) and the saved-rows-only scope
+  are reported as diagnostics, so the bounded output never silently omits
+  impacts.
+- Saved file rows are read once per referenced artifact and once per enabled
+  overlay that can apply to a resolvable context; unknown documents throw
+  `InvalidOperationException` before any saved-context reads. File content
+  never leaves the service: contexts, files and diagnostics carry winner
+  metadata only.
+- The page renders this aggregate in its own `Installation impact` section
+  whenever an overlay is opened. The existing selected detailed preview and
+  its preview-bound transactional mutation guarantees are unchanged.
 
 ## Schema and validation limits
 

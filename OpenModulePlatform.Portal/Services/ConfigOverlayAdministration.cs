@@ -24,7 +24,8 @@ public interface IConfigOverlayAdminStore
 }
 
 public sealed record OverlayAdminSnapshot(bool SchemaReady, IReadOnlyList<HostRow> Hosts,
-    IReadOnlyList<ArtifactRow> Artifacts, IReadOnlyList<ConfigOverlayDocumentRow> Overlays, bool HasHostScope = true);
+    IReadOnlyList<ArtifactRow> Artifacts, IReadOnlyList<ConfigOverlayDocumentRow> Overlays, bool HasHostScope = true,
+    IReadOnlyList<AppInstanceRow>? AppInstances = null);
 public sealed record OverlayAdminDetail(ConfigOverlayDocumentRow Summary, string Json, IReadOnlyList<OverlaySourceRow> Files);
 // Content stays inside the service; effective-source responses contain metadata only.
 public sealed record OverlaySourceRow(int RowId, int? DocumentId, string RelativePath, string Content,
@@ -58,6 +59,24 @@ public sealed record OverlayRemovalPreview(
     // that can contribute to or fall back for the previewed paths. Hash only;
     // never file content. Per-action tokens derive from it.
     string PreviewFingerprint);
+// Installation-wide read-only impact for one saved overlay across the
+// configured app contexts of this installation. Metadata only; file content
+// is never included. Saved rows only: never live files, disk contents or
+// final deployment configuration. Read-only: no tokens, no mutations.
+public sealed record OverlayInstallationImpact(
+    int DocumentId,
+    string OverlayKey,
+    string OverlayVersion,
+    string HostScope,
+    string HostKey,
+    bool DocumentWasEnabled,
+    bool DetailUnavailable,
+    IReadOnlyList<OverlayInstallationContextDto> Contexts,
+    IReadOnlyList<OverlayPossibleArtifactDto> PossibleArtifacts,
+    int TotalConfiguredContexts,
+    int OmittedContexts,
+    int OmittedArtifacts,
+    IReadOnlyList<string> Diagnostics);
 
 public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
 {
@@ -173,40 +192,8 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             {
                 var currentEntry = current.SingleOrDefault(f => string.Equals(f.File.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
                 var afterEntry = after.SingleOrDefault(f => string.Equals(f.File.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
-                var currentFile = currentEntry?.File; var afterFile = afterEntry?.File;
-                if (blocker is not null)
-                {
-                    files.Add(new(owned.RelativePath, currentFile?.Winner, afterFile?.Winner, "Unchanged",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: {blocker} Removal changes nothing on this host and artifact."]));
-                }
-                else if (currentFile is null)
-                {
-                    files.Add(new(owned.RelativePath, null, afterFile?.Winner, "Unknown",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: no saved effective file at this path; coverage is unknown. Reload before changing anything."]));
-                }
-                else if (afterFile is null)
-                {
-                    files.Add(new(owned.RelativePath, currentFile.Winner, null, "NoEffectiveFile",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: no saved source remains for this path after removal."]));
-                }
-                else if (!SameSource(currentFile.Winner, afterFile.Winner))
-                {
-                    files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "FallsBack",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: {Describe(afterFile.Winner)} becomes the winner."]));
-                }
-                else if (!string.Equals(currentEntry!.ContentHash, afterEntry!.ContentHash, StringComparison.Ordinal))
-                {
-                    // Winner identity alone is not enough: a merge contribution
-                    // below the winner changes the effective content even
-                    // though the same source still wins.
-                    files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "ChangesEffectiveContent",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: {Describe(afterFile.Winner)} still wins, but removing this document changes the merged effective content for this path."]));
-                }
-                else
-                {
-                    files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "Unchanged",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: does not decide this path; {Describe(afterFile.Winner)} still wins."]));
-                }
+                files.Add(ClassifyRemovalFile(selected, owned.RelativePath, currentEntry, afterEntry, blocker,
+                    "on this host and artifact"));
             }
             if (files.Count == 0)
                 diagnostics.Add($"{selected.OverlayKey} {selected.OverlayVersion}: no enabled owned files apply to this host and artifact.");
@@ -216,6 +203,232 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             selected.IsEnabled, host.HostKey, artifact.ArtifactId, selected.OverlaySha256, selected.UpdatedUtc,
             selectedDetail is null, files, diagnostics, fingerprint);
     }
+
+    // Shared per-file removal classification for one owned path. Compares
+    // both the winner and the merged effective content before and after
+    // excluding the selected document. `location` names where the outcome
+    // applies ("on this host and artifact" for the single preview, one
+    // configured context for the installation impact).
+    private static OverlayRemovalFilePreview ClassifyRemovalFile(ConfigOverlayDocumentRow selected,
+        string relativePath, ResolvedFile? currentEntry, ResolvedFile? afterEntry, string? blocker, string location)
+    {
+        var currentFile = currentEntry?.File; var afterFile = afterEntry?.File;
+        if (blocker is not null)
+        {
+            return new(relativePath, currentFile?.Winner, afterFile?.Winner, "Unchanged",
+                [$"{selected.OverlayKey} {selected.OverlayVersion}: {blocker} Removal changes nothing {location}."]);
+        }
+        if (currentFile is null)
+        {
+            return new(relativePath, null, afterFile?.Winner, "Unknown",
+                [$"{selected.OverlayKey} {selected.OverlayVersion}: no saved effective file at this path; coverage is unknown. Reload before changing anything."]);
+        }
+        if (afterFile is null)
+        {
+            return new(relativePath, currentFile.Winner, null, "NoEffectiveFile",
+                [$"{selected.OverlayKey} {selected.OverlayVersion}: no saved source remains for this path after removal."]);
+        }
+        if (!SameSource(currentFile.Winner, afterFile.Winner))
+        {
+            return new(relativePath, currentFile.Winner, afterFile.Winner, "FallsBack",
+                [$"{selected.OverlayKey} {selected.OverlayVersion}: {Describe(afterFile.Winner)} becomes the winner."]);
+        }
+        if (!string.Equals(currentEntry!.ContentHash, afterEntry!.ContentHash, StringComparison.Ordinal))
+        {
+            // Winner identity alone is not enough: a merge contribution
+            // below the winner changes the effective content even
+            // though the same source still wins.
+            return new(relativePath, currentFile.Winner, afterFile.Winner, "ChangesEffectiveContent",
+                [$"{selected.OverlayKey} {selected.OverlayVersion}: {Describe(afterFile.Winner)} still wins, but removing this document changes the merged effective content for this path."]);
+        }
+        return new(relativePath, currentFile.Winner, afterFile.Winner, "Unchanged",
+            [$"{selected.OverlayKey} {selected.OverlayVersion}: does not decide this path; {Describe(afterFile.Winner)} still wins."]);
+    }
+
+    // Output bounds for the installation-wide impact view. Truncation is
+    // never silent: omitted counts are reported in Diagnostics.
+    public const int MaxInstallationContexts = 25;
+    public const int MaxPossibleArtifacts = 25;
+
+    // Installation-wide read-only impact for one saved overlay. Enumerates
+    // the configured app contexts (one AppInstanceRow each: a concrete host
+    // plus the exact artifact version it runs) and classifies every enabled
+    // owned file with the same winner-plus-merged-content comparison as the
+    // single host/artifact removal preview. Artifacts that match the overlay
+    // selectors but are referenced by no configured app are listed separately
+    // as possible matches, never as deployments. Metadata only; never
+    // content. Read-only: no tokens, no mutations, no schema or store writes.
+    public async Task<OverlayInstallationImpact> PreviewInstallationImpactAsync(
+        OverlayAdminSnapshot snapshot, int documentId, CancellationToken ct)
+    {
+        var selected = snapshot.Overlays.SingleOrDefault(o => o.ConfigOverlayDocumentId == documentId)
+            ?? throw new InvalidOperationException("Select a saved overlay in this installation.");
+        var diagnostics = new List<string>
+        {
+            "Installation impact is read-only and covers saved rows only: never live files, disk contents or final deployment configuration.",
+            "Only configured app contexts in this installation count as deployments. Matching artifacts with no configured app are listed separately as possible matches, never as deployments.",
+        };
+        if (!snapshot.SchemaReady) diagnostics.Add("Schema not ready: writes are disabled; upgrade the platform schema.");
+        if (!snapshot.HasHostScope) diagnostics.Add("HostScope is missing: exact-host fallback only.");
+        var appInstances = snapshot.AppInstances ?? [];
+        var artifactsById = snapshot.Artifacts.ToDictionary(a => a.ArtifactId);
+        var ordered = appInstances
+            .OrderBy(a => a.HostKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.AppInstanceKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.ArtifactId)
+            .ToList();
+
+        var selectedDetail = await store.DetailAsync(documentId, ct);
+        if (selectedDetail is null)
+            diagnostics.Add($"{selected.OverlayKey} {selected.OverlayVersion}: saved detail is unavailable; owned files cannot be listed and this impact view is partial. Reload before changing anything.");
+
+        // One saved-context read per referenced artifact and per enabled
+        // overlay that can apply to at least one resolvable context.
+        var artifactFiles = new Dictionary<int, IReadOnlyList<OverlaySourceRow>>();
+        foreach (var artifactId in ordered.Where(a => a.ArtifactId.HasValue).Select(a => a.ArtifactId!.Value).Distinct())
+            artifactFiles[artifactId] = await store.SourcesAsync(artifactId, ct);
+        var resolvable = ordered
+            .Where(a => a.HostKey is not null && a.ArtifactId.HasValue && artifactsById.ContainsKey(a.ArtifactId.Value))
+            .Select(a => (HostKey: a.HostKey!, Artifact: artifactsById[a.ArtifactId!.Value]))
+            .ToList();
+        var overlayDetails = new List<(ConfigOverlayDocumentRow Overlay, IReadOnlyList<OverlaySourceRow> Files)>();
+        foreach (var overlay in snapshot.Overlays)
+        {
+            if (!overlay.IsEnabled) continue;
+            if (!resolvable.Any(r => IsRelevantTo(overlay, snapshot, r.HostKey, r.Artifact))) continue;
+            var detail = await store.DetailAsync(overlay.ConfigOverlayDocumentId, ct);
+            if (detail is null) continue;
+            overlayDetails.Add((overlay, detail.Files));
+        }
+
+        var contexts = new List<OverlayInstallationContextDto>();
+        foreach (var app in ordered.Take(MaxInstallationContexts))
+            contexts.Add(BuildImpactContext(snapshot, selected, selectedDetail?.Files, app, artifactsById, artifactFiles, overlayDetails));
+        var omittedContexts = Math.Max(0, ordered.Count - contexts.Count);
+        if (omittedContexts > 0)
+            diagnostics.Add($"Showing {contexts.Count} of {ordered.Count} configured app contexts; {omittedContexts} further context(s) omitted by bound. Refine selectors before changing.");
+
+        var hostsWithoutContext = snapshot.Hosts
+            .Where(h => !ordered.Any(a => string.Equals(a.HostKey, h.HostKey, StringComparison.OrdinalIgnoreCase)))
+            .Select(h => h.HostKey)
+            .OrderBy(h => h, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (hostsWithoutContext.Count > 0)
+            diagnostics.Add(hostsWithoutContext.Count <= 10
+                ? $"Registered host(s) without a configured app context: {string.Join(", ", hostsWithoutContext)}. They have no deployment for this overlay to affect."
+                : $"{hostsWithoutContext.Count} registered hosts have no configured app context. They have no deployment for this overlay to affect.");
+
+        var referencedIds = new HashSet<int>(ordered.Where(a => a.ArtifactId.HasValue).Select(a => a.ArtifactId!.Value));
+        var possible = snapshot.Artifacts
+            .Where(a => !referencedIds.Contains(a.ArtifactId) && MatchesArtifactSelectors(selected, a))
+            .OrderBy(a => a.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.AppKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.Version, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.ArtifactId)
+            .ToList();
+        var shownPossible = possible.Take(MaxPossibleArtifacts).Select(a =>
+            new OverlayPossibleArtifactDto(a.ArtifactId, a.ModuleKey, a.AppKey, a.Version, a.PackageType, a.TargetName)).ToList();
+        var omittedArtifacts = Math.Max(0, possible.Count - shownPossible.Count);
+        if (omittedArtifacts > 0)
+            diagnostics.Add($"{omittedArtifacts} further matching artifact(s) omitted by bound.");
+        if (possible.Count == 0 && selectedDetail is not null)
+            diagnostics.Add("No unreferenced artifact matches this overlay's selectors; every matching artifact is either configured on an app context above or matches nothing.");
+
+        return new(documentId, selected.OverlayKey, selected.OverlayVersion, selected.HostScope, selected.HostKey,
+            selected.IsEnabled, selectedDetail is null, contexts, shownPossible,
+            ordered.Count, omittedContexts, omittedArtifacts, diagnostics);
+    }
+
+    private static OverlayInstallationContextDto BuildImpactContext(OverlayAdminSnapshot snapshot,
+        ConfigOverlayDocumentRow selected, IReadOnlyList<OverlaySourceRow>? ownedFiles, AppInstanceRow app,
+        IReadOnlyDictionary<int, ArtifactRow> artifactsById,
+        IReadOnlyDictionary<int, IReadOnlyList<OverlaySourceRow>> artifactFiles,
+        IReadOnlyList<(ConfigOverlayDocumentRow Overlay, IReadOnlyList<OverlaySourceRow> Files)> overlayDetails)
+    {
+        var notes = new List<string>();
+        if (app.HostKey is null)
+            return new("(no host assigned)", app.AppKey, app.AppInstanceKey, app.ArtifactId, null,
+                "Unavailable", [], [$"App context '{app.AppInstanceKey}' has no assigned host in this installation; nothing can be resolved for it."]);
+        var hosts = snapshot.Hosts.Where(h => string.Equals(h.HostKey, app.HostKey, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (hosts.Count != 1)
+            return new(app.HostKey, app.AppKey, app.AppInstanceKey, app.ArtifactId, null,
+                "Unavailable", [], [hosts.Count == 0
+                    ? $"Host '{app.HostKey}' is not registered in this installation; nothing can be resolved for app context '{app.AppInstanceKey}'."
+                    : $"Host '{app.HostKey}' has {hosts.Count} rows in this installation; overlay identity uses the host key alone. Resolve duplicate host keys before trusting this context."]);
+        if (!app.ArtifactId.HasValue || !artifactsById.TryGetValue(app.ArtifactId.Value, out var artifact))
+            return new(app.HostKey, app.AppKey, app.AppInstanceKey, app.ArtifactId, null,
+                "Unavailable", [], [$"App context '{app.AppInstanceKey}' on host '{app.HostKey}' has no registered artifact in this installation; nothing can be resolved for it."]);
+        var host = hosts[0];
+        if (!host.IsEnabled) notes.Add($"Host '{host.HostKey}' is disabled; this describes saved configuration only.");
+        if (!artifact.IsEnabled) notes.Add($"Artifact {artifact.ArtifactId} ({artifact.Version}) is disabled; this describes saved configuration only.");
+        var candidates = BuildImpactCandidates(snapshot, host.HostKey, artifact,
+            artifactFiles.GetValueOrDefault(artifact.ArtifactId, []), overlayDetails, notes, snapshot.Overlays);
+        var current = ResolveWithContent(candidates, notes);
+        var after = ResolveWithContent(candidates.Where(c => c.Overlay?.ConfigOverlayDocumentId != selected.ConfigOverlayDocumentId), notes);
+        var files = new List<OverlayInstallationFileDto>();
+        var location = $"on host '{host.HostKey}', app '{app.AppInstanceKey}', artifact {artifact.ArtifactId} ({artifact.Version})";
+        if (ownedFiles is null)
+        {
+            notes.Add($"{selected.OverlayKey} {selected.OverlayVersion}: saved detail is unavailable; owned files cannot be listed for this context.");
+        }
+        else
+        {
+            var blocker = Blocker(selected, snapshot, host.HostKey, artifact);
+            foreach (var owned in ownedFiles.Where(f => f.IsEnabled))
+            {
+                var currentEntry = current.SingleOrDefault(f => string.Equals(f.File.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
+                var afterEntry = after.SingleOrDefault(f => string.Equals(f.File.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
+                var classified = ClassifyRemovalFile(selected, owned.RelativePath, currentEntry, afterEntry, blocker, location);
+                files.Add(new(classified.RelativePath, classified.CurrentWinner, classified.WinnerAfterRemoval, classified.Outcome, classified.Notes));
+            }
+            if (files.Count == 0)
+                notes.Add(blocker is not null
+                    ? $"{selected.OverlayKey} {selected.OverlayVersion}: {blocker} It has no effect {location}."
+                    : $"{selected.OverlayKey} {selected.OverlayVersion}: no enabled owned files apply {location}.");
+        }
+        // Unavailable contexts return above; here the host and artifact rows
+        // exist, so the state follows the same selector/minimum/version gate
+        // as the single host/artifact preview.
+        var state = Blocker(selected, snapshot, host.HostKey, artifact) is not null ? "NotApplicable" : "Applicable";
+        return new(host.HostKey, app.AppKey, app.AppInstanceKey, artifact.ArtifactId, artifact.Version, state, files, notes);
+    }
+
+    private static List<Candidate> BuildImpactCandidates(OverlayAdminSnapshot snapshot, string hostKey,
+        ArtifactRow artifact, IReadOnlyList<OverlaySourceRow> artifactRows,
+        IReadOnlyList<(ConfigOverlayDocumentRow Overlay, IReadOnlyList<OverlaySourceRow> Files)> overlayDetails,
+        List<string> notes, IReadOnlyList<ConfigOverlayDocumentRow> overlays)
+    {
+        var candidates = new List<Candidate>();
+        foreach (var file in artifactRows)
+        {
+            if (file.IsEnabled) candidates.Add(new(file, null));
+            else notes.Add($"Artifact file {file.RelativePath}: disabled.");
+        }
+        foreach (var overlay in overlays)
+        {
+            if (!IsRelevantTo(overlay, snapshot, hostKey, artifact)) continue;
+            if (!overlay.IsEnabled) { notes.Add($"{overlay.OverlayKey} {overlay.OverlayVersion}: disabled."); continue; }
+            if (overlay.ArtifactVersion is not null && ArtifactVersionComparer.Compare(artifact.Version, overlay.ArtifactVersion) < 0)
+            {
+                notes.Add($"{overlay.OverlayKey} {overlay.OverlayVersion}: excluded by artifact minimum {overlay.ArtifactVersion}.");
+                continue;
+            }
+            var files = overlayDetails.FirstOrDefault(d => d.Overlay.ConfigOverlayDocumentId == overlay.ConfigOverlayDocumentId).Files;
+            if (files is null) { notes.Add($"{overlay.OverlayKey}: missing document; reload."); continue; }
+            foreach (var file in files)
+            {
+                if (file.IsEnabled) candidates.Add(new(file, overlay));
+                else notes.Add($"{overlay.OverlayKey} / {file.RelativePath}: disabled file.");
+            }
+            if (files.Count == 0) notes.Add($"{overlay.OverlayKey}: no configuration files.");
+        }
+        return candidates;
+    }
+
+    private static bool MatchesArtifactSelectors(ConfigOverlayDocumentRow overlay, ArtifactRow artifact) =>
+        Matches(overlay.ModuleKey, artifact.ModuleKey) && Matches(overlay.AppKey, artifact.AppKey)
+        && Matches(overlay.PackageType, artifact.PackageType) && Matches(overlay.TargetName, artifact.TargetName)
+        && (overlay.ArtifactVersion is null || ArtifactVersionComparer.Compare(artifact.Version, overlay.ArtifactVersion) >= 0);
 
     // Fingerprint over every saved row that can affect the previewed host and
     // artifact: all document rows (identity, selectors, hash, update time),
