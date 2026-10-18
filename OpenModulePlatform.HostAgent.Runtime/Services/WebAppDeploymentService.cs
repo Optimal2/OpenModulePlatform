@@ -193,6 +193,30 @@ public sealed class WebAppDeploymentService
                 configuredConnectionString,
                 settings,
                 out var replacedOmpConnectionString);
+
+            // F6: reserved HostAgent runtime control paths can never be supplied by a
+            // configuration overlay. Deny them before apply/classification so an overlay
+            // cannot overwrite the deployment lease or other control state; generic user
+            // App_Data files remain allowed.
+            var reservedFiles = configurationFiles
+                .Where(static file => OverlayReservedPaths.IsReserved(file.RelativePath))
+                .ToList();
+            if (reservedFiles.Count > 0)
+            {
+                configurationFiles = configurationFiles
+                    .Where(static file => !OverlayReservedPaths.IsReserved(file.RelativePath))
+                    .ToList();
+                var reservedWarning = "Configuration overlay supplied reserved HostAgent control path(s) and they were not applied: "
+                    + string.Join(", ", reservedFiles.Select(static file => file.RelativePath)) + ".";
+                _logger.LogWarning(
+                    "Web app deployment refused reserved overlay control paths. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Paths={Paths}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    string.Join(", ", reservedFiles.Select(static file => file.RelativePath)));
+                diagnosticWarning = string.IsNullOrWhiteSpace(diagnosticWarning)
+                    ? reservedWarning
+                    : diagnosticWarning + Environment.NewLine + reservedWarning;
+            }
             if (replacedOmpConnectionString
                 && _replacedOmpConnectionStringArtifacts.TryAdd((deployment.ArtifactId, deployment.Version), 0))
             {
@@ -220,8 +244,8 @@ public sealed class WebAppDeploymentService
             }
 
             diagnosticWarning = ompAuthValidation.Warnings.Count > 0
-                ? string.Join(Environment.NewLine, ompAuthValidation.Warnings.Select(warning => warning.ToStoredString()))
-                : null;
+                ? CombineWarnings(diagnosticWarning, string.Join(Environment.NewLine, ompAuthValidation.Warnings.Select(warning => warning.ToStoredString())))
+                : diagnosticWarning;
 
             var requiredRootSections = await _repository.GetRequiredConfigRootSectionsAsync(
                 deployment.ArtifactId,
@@ -315,13 +339,18 @@ public sealed class WebAppDeploymentService
             // content the fast path below leaves behind: AreApplied only looks at desired files,
             // so a removed overlay file persisted forever. Resolve the desired set and plan any
             // reconciliation before the fast path so the decision is made on the same cycle.
+            var overlayStateRoot = settings.LocalArtifactCacheRoot;
+            var payloadPaths = AppliedOverlayFileReconciler.EnumeratePayloadPaths(deployment.SourceLocalPath);
             var desiredOverlayFiles = AppliedOverlayFileReconciler.ResolveDesiredOverlayFiles(
                 configurationFiles,
-                configurationVariables);
+                configurationVariables,
+                payloadPaths);
             var overlayRemovalPlan = AppliedOverlayFileReconciler.Plan(
+                overlayStateRoot,
                 targetPath,
                 deployment,
-                desiredOverlayFiles);
+                desiredOverlayFiles,
+                payloadPaths);
             var overlayRemovalWarning = overlayRemovalPlan.Warning;
 
             var alreadyApplied = IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)
@@ -331,7 +360,7 @@ public sealed class WebAppDeploymentService
             {
                 if (overlayRemovalWarning is null && overlayRemovalPlan.ShouldRefreshInventory)
                 {
-                    AppliedOverlayFileReconciler.WriteInventory(targetPath, deployment, desiredOverlayFiles);
+                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(overlayStateRoot, targetPath, deployment, desiredOverlayFiles);
                 }
 
                 await _repository.PublishAppDeploymentResultAsync(
@@ -421,18 +450,18 @@ public sealed class WebAppDeploymentService
                 // Targeted reconciliation: only files recorded as overlay-owned whole files are
                 // removed. The generic full mirror is not an owned-path proof and would delete
                 // unrelated operator files, so it is deliberately not used here.
-                var removalWarning = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
-                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, removalWarning);
+                var removal = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, removal.Warning);
                 if (overlayRemovalWarning is null)
                 {
-                    AppliedOverlayFileReconciler.WriteInventory(targetPath, deployment, desiredOverlayFiles);
+                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(overlayStateRoot, targetPath, deployment, desiredOverlayFiles);
                 }
 
                 _logger.LogInformation(
                     "Web app overlay-owned files reconciled. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Removed={Removed}",
                     deployment.AppInstanceId,
                     deployment.ArtifactId,
-                    overlayRemovalPlan.RemoveEntries.Count);
+                    removal.RemovedCount);
             }
             else
             {
@@ -474,11 +503,14 @@ public sealed class WebAppDeploymentService
                 // anything left in place.
                 if (overlayRemovalPlan.HasRemovals)
                 {
-                    var fullRemovalWarning = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
-                    overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRemovalWarning);
+                    var fullRemoval = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
+                    overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRemoval.Warning);
                 }
 
-                await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
+                // F5: retained (modified/unsafe) files must survive the mirror's stale-entry
+                // deletion exactly as the warning states. Reuse the mirror exclusion mechanism.
+                var retainedPaths = AppliedOverlayFileReconciler.ResolveRetainedRelativePaths(targetPath, overlayRemovalPlan);
+                await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken, retainedPaths);
 
                 if (UseAppCmdAppPoolControl(settings)
                     && settings.StartIisAppPoolAfterWebAppDeployment
@@ -496,10 +528,12 @@ public sealed class WebAppDeploymentService
                 if (deploymentCycle.IsCoordinated)
                     await _deploymentHealthCheck(settings, deployment, runtimeName, cancellationToken);
 
-                AppliedOverlayFileReconciler.WriteInventory(
+                var inventoryWriteWarning = AppliedOverlayFileReconciler.TryWriteInventory(
+                    overlayStateRoot,
                     targetPath,
                     deployment,
                     AppliedOverlayFileReconciler.ResolveInventoryForWrite(targetPath, desiredOverlayFiles, overlayRemovalPlan));
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, inventoryWriteWarning);
             }
 
             deploymentHealthy = true;
@@ -595,7 +629,8 @@ public sealed class WebAppDeploymentService
         string targetPath,
         IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
         IReadOnlyDictionary<string, string> configurationVariables,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? additionalExcludedEntries = null)
     {
         string? appOfflinePath = null;
         try
@@ -610,6 +645,11 @@ public sealed class WebAppDeploymentService
             }
 
             var excludedEntries = settings.WebAppDeploymentExcludedEntries;
+            if (additionalExcludedEntries is { Count: > 0 })
+            {
+                excludedEntries = [.. excludedEntries, .. additionalExcludedEntries];
+            }
+
             if (!string.IsNullOrWhiteSpace(appOfflinePath))
             {
                 excludedEntries = [.. excludedEntries, "app_offline.htm"];

@@ -7,15 +7,43 @@ using OpenModulePlatform.HostAgent.Runtime.Models;
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 /// <summary>
+/// HostAgent runtime control files that a configuration overlay must never supply, overwrite
+/// or be classified as owning. Generic user <c>App_Data</c> files remain allowed; only these
+/// exact control paths are reserved (F6).
+/// </summary>
+internal static class OverlayReservedPaths
+{
+    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "App_Data/" + AppliedOverlayFileInventory.FileName,
+        DeploymentLockFile.RelativePath.Replace('\\', '/'),
+        "App_Data/omp-runtime-stopped-for-deployment.json"
+    };
+
+    internal static bool IsReserved(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return false;
+        }
+
+        var normalized = relativePath.Trim().Replace('\\', '/').Trim('/');
+        return Reserved.Contains(normalized);
+    }
+}
+
+/// <summary>
 /// Reconciles whole-file config overlays on the web app already-applied fast path. An overlay
 /// file whose path the artifact does not own stands alone on disk, so when the overlay stops
 /// supplying it, <see cref="ArtifactConfigurationFileWriter.AreApplied"/> (which only examines
 /// desired files) keeps reporting the deployment applied and the file persists forever.
 ///
-/// This type closes that gap without guessing: it only removes a file recorded in the
-/// applied-overlay-file inventory for the same app instance, and only when the on-disk file is
-/// still byte-identical to what HostAgent wrote. A modified, unreadable, reparse-point or
-/// foreign-inventory path fails safe and is reported, never deleted.
+/// This type closes that gap without guessing: it only removes a file recorded in the trusted
+/// applied-overlay-file inventory (HostAgent-owned state outside the web root, bound to the
+/// app instance and target path), only when the path is not owned by the artifact payload and
+/// is not a reserved runtime control path, and only when the on-disk file is still
+/// byte-identical to what HostAgent wrote. A modified, unreadable, reparse-point, payload-owned
+/// or foreign-inventory path fails safe and is reported, never deleted.
 /// </summary>
 internal static class AppliedOverlayFileReconciler
 {
@@ -25,11 +53,13 @@ internal static class AppliedOverlayFileReconciler
     /// The overlay-owned whole files in the resolved set, rendered to their effective content so
     /// the recorded hash matches what <see cref="ArtifactConfigurationFileWriter.ApplyAsync"/>
     /// writes. The built-in appsettings.json and any artifact-owned or merged file are already
-    /// excluded by their descriptor flag.
+    /// excluded by their descriptor flag. Reserved runtime control paths and paths the artifact
+    /// payload itself ships are never overlay-owned (F2, F6).
     /// </summary>
     internal static IReadOnlyList<AppliedOverlayFileEntry> ResolveDesiredOverlayFiles(
         IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
-        IReadOnlyDictionary<string, string> variables)
+        IReadOnlyDictionary<string, string> variables,
+        IReadOnlySet<string>? payloadPaths = null)
     {
         var entries = new List<AppliedOverlayFileEntry>();
         foreach (var file in files)
@@ -39,10 +69,21 @@ internal static class AppliedOverlayFileReconciler
                 continue;
             }
 
+            if (OverlayReservedPaths.IsReserved(file.RelativePath))
+            {
+                continue;
+            }
+
+            var relativePath = file.RelativePath.Trim().Replace('/', Path.DirectorySeparatorChar);
+            if (payloadPaths is not null && payloadPaths.Contains(NormalizeRelative(file.RelativePath)))
+            {
+                continue;
+            }
+
             var content = ArtifactConfigurationFileWriter.Render(file.FileContent, variables);
             entries.Add(new AppliedOverlayFileEntry
             {
-                RelativePath = file.RelativePath.Trim().Replace('/', Path.DirectorySeparatorChar),
+                RelativePath = relativePath,
                 ContentLength = Utf8NoBom.GetByteCount(content),
                 ContentSha256 = ComputeContentSha256(content)
             });
@@ -51,18 +92,49 @@ internal static class AppliedOverlayFileReconciler
         return entries;
     }
 
+    /// <summary>Relative paths of every regular file the artifact payload ships, or an empty set.</summary>
+    internal static IReadOnlySet<string> EnumeratePayloadPaths(string? sourceLocalPath)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(sourceLocalPath) || !Directory.Exists(sourceLocalPath))
+        {
+            return paths;
+        }
+
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(sourceLocalPath, "*", OmpReparsePointGuard.RecursiveNoFollow))
+            {
+                paths.Add(NormalizeRelative(Path.GetRelativePath(sourceLocalPath, file)));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // An unreadable payload cannot prove ownership; stay fail-closed by returning what
+            // was enumerated (possibly empty) and let the hash check remain the second gate.
+        }
+
+        return paths;
+    }
+
+    internal static string NormalizeRelative(string relativePath)
+        => relativePath.Trim().Replace('\\', '/').Trim('/');
+
     /// <summary>
-    /// Plans removal against the persisted inventory. A missing inventory has nothing to remove
-    /// (and no warning); an unreadable, foreign-schema or foreign-instance inventory warns and
-    /// plans nothing. A recorded file that is no longer desired is removable only when it still
-    /// exists as a regular file, is not a reparse point, and hashes to the recorded content.
+    /// Plans removal against the persisted trusted inventory. A missing inventory has nothing
+    /// to remove (and no warning unless a legacy untrusted file is present); an unreadable,
+    /// foreign-schema or foreign-instance inventory warns and plans nothing. A recorded file
+    /// that is no longer desired is removable only when it still exists as a regular file, is
+    /// not a reparse point, is not payload-owned or reserved, and hashes to the recorded content.
     /// </summary>
     internal static OverlayRemovalPlan Plan(
+        string stateRoot,
         string targetPath,
         WebAppDeploymentDescriptor deployment,
-        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles)
+        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles,
+        IReadOnlySet<string>? payloadPaths = null)
     {
-        var inventory = AppliedOverlayFileInventory.TryRead(targetPath, out var readDiagnostic);
+        var inventory = AppliedOverlayFileInventory.TryRead(stateRoot, targetPath, deployment.AppInstanceId, out var readDiagnostic);
         if (inventory is null)
         {
             if (readDiagnostic is not null)
@@ -80,7 +152,8 @@ internal static class AppliedOverlayFileReconciler
                 RetainedEntries: []);
         }
 
-        if (inventory.AppInstanceId != deployment.AppInstanceId)
+        if (inventory.AppInstanceId != deployment.AppInstanceId
+            || !string.Equals(inventory.HostKey ?? string.Empty, deployment.HostKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
         {
             return new OverlayRemovalPlan(
                 HasRemovals: false,
@@ -108,6 +181,14 @@ internal static class AppliedOverlayFileReconciler
             }
 
             if (desiredPaths.Contains(entry.RelativePath))
+            {
+                continue;
+            }
+
+            // Payload-owned and reserved paths are never overlay-owned: drop the record
+            // without deleting. The artifact mirror owns the payload file's content.
+            if (OverlayReservedPaths.IsReserved(entry.RelativePath)
+                || (payloadPaths is not null && payloadPaths.Contains(NormalizeRelative(entry.RelativePath))))
             {
                 continue;
             }
@@ -192,19 +273,44 @@ internal static class AppliedOverlayFileReconciler
     }
 
     /// <summary>
-    /// Deletes the planned files, re-verifying ownership immediately before each delete so a file
-    /// that changed since planning is left in place rather than removed. Returns null when every
-    /// planned file was removed, otherwise a combined warning naming the files left in place so
-    /// the caller never reports a clean removal that did not happen.
+    /// Relative paths (deployment-root relative, OS separators) that a full-apply mirror must
+    /// not delete as stale: every retained entry plus every planned removal that is still on
+    /// disk. Reuses the mirror's existing exclusion mechanism instead of a delete bypass (F5).
     /// </summary>
-    internal static string? RemoveOwnedFiles(
+    internal static IReadOnlyList<string> ResolveRetainedRelativePaths(string targetPath, OverlayRemovalPlan plan)
+    {
+        var paths = new List<string>();
+        foreach (var entry in plan.RetainedEntries.Concat(plan.RemoveEntries))
+        {
+            if (TryResolvePath(targetPath, entry.RelativePath, out var path, out _) && File.Exists(path))
+            {
+                paths.Add(entry.RelativePath);
+            }
+        }
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Deletes the planned files, re-verifying ownership immediately before each delete so a file
+    /// that changed since planning is left in place rather than removed. Reports the number
+    /// actually deleted (F7), never the planned count, plus a combined warning naming the files
+    /// left in place so the caller never reports a clean removal that did not happen.
+    /// </summary>
+    internal static OverlayRemovalResult RemoveOwnedFiles(
         string targetPath,
         OverlayRemovalPlan plan,
         ILogger logger)
     {
         var warnings = new List<string>();
+        var removed = 0;
         foreach (var entry in plan.RemoveEntries)
         {
+            if (OverlayReservedPaths.IsReserved(entry.RelativePath))
+            {
+                continue;
+            }
+
             if (!TryResolvePath(targetPath, entry.RelativePath, out var path, out var pathWarning))
             {
                 logger.LogWarning("Applied overlay file '{RelativePath}' could not be resolved for removal and was left in place.", entry.RelativePath);
@@ -215,7 +321,7 @@ internal static class AppliedOverlayFileReconciler
             if (!File.Exists(path))
             {
                 // Already gone (for example the generic mirror removed it first): the goal
-                // is achieved, so this is not a failure to warn about.
+                // is achieved, but it was not removed here, so it is not counted (F7).
                 continue;
             }
 
@@ -229,6 +335,7 @@ internal static class AppliedOverlayFileReconciler
             try
             {
                 File.Delete(path);
+                removed++;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -237,14 +344,17 @@ internal static class AppliedOverlayFileReconciler
             }
         }
 
-        return warnings.Count > 0 ? string.Join(" ", warnings) : null;
+        return new OverlayRemovalResult(removed, warnings.Count > 0 ? string.Join(" ", warnings) : null);
     }
 
-    internal static void WriteInventory(
+    /// <summary>Persists trusted inventory; returns an actionable diagnostic or null. Never throws for I/O.</summary>
+    internal static string? TryWriteInventory(
+        string stateRoot,
         string targetPath,
         WebAppDeploymentDescriptor deployment,
         IReadOnlyList<AppliedOverlayFileEntry> desiredFiles)
-        => AppliedOverlayFileInventory.Write(
+        => AppliedOverlayFileInventory.TryWrite(
+            stateRoot,
             targetPath,
             deployment.AppInstanceId,
             deployment.AppInstanceKey,
@@ -340,3 +450,5 @@ internal sealed record OverlayRemovalPlan(
     string? Warning,
     bool ShouldRefreshInventory,
     IReadOnlyList<AppliedOverlayFileEntry> RetainedEntries);
+
+internal sealed record OverlayRemovalResult(int RemovedCount, string? Warning);

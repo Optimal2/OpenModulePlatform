@@ -307,26 +307,52 @@ Deployment-directory ACLs must therefore restrict who can change those paths.
 ## Overlay-owned whole files (web apps)
 
 When a config overlay supplies a whole configuration file at a path the
-artifact does not own, HostAgent records it in
-`App_Data/omp-applied-overlay-files.json` in the web app's target directory
-(relative path, byte length and SHA-256, bound to the app instance and host).
-If the overlay later stops supplying the path, HostAgent removes the recorded
-file on both the already-applied fast path and a full apply -- but only when
-the file is still byte-identical and neither it nor its parent chain is a
-reparse point. A modified or unsafe file is left in place, reported as a
-diagnostic warning on the deployment row, and kept in the inventory so the
-warning repeats until an operator resolves it (edit the file back, remove it
-manually, or remove the stale inventory entry by deleting the inventory file
-and letting a full deployment recreate it).
+artifact does not own (neither a configuration row nor a file shipped in the
+artifact payload), HostAgent records it in a trusted inventory under
+`HostAgent:LocalArtifactCacheRoot` in `.overlay-state/` -- HostAgent-owned
+state outside every web root. The inventory file name and its content bind it
+to one deployment target path and app instance (relative path, byte length and
+SHA-256 per file). If the overlay later stops supplying the path, HostAgent
+removes the recorded file on both the already-applied fast path and a full
+apply -- but only when the file is still byte-identical, neither it nor its
+parent chain is a reparse point, the path is not shipped in the artifact
+payload, and it is not a reserved runtime control path. A modified or unsafe
+file is left in place (including across a full apply: retained files are passed
+to the mirror as exclusions so its stale-entry deletion cannot remove them),
+reported as a diagnostic warning on the deployment row, and kept in the
+inventory so the warning repeats until an operator resolves it (edit the file
+back, remove it manually, or remove the stale inventory entry by deleting the
+inventory file and letting a full deployment recreate it). Removal logs and
+results report the number of files actually deleted, not the planned count.
 
-The inventory itself is a control file in an app-pool-writable directory, so it
-is read as untrusted: the entire path including `App_Data` must not be a
-reparse point, size and entry counts are bounded before parsing, and untrusted
+The legacy inventory location, `App_Data/omp-applied-overlay-files.json` in the
+web app's target directory, is app-pool writable and is therefore never trusted
+as proof of ownership: a file there (well-formed or not) is treated as UNKNOWN,
+reported with an actionable warning, never migrated into trusted state, and
+never authorizes a deletion. Trusted state is likewise read defensively: the
+entire path must not be a reparse point, size and entry counts are bounded
+before parsing, the serialized schema/property identity must match exactly
+(case-sensitive; a missing or case-variant binding is rejected, never
+defaulted), the app-instance and target-path binding must match, and untrusted
 schema or file content is never echoed into diagnostics. A malformed or torn
 inventory disables overlay-file removal for that cycle only; it never causes
-deletion. The write is atomic (temp file plus move). Limits: at most 512
-recorded files and a 1 MiB inventory. Service apps do not reconcile removed
-overlay-owned whole files yet; see `docs/CONFIG_OVERLAYS.md`.
+deletion.
+
+Inventory writes enforce the same limits as reads before persisting (at most
+512 recorded files, a 1 MiB serialized inventory, relative paths of at most
+1024 characters), so HostAgent never writes an inventory it would later reject.
+A failed inventory write (planted directory at the leaf, reparse-point state,
+I/O or ACL failure) degrades to an actionable warning and the deployment
+continues without removal for that cycle; it never blocks the deployment. The
+write is atomic (temp file plus move).
+
+Reserved runtime control paths can never be supplied by a configuration
+overlay: `App_Data/omp-applied-overlay-files.json`,
+`App_Data/omp-deployment.lock.json` and
+`App_Data/omp-runtime-stopped-for-deployment.json` are denied before apply and
+classification, with a diagnostic warning. Generic user `App_Data` files remain
+allowed. Service apps do not reconcile removed overlay-owned whole files yet;
+see `docs/CONFIG_OVERLAYS.md`.
 
 ## Rolling upgrades in multi-host installations
 
