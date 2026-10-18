@@ -86,13 +86,21 @@ changes configuration concurrently.
 ## Preview before disabling or deleting
 
 Open the overlay (`?id=<document-id>`), choose the same host and artifact as
-the saved-source view, and read the **Removal impact preview**. It lists each
-enabled file owned by the overlay, the current winner, and the winner that
-would remain after removal: a fallback source, no saved source, or no change
-when the overlay does not decide that path. The preview covers only the
-selected host and artifact and shows the token it was computed against.
-Disable and Delete re-check that token and reject a stale preview, so reload
-before changing when another administrator may have edited the overlay.
+the saved-source view, and read the **Removal impact preview**. If no host and
+artifact are chosen yet, the page says so and keeps the opened overlay while
+you choose them in the saved-source view. The preview lists each enabled file
+owned by the overlay, the current winner, and the winner that would remain
+after removal: a fallback source, no saved source, no change when the overlay
+does not affect the effective content, or a changed merged result when the
+same winner remains but the overlay contributed content below it (for
+example a distinct key from an AllHosts merge layer). The preview covers only
+the selected host and artifact and shows the token it was computed against.
+The preview section's own Disable and Delete buttons re-validate every saved
+row the preview depends on — the selected document, contributing and fallback
+overlays, and the artifact and its files — and reject a stale preview, so
+reload before changing when another administrator may have edited any of
+them. The Disable and Delete buttons in the saved-overlays list remain direct
+operations that check only the selected row's token, as before.
 
 ## Older schemas and local acceptance
 

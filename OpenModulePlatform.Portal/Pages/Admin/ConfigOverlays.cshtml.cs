@@ -91,10 +91,13 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
     }
 
     public Task<IActionResult> OnPostEnableAsync(int id, string token, CancellationToken ct) => ChangeAsync(id, token, true, ct);
-    public Task<IActionResult> OnPostDisableAsync(int id, string token, CancellationToken ct) => ChangeAsync(id, token, false, ct);
-    public Task<IActionResult> OnPostDeleteAsync(int id, string token, CancellationToken ct) => ChangeAsync(id, token, null, ct);
+    public Task<IActionResult> OnPostDisableAsync(int id, string token, string? hostKey = null, int? artifactId = null,
+        string? previewToken = null, CancellationToken ct = default) => ChangeAsync(id, token, false, ct, hostKey, artifactId, previewToken);
+    public Task<IActionResult> OnPostDeleteAsync(int id, string token, string? hostKey = null, int? artifactId = null,
+        string? previewToken = null, CancellationToken ct = default) => ChangeAsync(id, token, null, ct, hostKey, artifactId, previewToken);
 
-    private async Task<IActionResult> ChangeAsync(int id, string token, bool? enabled, CancellationToken ct)
+    private async Task<IActionResult> ChangeAsync(int id, string token, bool? enabled, CancellationToken ct,
+        string? hostKey = null, int? artifactId = null, string? previewToken = null)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null) return guard;
@@ -107,7 +110,14 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         }
         try
         {
-            await store.ChangeStateAsync(id, token, enabled, ct);
+            // A submitted previewToken binds this mutation to the preview it
+            // was minted from (fail closed when any part is missing); without
+            // it, the deliberate direct operation keeps the selected-row token.
+            if (previewToken is not null)
+                await administration.ChangeStateFromPreviewAsync(Snapshot, id, hostKey ?? string.Empty,
+                    artifactId ?? 0, token, enabled, previewToken, ct);
+            else
+                await store.ChangeStateAsync(id, token, enabled, ct);
             StatusMessage = T("Overlay updated. Live files have not been changed.");
             return RedirectToPage();
         }
@@ -131,6 +141,11 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
     // Disable/Delete forms submit, so operators can see when a preview is stale.
     public string? PreviewToken() => RemovalPreview is null
         ? null : OmpAdminRepository.OverlayEditToken(RemovalPreview.OverlaySha256, RemovalPreview.UpdatedUtc);
+
+    // Per-action token over the preview fingerprint, rendered into the
+    // preview section's own Disable/Delete forms.
+    public string? PreviewActionToken(bool? enabled) => RemovalPreview is null
+        ? null : Services.ConfigOverlayAdministration.PreviewActionToken(RemovalPreview.PreviewFingerprint, enabled);
 
     public sealed class DraftInput
     {

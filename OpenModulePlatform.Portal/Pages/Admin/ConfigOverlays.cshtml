@@ -102,6 +102,10 @@
     <h3>@L["Saved effective sources"]</h3>
     <p>@L["This readback uses saved rows, never the unsaved draft. Precedence: artifact → AllHosts → exact host. The highest version wins within a scope, then update time and file row ID. Merge retains earlier inputs; replace discards them. This is overlay provenance, not live file contents or final deployment configuration (connection protection and other runtime transformations apply later)."]</p>
     <form method="get">
+        @if (Model.Detail is not null)
+        {
+            <input type="hidden" name="id" value="@Model.Detail.Summary.ConfigOverlayDocumentId" />
+        }
         <label asp-for="HostKey">@L["Host"]</label>
         <select asp-for="HostKey">
             <option value="">@L["Select host"]</option>
@@ -129,11 +133,47 @@
         }
     }
 </section>
+@if (Model.Detail is not null && Model.RemovalPreview is null)
+{
+<section class="card top-gap">
+    <h3>@L["Preview before disabling or deleting"]</h3>
+    <p>@L["No removal preview is shown yet for the opened overlay. To preview before disabling or deleting, choose a host and artifact in Saved effective sources above and read the saved sources: the opened overlay is kept, so the preview is computed for this document on that host and artifact."]</p>
+</section>
+}
 @if (Model.RemovalPreview is not null)
 {
 <section class="card top-gap">
     <h3>@L["Removal impact preview"]</h3>
-    <p>@L["Read-only preview for disabling or deleting the opened overlay on the selected host and artifact. Saved rows only: never live files, disk contents or final deployment configuration. Other hosts or artifacts using this document are not enumerated. Computed against token:"] @Model.PreviewToken(). @L["Disable and Delete re-check this token and reject a stale preview; reload before changing."]</p>
+    <p>@L["Read-only preview for disabling or deleting the opened overlay on the selected host and artifact. Saved rows only: never live files, disk contents or final deployment configuration. Other hosts or artifacts using this document are not enumerated. Computed against token:"] @Model.PreviewToken(). @L["The Disable and Delete forms in this preview section re-validate every saved row this preview depends on and reject a stale preview; the forms in Saved overlays remain direct operations bound only to the selected row. Reload before changing."]</p>
+    @{
+        var previewRow = Model.Snapshot.Overlays.FirstOrDefault(o => o.ConfigOverlayDocumentId == Model.RemovalPreview.DocumentId);
+    }
+    @if (previewRow is not null)
+    {
+        @if (Model.RemovalPreview.DocumentWasEnabled)
+        {
+            <form method="post" data-omp-confirm="@L["Change this saved overlay? Enabling disables other versions of the same key and scope. Delete removes the document and its files. No other version is automatically selected after disable or delete."]">
+                <input type="hidden" name="id" value="@previewRow.ConfigOverlayDocumentId" />
+                <input type="hidden" name="token" value="@ConfigOverlaysModel.Token(previewRow)" />
+                <input type="hidden" name="hostKey" value="@Model.RemovalPreview.TargetHostKey" />
+                <input type="hidden" name="artifactId" value="@Model.RemovalPreview.TargetArtifactId" />
+                <input type="hidden" name="previewToken" value="@Model.PreviewActionToken(false)" data-preview-action="Disable" />
+                <button asp-page-handler="Disable" disabled="@(!Model.Snapshot.SchemaReady)">@L["Disable"]</button>
+            </form>
+        }
+        <form method="post" data-omp-confirm="@L["Change this saved overlay? Enabling disables other versions of the same key and scope. Delete removes the document and its files. No other version is automatically selected after disable or delete."]">
+            <input type="hidden" name="id" value="@previewRow.ConfigOverlayDocumentId" />
+            <input type="hidden" name="token" value="@ConfigOverlaysModel.Token(previewRow)" />
+            <input type="hidden" name="hostKey" value="@Model.RemovalPreview.TargetHostKey" />
+            <input type="hidden" name="artifactId" value="@Model.RemovalPreview.TargetArtifactId" />
+            <input type="hidden" name="previewToken" value="@Model.PreviewActionToken(null)" data-preview-action="Delete" />
+            <button asp-page-handler="Delete" class="btn btn-danger" disabled="@(!Model.Snapshot.SchemaReady)">@L["Delete"]</button>
+        </form>
+        @if (!Model.Snapshot.SchemaReady)
+        {
+            <p>@L["Schema not ready. Upgrade the platform schema before editing."]</p>
+        }
+    }
     @if (Model.RemovalPreview.DetailUnavailable)
     {
         <p role="alert">@L["Saved detail for this overlay is currently unavailable, so owned files cannot be listed and this preview is partial."]</p>

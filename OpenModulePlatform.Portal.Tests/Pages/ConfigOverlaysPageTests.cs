@@ -292,6 +292,126 @@ public sealed class ConfigOverlaysPageTests
     }
 
     [Fact]
+    public async Task RenderedPreviewBoundDisableSucceedsWhenNothingChanged()
+    {
+        var (store, server, client, html) = await PreviewPage();
+        using var _ = server;
+        var form = await TokenForm(client);
+        form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
+        form["hostKey"] = "host-a"; form["artifactId"] = "42";
+        form["previewToken"] = ExtractPreviewToken(html, "Disable");
+        var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal((1, ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1)), false), Assert.Single(store.Changes));
+    }
+
+    [Fact]
+    public async Task RenderedPreviewBoundDisableRejectsSiblingChangeAfterPreview()
+    {
+        var (store, server, client, html) = await PreviewPage();
+        using var _ = server;
+        // Sibling fallback content changes after the preview; the selected
+        // row token is untouched, so only a real preview fingerprint rejects.
+        store.Details[2] = new(ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0"), "",
+            [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":"changed-after-preview"}""")]);
+        var form = await TokenForm(client);
+        form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
+        form["hostKey"] = "host-a"; form["artifactId"] = "42";
+        form["previewToken"] = ExtractPreviewToken(html, "Disable");
+        var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(store.Changes);
+    }
+
+    [Fact]
+    public async Task RenderedPreviewBoundDeleteRejectsArtifactChangeAfterPreview()
+    {
+        var (store, server, client, html) = await PreviewPage();
+        using var _ = server;
+        store.Snapshot = store.Snapshot with
+        { Artifacts = [new() { ArtifactId = 42, ModuleKey = "module", AppKey = "app", Version = "2.0.0", PackageType = "web-app" }] };
+        var form = await TokenForm(client);
+        form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
+        form["hostKey"] = "host-a"; form["artifactId"] = "42";
+        form["previewToken"] = ExtractPreviewToken(html, "Delete");
+        var response = await client.PostAsync("/admin/configoverlays?handler=Delete", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(store.Changes);
+    }
+
+    [Fact]
+    public async Task RenderedPreviewBoundDisableRejectsArtifactFileChangeAndWrongActionToken()
+    {
+        var (store, server, client, html) = await PreviewPage();
+        using var _ = server;
+        var form = await TokenForm(client);
+        form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
+        form["hostKey"] = "host-a"; form["artifactId"] = "42";
+        // A Disable token must not authorize Delete.
+        form["previewToken"] = ExtractPreviewToken(html, "Disable");
+        var wrongAction = await client.PostAsync("/admin/configoverlays?handler=Delete", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, wrongAction.StatusCode);
+        Assert.Empty(store.Changes);
+        // An artifact-owned file appearing after the preview also rejects.
+        store.ArtifactFiles.Add(ConfigOverlayAdministrationTests.File(7, null, """{"base":true}"""));
+        form["previewToken"] = ExtractPreviewToken(html, "Disable");
+        var stale = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.OK, stale.StatusCode);
+        Assert.Empty(store.Changes);
+    }
+
+    [Fact]
+    public async Task DirectDisableWithoutPreviewFieldsStillUsesOnlySelectedToken()
+    {
+        var (store, server, client, _) = await PreviewPage();
+        using var _ = server;
+        store.Details[2] = new(ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0"), "",
+            [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":"changed"}""")]);
+        var form = await TokenForm(client);
+        form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
+        var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Single(store.Changes);
+    }
+
+    [Fact]
+    public async Task OpenedOverlayWithoutSelectionShowsGuidanceAndKeepsIdentityInReadbackForm()
+    {
+        var row = ConfigOverlayAdministrationTests.Overlay(1);
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(row) };
+        store.Details[1] = new(row, "", [ConfigOverlayAdministrationTests.File(1, 1)]);
+        using var server = Server(store, renderPage: true);
+        using var client = server.CreateClient();
+        using var response = await client.GetAsync("/admin/configoverlays?id=1");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("choose a host and artifact", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("name=\"id\" value=\"1\"", html);
+        Assert.DoesNotContain("Removal impact preview", html);
+    }
+
+    private static string ExtractPreviewToken(string html, string action)
+    {
+        var match = Regex.Match(html, $"name=\"previewToken\" value=\"([^\"]+)\"[^>]*data-preview-action=\"{action}\"|data-preview-action=\"{action}\"[^>]*name=\"previewToken\" value=\"([^\"]+)\"");
+        Assert.True(match.Success, html);
+        return match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+    }
+
+    private async Task<(OverlayAdminFakeStore Store, InMemoryPortalHost Server, HttpClient Client, string Html)> PreviewPage()
+    {
+        var host = ConfigOverlayAdministrationTests.Overlay(1);
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var store = new OverlayAdminFakeStore { Snapshot = ConfigOverlayAdministrationTests.Snapshot(host, allHosts) };
+        store.Details[1] = new(host, "", [ConfigOverlayAdministrationTests.File(1, 1, """{"host":true}""")]);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);
+        var server = Server(store, renderPage: true);
+        var client = server.CreateClient();
+        using var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (store, server, client, await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public void CompiledPageAndNavigationKeepDraftAndReadbackSeparate()
     {
         var markup = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Admin", "ConfigOverlays.cshtml");

@@ -93,6 +93,66 @@ public sealed class ConfigOverlayRemovalPreviewTests
         => ConfigOverlaysModel.Token(row);
 
     [Fact]
+    public async Task AllHostsMergeContributionBelowExactHostWinnerIsNotUnchanged()
+    {
+        // Selected AllHosts layer contributes a distinct key through merge;
+        // the exact-host winner stays the winner after removal, but the
+        // effective content loses that key, so this is not "Unchanged".
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var host = ConfigOverlayAdministrationTests.Overlay(3);
+        var store = StoreWith(allHosts, host);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":"from-all-hosts"}""")]);
+        store.Details[3] = new(host, "", [ConfigOverlayAdministrationTests.File(3, 3, """{"host":true}""")]);
+        var preview = await new ConfigOverlayAdministration(store).PreviewRemovalAsync(store.Snapshot, 2, "host-a", 42, default);
+        var file = Assert.Single(preview.Files);
+        Assert.Equal("overlay-3", file.CurrentWinner!.OverlayKey);
+        Assert.Equal("overlay-3", file.WinnerAfterRemoval!.OverlayKey);
+        Assert.Equal("ChangesEffectiveContent", file.Outcome);
+        Assert.DoesNotContain("private-secret", JsonSerializer.Serialize(preview), StringComparison.Ordinal);
+        Assert.DoesNotContain("from-all-hosts", JsonSerializer.Serialize(preview), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenuinelyShadowedMergeContributionStaysUnchanged()
+    {
+        // Exact-host replace discards the lower AllHosts layer entirely, so
+        // removing the shadowed AllHosts document changes nothing.
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var host = ConfigOverlayAdministrationTests.Overlay(3);
+        var store = StoreWith(allHosts, host);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":"from-all-hosts"}""")]);
+        store.Details[3] = new(host, "", [ConfigOverlayAdministrationTests.File(3, 3, """{"host":true}""", "replace")]);
+        var preview = await new ConfigOverlayAdministration(store).PreviewRemovalAsync(store.Snapshot, 2, "host-a", 42, default);
+        var file = Assert.Single(preview.Files);
+        Assert.Equal("Unchanged", file.Outcome);
+        Assert.Equal("overlay-3", file.WinnerAfterRemoval!.OverlayKey);
+    }
+
+    [Fact]
+    public async Task MergeContributionWithIdenticalEffectiveContentStaysUnchanged()
+    {
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var host = ConfigOverlayAdministrationTests.Overlay(3);
+        var store = StoreWith(allHosts, host);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);
+        store.Details[3] = new(host, "", [ConfigOverlayAdministrationTests.File(3, 3, """{"shared":true}""")]);
+        var preview = await new ConfigOverlayAdministration(store).PreviewRemovalAsync(store.Snapshot, 2, "host-a", 42, default);
+        Assert.Equal("Unchanged", Assert.Single(preview.Files).Outcome);
+    }
+
+    [Fact]
+    public async Task ReplaceWinnerRemovalFallsBack()
+    {
+        var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var host = ConfigOverlayAdministrationTests.Overlay(3);
+        var store = StoreWith(host, allHosts);
+        store.Details[3] = new(host, "", [ConfigOverlayAdministrationTests.File(3, 3, """{"host":true}""", "replace")]);
+        store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);
+        var preview = await new ConfigOverlayAdministration(store).PreviewRemovalAsync(store.Snapshot, 3, "host-a", 42, default);
+        Assert.Equal("FallsBack", Assert.Single(preview.Files).Outcome);
+    }
+
+    [Fact]
     public async Task MissingDetailIsPartialUnknownWithoutContent()
     {
         var row = ConfigOverlayAdministrationTests.Overlay(3);

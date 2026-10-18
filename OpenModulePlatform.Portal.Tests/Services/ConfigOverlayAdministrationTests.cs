@@ -24,6 +24,11 @@ public sealed class ConfigOverlayAdministrationTests
     [InlineData(OmpAdminRepository.OverlayEnableSiblingsSql)]
     [InlineData(OmpAdminRepository.OverlayUpdateStateSql)]
     [InlineData(OmpAdminRepository.OverlayDeleteSql)]
+    [InlineData(OmpAdminRepository.PreviewHostSql)]
+    [InlineData(OmpAdminRepository.PreviewArtifactSql)]
+    [InlineData(OmpAdminRepository.PreviewArtifactFilesSql)]
+    [InlineData(OmpAdminRepository.PreviewOverlayFilesSql)]
+    [InlineData(OmpAdminRepository.PreviewOverlayFilesNoMergeSql)]
     public void AdministrationSqlParsesWithoutDatabaseAccess(string sql)
     {
         new TSql160Parser(true).Parse(new StringReader(sql), out var errors);
@@ -251,7 +256,8 @@ internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
     public bool RejectSave { get; set; }
     public Task<OverlayAdminSnapshot> ReadAsync(CancellationToken ct) { Reads++; return Task.FromResult(Snapshot); }
     public Task<OverlayAdminDetail?> DetailAsync(int id, CancellationToken ct) { DetailReads.Add(id); return Task.FromResult(Details.GetValueOrDefault(id)); }
-    public Task<IReadOnlyList<OverlaySourceRow>> SourcesAsync(int artifactId, CancellationToken ct) { SourceReads++; return Task.FromResult<IReadOnlyList<OverlaySourceRow>>([]); }
+    public List<OverlaySourceRow> ArtifactFiles { get; } = [];
+    public Task<IReadOnlyList<OverlaySourceRow>> SourcesAsync(int artifactId, CancellationToken ct) { SourceReads++; return Task.FromResult<IReadOnlyList<OverlaySourceRow>>(ArtifactFiles); }
     public Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, CancellationToken ct)
     {
         if (RejectSave) throw new InvalidOperationException("private-secret SQL content");
@@ -259,4 +265,15 @@ internal sealed class OverlayAdminFakeStore : IConfigOverlayAdminStore
     }
     public Task ChangeStateAsync(int id, string expectedHash, bool? enabled, CancellationToken ct)
     { Changes.Add((id, expectedHash, enabled)); return Task.CompletedTask; }
+    public async Task ChangeStateFromPreviewAsync(int id, string expectedHash, bool? enabled, string hostKey, int artifactId,
+        string previewToken, CancellationToken ct)
+    {
+        // In-memory equivalent of the transactional store: re-derive the
+        // preview from current rows and reject a stale token before recording.
+        var preview = await new ConfigOverlayAdministration(this).PreviewRemovalAsync(Snapshot, id, hostKey, artifactId, ct);
+        if (preview.DetailUnavailable
+            || ConfigOverlayAdministration.PreviewActionToken(preview.PreviewFingerprint, enabled) != previewToken)
+            throw new InvalidOperationException("The preview is stale.");
+        Changes.Add((id, expectedHash, enabled));
+    }
 }

@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenModulePlatform.Artifacts;
@@ -13,6 +16,11 @@ public interface IConfigOverlayAdminStore
     Task<IReadOnlyList<OverlaySourceRow>> SourcesAsync(int artifactId, CancellationToken ct);
     Task<int> SaveAsync(PortableConfigOverlayDocument document, int? id, string? expectedHash, CancellationToken ct);
     Task ChangeStateAsync(int id, string expectedHash, bool? enabled, CancellationToken ct);
+    // Preview-bound mutation: the store re-derives the preview fingerprint
+    // from the rows it locks in the same transaction as the mutation and
+    // rejects when it no longer matches the submitted preview token.
+    Task ChangeStateFromPreviewAsync(int id, string expectedHash, bool? enabled, string hostKey, int artifactId,
+        string previewToken, CancellationToken ct);
 }
 
 public sealed record OverlayAdminSnapshot(bool SchemaReady, IReadOnlyList<HostRow> Hosts,
@@ -45,7 +53,11 @@ public sealed record OverlayRemovalPreview(
     DateTime UpdatedUtc,
     bool DetailUnavailable,
     IReadOnlyList<OverlayRemovalFilePreview> Files,
-    IReadOnlyList<string> Diagnostics);
+    IReadOnlyList<string> Diagnostics,
+    // SHA-256 over the selected document/host/artifact and every saved row
+    // that can contribute to or fall back for the previewed paths. Hash only;
+    // never file content. Per-action tokens derive from it.
+    string PreviewFingerprint);
 
 public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
 {
@@ -89,28 +101,63 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
     public async Task<OverlayEffectiveReadback> ReadEffectiveAsync(OverlayAdminSnapshot snapshot,
         string hostKey, int artifactId, CancellationToken ct)
     {
-        var (candidates, diagnostics, _, _) = await CollectCandidatesAsync(snapshot, hostKey, artifactId, ct);
-        return Resolve(candidates, diagnostics);
+        var collected = await CollectCandidatesAsync(snapshot, hostKey, artifactId, ct);
+        return Resolve(collected.Candidates, collected.Diagnostics);
     }
 
-    // Removal preview excludes one saved document and compares the winner per
-    // owned file path before and after. It never enables, disables or deletes
-    // anything. Outcome is one of "Unchanged", "FallsBack", "NoEffectiveFile"
-    // or "Unknown". The caller binds the returned hash/timestamp token to the
-    // Disable/Delete action; ChangeStateAsync rejects a stale token, so a
-    // preview computed against older rows cannot silently mutate.
+    // Action-bound token over a preview fingerprint: a token minted for
+    // Disable cannot authorize Delete or Enable.
+    public static string PreviewActionToken(string previewFingerprint, bool? enabled)
+    {
+        var action = enabled is null ? "Delete" : enabled.Value ? "Enable" : "Disable";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(previewFingerprint + "|action=" + action)));
+    }
+
+    private static bool TokenEquals(string expected, string submitted) =>
+        expected.Length == submitted.Length
+        && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(submitted));
+
+    // Preview-bound mutation gate. Recomputes the preview from the caller's
+    // fresh snapshot and fails closed on any mismatch, then delegates to the
+    // store, which re-derives and compares the same fingerprint inside its
+    // mutation transaction before writing.
+    public async Task ChangeStateFromPreviewAsync(OverlayAdminSnapshot snapshot, int documentId,
+        string hostKey, int artifactId, string expectedHash, bool? enabled, string previewToken, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(previewToken) || artifactId <= 0 || string.IsNullOrWhiteSpace(hostKey))
+            throw new InvalidOperationException("A removal preview is required before this change. Reload and preview again.");
+        if (enabled is true)
+            throw new InvalidOperationException("A removal preview does not authorize enabling an overlay.");
+        var preview = await PreviewRemovalAsync(snapshot, documentId, hostKey, artifactId, ct);
+        if (preview.DetailUnavailable)
+            throw new InvalidOperationException("Preview detail is unavailable. Reload and preview again.");
+        if (!TokenEquals(PreviewActionToken(preview.PreviewFingerprint, enabled), previewToken))
+            throw new InvalidOperationException("The preview is stale. Reload and preview again before changing.");
+        await store.ChangeStateFromPreviewAsync(documentId, expectedHash, enabled, preview.TargetHostKey, artifactId, previewToken, ct);
+    }
+
+    // Removal preview excludes one saved document and compares, per owned
+    // file path, both the winner and the merged effective content before and
+    // after. It never enables, disables or deletes anything. Outcome is one
+    // of "Unchanged", "ChangesEffectiveContent" (same winner, different
+    // merged content), "FallsBack", "NoEffectiveFile" or "Unknown". The
+    // returned PreviewFingerprint binds the selected document/host/artifact
+    // and every contributing or fallback row; preview-bound Disable/Delete
+    // re-derive and compare it at mutation time.
     public async Task<OverlayRemovalPreview> PreviewRemovalAsync(OverlayAdminSnapshot snapshot,
         int documentId, string hostKey, int artifactId, CancellationToken ct)
     {
         var selected = snapshot.Overlays.SingleOrDefault(o => o.ConfigOverlayDocumentId == documentId)
             ?? throw new InvalidOperationException("Select a saved overlay in this installation.");
-        var (candidates, diagnostics, host, artifact) = await CollectCandidatesAsync(snapshot, hostKey, artifactId, ct);
+        var collected = await CollectCandidatesAsync(snapshot, hostKey, artifactId, ct);
+        var candidates = collected.Candidates; var diagnostics = collected.Diagnostics;
+        var host = collected.Host; var artifact = collected.Artifact;
         diagnostics.Add("Preview covers only the selected host and artifact. Other hosts or artifacts using this document are not enumerated.");
         diagnostics.Add("Saved rows only: never live files, disk contents or final deployment configuration.");
         var currentDiagnostics = new List<string>();
-        var current = Resolve(candidates, currentDiagnostics);
+        var current = ResolveWithContent(candidates, currentDiagnostics);
         var afterDiagnostics = new List<string>();
-        var after = Resolve(candidates.Where(c => c.Overlay?.ConfigOverlayDocumentId != documentId), afterDiagnostics);
+        var after = ResolveWithContent(candidates.Where(c => c.Overlay?.ConfigOverlayDocumentId != documentId), afterDiagnostics);
         foreach (var message in currentDiagnostics.Concat(afterDiagnostics))
             if (!diagnostics.Contains(message)) diagnostics.Add(message);
         var selectedDetail = await store.DetailAsync(documentId, ct);
@@ -124,8 +171,9 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             var blocker = Blocker(selected, snapshot, hostKey, artifact);
             foreach (var owned in selectedDetail.Files.Where(f => f.IsEnabled))
             {
-                var currentFile = current.Files.SingleOrDefault(f => string.Equals(f.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
-                var afterFile = after.Files.SingleOrDefault(f => string.Equals(f.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
+                var currentEntry = current.SingleOrDefault(f => string.Equals(f.File.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
+                var afterEntry = after.SingleOrDefault(f => string.Equals(f.File.RelativePath, owned.RelativePath, StringComparison.OrdinalIgnoreCase));
+                var currentFile = currentEntry?.File; var afterFile = afterEntry?.File;
                 if (blocker is not null)
                 {
                     files.Add(new(owned.RelativePath, currentFile?.Winner, afterFile?.Winner, "Unchanged",
@@ -141,23 +189,76 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
                     files.Add(new(owned.RelativePath, currentFile.Winner, null, "NoEffectiveFile",
                         [$"{selected.OverlayKey} {selected.OverlayVersion}: no saved source remains for this path after removal."]));
                 }
-                else if (SameSource(currentFile.Winner, afterFile.Winner))
-                {
-                    files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "Unchanged",
-                        [$"{selected.OverlayKey} {selected.OverlayVersion}: does not decide this path; {Describe(afterFile.Winner)} still wins."]));
-                }
-                else
+                else if (!SameSource(currentFile.Winner, afterFile.Winner))
                 {
                     files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "FallsBack",
                         [$"{selected.OverlayKey} {selected.OverlayVersion}: {Describe(afterFile.Winner)} becomes the winner."]));
+                }
+                else if (!string.Equals(currentEntry!.ContentHash, afterEntry!.ContentHash, StringComparison.Ordinal))
+                {
+                    // Winner identity alone is not enough: a merge contribution
+                    // below the winner changes the effective content even
+                    // though the same source still wins.
+                    files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "ChangesEffectiveContent",
+                        [$"{selected.OverlayKey} {selected.OverlayVersion}: {Describe(afterFile.Winner)} still wins, but removing this document changes the merged effective content for this path."]));
+                }
+                else
+                {
+                    files.Add(new(owned.RelativePath, currentFile.Winner, afterFile.Winner, "Unchanged",
+                        [$"{selected.OverlayKey} {selected.OverlayVersion}: does not decide this path; {Describe(afterFile.Winner)} still wins."]));
                 }
             }
             if (files.Count == 0)
                 diagnostics.Add($"{selected.OverlayKey} {selected.OverlayVersion}: no enabled owned files apply to this host and artifact.");
         }
+        var fingerprint = ComputePreviewFingerprint(snapshot, selected, host, artifact, collected.ArtifactFiles, collected.OverlayFiles);
         return new(documentId, selected.OverlayKey, selected.OverlayVersion, selected.HostScope, selected.HostKey,
             selected.IsEnabled, host.HostKey, artifact.ArtifactId, selected.OverlaySha256, selected.UpdatedUtc,
-            selectedDetail is null, files, diagnostics);
+            selectedDetail is null, files, diagnostics, fingerprint);
+    }
+
+    // Fingerprint over every saved row that can affect the previewed host and
+    // artifact: all document rows (identity, selectors, hash, update time),
+    // the host and artifact rows, the artifact files, and the files of every
+    // enabled overlay that matches this host/artifact. File content enters
+    // only as its SHA-256. Shared by the preview, the in-memory store and the
+    // transactional store so all three derive the identical value.
+    public static string ComputePreviewFingerprint(OverlayAdminSnapshot snapshot, ConfigOverlayDocumentRow selected,
+        HostRow host, ArtifactRow artifact, IReadOnlyList<OverlaySourceRow> artifactFiles,
+        IReadOnlyList<OverlaySourceRow> overlayFiles)
+    {
+        var builder = new StringBuilder();
+        void Field(object? value) => builder.Append(value switch
+        {
+            null => "<null>",
+            bool b => b ? "1" : "0",
+            DateTime time => time.Ticks.ToString(CultureInfo.InvariantCulture),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture),
+        }).Append('\u001f');
+        void Document(ConfigOverlayDocumentRow row)
+        {
+            Field(row.ConfigOverlayDocumentId); Field(row.OverlayKey); Field(row.OverlayVersion); Field(row.HostKey);
+            Field(row.HostScope); Field(row.ModuleKey); Field(row.ModuleDefinitionVersion); Field(row.AppKey);
+            Field(row.PackageType); Field(row.TargetName); Field(row.ArtifactVersion); Field(row.OverlaySha256);
+            Field(row.SourceName); Field(row.ConfigurationFileCount); Field(row.IsEnabled); Field(row.UpdatedUtc);
+            builder.Append('\n');
+        }
+        void FileRow(OverlaySourceRow row)
+        {
+            Field(row.RowId); Field(row.DocumentId); Field(row.RelativePath); Field(row.MergeMode); Field(row.IsEnabled);
+            Field(row.UpdatedUtc); Field(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(row.Content))));
+            builder.Append('\n');
+        }
+        Field("v1"); Field(selected.ConfigOverlayDocumentId); Field(host.HostKey); Field(artifact.ArtifactId);
+        Field(snapshot.SchemaReady); Field(snapshot.HasHostScope); builder.Append('\n');
+        Field(host.HostKey); Field(host.IsEnabled); builder.Append('\n');
+        Field(artifact.ArtifactId); Field(artifact.ModuleKey); Field(artifact.AppKey); Field(artifact.Version);
+        Field(artifact.PackageType); Field(artifact.TargetName); Field(artifact.IsEnabled); builder.Append('\n');
+        Document(selected);
+        foreach (var row in snapshot.Overlays.OrderBy(o => o.ConfigOverlayDocumentId)) Document(row);
+        foreach (var row in artifactFiles.OrderBy(f => f.RowId)) FileRow(row);
+        foreach (var row in overlayFiles.OrderBy(f => f.DocumentId).ThenBy(f => f.RowId)) FileRow(row);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
     }
 
     private static string? Blocker(ConfigOverlayDocumentRow selected, OverlayAdminSnapshot snapshot,
@@ -185,8 +286,22 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             ? $"artifact-owned configuration ({winner.RelativePath})"
             : $"{winner.SourceKind} {winner.OverlayKey} {winner.OverlayVersion} ({winner.HostScope})";
 
-    private async Task<(List<Candidate> Candidates, List<string> Diagnostics, HostRow Host, ArtifactRow Artifact)>
-        CollectCandidatesAsync(OverlayAdminSnapshot snapshot, string hostKey, int artifactId, CancellationToken ct)
+    private sealed record Collected(List<Candidate> Candidates, List<string> Diagnostics, HostRow Host,
+        ArtifactRow Artifact, IReadOnlyList<OverlaySourceRow> ArtifactFiles, IReadOnlyList<OverlaySourceRow> OverlayFiles);
+
+    // Relevance for one host/artifact, shared by candidate collection and by
+    // the fingerprint a preview-bound mutation re-derives.
+    internal static bool IsRelevantTo(ConfigOverlayDocumentRow overlay, OverlayAdminSnapshot snapshot,
+        string hostKey, ArtifactRow artifact)
+    {
+        var allHosts = overlay.HostScope == "AllHosts";
+        if (!(allHosts && snapshot.HasHostScope) && !Equal(overlay.HostKey, hostKey)) return false;
+        if (!Matches(overlay.ModuleKey, artifact.ModuleKey) || !Matches(overlay.AppKey, artifact.AppKey)
+            || !Matches(overlay.PackageType, artifact.PackageType) || !Matches(overlay.TargetName, artifact.TargetName)) return false;
+        return true;
+    }
+
+    private async Task<Collected> CollectCandidatesAsync(OverlayAdminSnapshot snapshot, string hostKey, int artifactId, CancellationToken ct)
     {
         var host = snapshot.Hosts.SingleOrDefault(h => string.Equals(h.HostKey, hostKey, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException("Select a registered host in this installation.");
@@ -198,17 +313,16 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         if (!artifact.IsEnabled) diagnostics.Add("Selected artifact is disabled; this describes saved configuration only.");
         if (!snapshot.SchemaReady) diagnostics.Add("Schema not ready: writes are disabled; upgrade the platform schema.");
         if (!snapshot.HasHostScope) diagnostics.Add("HostScope is missing: exact-host fallback only.");
-        foreach (var file in await store.SourcesAsync(artifactId, ct))
+        var artifactFiles = await store.SourcesAsync(artifactId, ct);
+        foreach (var file in artifactFiles)
         {
             if (file.IsEnabled) candidates.Add(new(file, null));
             else diagnostics.Add($"Artifact file {file.RelativePath}: disabled.");
         }
+        var overlayFiles = new List<OverlaySourceRow>();
         foreach (var overlay in snapshot.Overlays)
         {
-            var allHosts = overlay.HostScope == "AllHosts";
-            if (!(allHosts && snapshot.HasHostScope) && !Equal(overlay.HostKey, hostKey)) continue;
-            if (!Matches(overlay.ModuleKey, artifact.ModuleKey) || !Matches(overlay.AppKey, artifact.AppKey)
-                || !Matches(overlay.PackageType, artifact.PackageType) || !Matches(overlay.TargetName, artifact.TargetName)) continue;
+            if (!IsRelevantTo(overlay, snapshot, hostKey, artifact)) continue;
             if (!overlay.IsEnabled) { diagnostics.Add($"{overlay.OverlayKey} {overlay.OverlayVersion}: disabled."); continue; }
             if (overlay.ArtifactVersion is not null && ArtifactVersionComparer.Compare(artifact.Version, overlay.ArtifactVersion) < 0)
             {
@@ -217,6 +331,7 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             }
             var detail = await store.DetailAsync(overlay.ConfigOverlayDocumentId, ct);
             if (detail is null) { diagnostics.Add($"{overlay.OverlayKey}: missing document; reload."); continue; }
+            overlayFiles.AddRange(detail.Files);
             foreach (var file in detail.Files)
             {
                 if (file.IsEnabled) candidates.Add(new(file, overlay));
@@ -224,7 +339,7 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             }
             if (detail.Files.Count == 0) diagnostics.Add($"{overlay.OverlayKey}: no configuration files.");
         }
-        return (candidates, diagnostics, host, artifact);
+        return new(candidates, diagnostics, host, artifact, artifactFiles, overlayFiles);
     }
 
     public sealed record Candidate(OverlaySourceRow File, ConfigOverlayDocumentRow? Overlay)
@@ -232,10 +347,23 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         public int Priority => Overlay is null ? 0 : Overlay.HostScope == "AllHosts" ? 1 : 2;
     }
 
+    internal sealed record ResolvedFile(EffectiveConfigurationFileDto File, string ContentHash);
+
     public static OverlayEffectiveReadback Resolve(IEnumerable<Candidate> candidates, List<string>? diagnostics = null)
     {
         diagnostics ??= [];
-        var results = new List<EffectiveConfigurationFileDto>();
+        var resolved = ResolveWithContent(candidates, diagnostics);
+        if (resolved.Count == 0 && !diagnostics.Contains("No effective configuration files found."))
+            diagnostics.Add("No effective configuration files found.");
+        return new(resolved.Select(r => r.File).OrderBy(f => f.RelativePath, StringComparer.OrdinalIgnoreCase).ToArray(), diagnostics);
+    }
+
+    // Same resolution as Resolve, plus a hash of the actual merged effective
+    // content per path. The hash stays inside the service; DTOs never carry it.
+    internal static List<ResolvedFile> ResolveWithContent(IEnumerable<Candidate> candidates, List<string>? diagnostics = null)
+    {
+        diagnostics ??= [];
+        var results = new List<ResolvedFile>();
         foreach (var group in candidates.GroupBy(c => c.File.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
             var layers = group.GroupBy(c => c.Priority).Select(g => g.Aggregate((a, b) => Wins(b, a) ? b : a))
@@ -269,10 +397,10 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
                 c.Overlay is null ? "Artifact" : "ConfigOverlay", c.Overlay?.OverlayKey, c.Overlay?.OverlayVersion,
                 c.Overlay?.HostScope, c.File.MergeMode, Mode(c.File.MergeMode, c.File.RelativePath),
                 ReferenceEquals(c, winner), !contributing.Contains(c));
-            results.Add(new(group.Key, Dto(winner), group.OrderBy(c => c.Priority).Select(Dto).ToArray()));
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content ?? string.Empty)));
+            results.Add(new(new(group.Key, Dto(winner), group.OrderBy(c => c.Priority).Select(Dto).ToArray()), hash));
         }
-        if (results.Count == 0) diagnostics.Add("No effective configuration files found.");
-        return new(results.OrderBy(f => f.RelativePath, StringComparer.OrdinalIgnoreCase).ToArray(), diagnostics);
+        return results;
     }
 
     private static bool Wins(Candidate a, Candidate b)
