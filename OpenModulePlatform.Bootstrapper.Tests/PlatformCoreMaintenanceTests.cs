@@ -12,7 +12,7 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
 
     public PlatformCoreMaintenanceTests()
     {
-        root = Path.Combine(Environment.GetEnvironmentVariable("AO_JOB_SCRATCH") ?? @"G:\AI_Workdir", "core-maintenance-tests", Guid.NewGuid().ToString("N"));
+        root = Path.Combine(Environment.GetEnvironmentVariable("AO_JOB_SCRATCH") ?? Path.GetTempPath(), "core-maintenance-tests", Guid.NewGuid().ToString("N"));
         var definitions = Path.Combine(root, "data", "global", "module-definitions");
         Directory.CreateDirectory(definitions);
         configPath = Path.Combine(root, "bootstrap.json");
