@@ -304,6 +304,30 @@ rights can replace a path in that TOCTOU window. `icacls /L` limits traversal of
 a replaced leaf link; it does not prevent replacement of an ancestor directory.
 Deployment-directory ACLs must therefore restrict who can change those paths.
 
+## Overlay-owned whole files (web apps)
+
+When a config overlay supplies a whole configuration file at a path the
+artifact does not own, HostAgent records it in
+`App_Data/omp-applied-overlay-files.json` in the web app's target directory
+(relative path, byte length and SHA-256, bound to the app instance and host).
+If the overlay later stops supplying the path, HostAgent removes the recorded
+file on both the already-applied fast path and a full apply -- but only when
+the file is still byte-identical and neither it nor its parent chain is a
+reparse point. A modified or unsafe file is left in place, reported as a
+diagnostic warning on the deployment row, and kept in the inventory so the
+warning repeats until an operator resolves it (edit the file back, remove it
+manually, or remove the stale inventory entry by deleting the inventory file
+and letting a full deployment recreate it).
+
+The inventory itself is a control file in an app-pool-writable directory, so it
+is read as untrusted: the entire path including `App_Data` must not be a
+reparse point, size and entry counts are bounded before parsing, and untrusted
+schema or file content is never echoed into diagnostics. A malformed or torn
+inventory disables overlay-file removal for that cycle only; it never causes
+deletion. The write is atomic (temp file plus move). Limits: at most 512
+recorded files and a 1 MiB inventory. Service apps do not reconcile removed
+overlay-owned whole files yet; see `docs/CONFIG_OVERLAYS.md`.
+
 ## Rolling upgrades in multi-host installations
 
 Cross-host deployment coordination is controlled by the global configuration

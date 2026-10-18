@@ -466,6 +466,18 @@ public sealed class WebAppDeploymentService
                     }
                 }
 
+                // Full-apply cycles must honour the same plan: the generic mirror skips
+                // excluded entries (appsettings.*.json, App_Data, logs), so a stale
+                // overlay-owned file there would survive the mirror and, if the inventory
+                // were then rewritten with only the desired set, lose its ownership record
+                // forever. Remove planned files first and preserve ownership below for
+                // anything left in place.
+                if (overlayRemovalPlan.HasRemovals)
+                {
+                    var fullRemovalWarning = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
+                    overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRemovalWarning);
+                }
+
                 await MirrorWebAppAsync(settings, deployment, targetPath, configurationFiles, configurationVariables, cancellationToken);
 
                 if (UseAppCmdAppPoolControl(settings)
@@ -484,7 +496,10 @@ public sealed class WebAppDeploymentService
                 if (deploymentCycle.IsCoordinated)
                     await _deploymentHealthCheck(settings, deployment, runtimeName, cancellationToken);
 
-                AppliedOverlayFileReconciler.WriteInventory(targetPath, deployment, desiredOverlayFiles);
+                AppliedOverlayFileReconciler.WriteInventory(
+                    targetPath,
+                    deployment,
+                    AppliedOverlayFileReconciler.ResolveInventoryForWrite(targetPath, desiredOverlayFiles, overlayRemovalPlan));
             }
 
             deploymentHealthy = true;

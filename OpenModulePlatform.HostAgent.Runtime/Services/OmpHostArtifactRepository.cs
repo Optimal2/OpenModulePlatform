@@ -3538,7 +3538,7 @@ WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
         CancellationToken ct)
     {
 
-        var rows = new Dictionary<string, List<ResolvedConfigurationFile>>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new List<ResolvedConfigurationFile>();
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -3554,7 +3554,7 @@ WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            var candidate = new ResolvedConfigurationFile(
+            candidates.Add(new ResolvedConfigurationFile(
                 new ArtifactConfigurationFileDescriptor
                 {
                     ArtifactConfigurationFileId = rdr.GetInt32(0),
@@ -3566,8 +3566,24 @@ WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
                 rdr.GetDateTime(5),
                 rdr.IsDBNull(6) ? null : rdr.GetString(6),
                 rdr.IsDBNull(7) ? null : rdr.GetString(7),
-                rdr.IsDBNull(8) ? null : rdr.GetString(8));
+                rdr.IsDBNull(8) ? null : rdr.GetString(8)));
+        }
 
+        return ResolveConfigurationFiles(candidates, artifactVersion);
+    }
+
+    /// <summary>
+    /// Pure resolution of configuration-file rows (grouping, winner, layered content and
+    /// whole-file overlay-ownership classification), split out of the SQL reader so fixture
+    /// rows can prove it without a live database.
+    /// </summary>
+    internal static IReadOnlyList<ArtifactConfigurationFileDescriptor> ResolveConfigurationFiles(
+        IReadOnlyList<ResolvedConfigurationFile> candidates,
+        string? artifactVersion)
+    {
+        var rows = new Dictionary<string, List<ResolvedConfigurationFile>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates)
+        {
             // ADR 0006: the overlay pin is a minimum artifact version. An overlay
             // pinned to 0.3.183 applies to 0.3.229 but not to 0.3.100.
             if (candidate.SourcePriority > 0

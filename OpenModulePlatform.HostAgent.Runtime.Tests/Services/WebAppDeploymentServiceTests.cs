@@ -459,6 +459,132 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeployDesiredWebAppsAsync_FullApply_RemovesOverlayOwnedExcludedFile_WhenOverlayRemoved()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out var moduleInstanceKey, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        // appsettings.*.json is in the default mirror exclusions, so the generic mirror
+        // never deletes this stale file; only the planned overlay removal can.
+        const string relativePath = "appsettings.overlay.json";
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, relativePath, """{ "Overlay": true }"""));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, relativePath);
+        Assert.True(File.Exists(overlayPath));
+
+        // Overlay removed and a new artifact forces a full apply (not the fast path).
+        repository.ArtifactConfigurationFiles.Clear();
+        var next = CreateSuccessorDescriptor(descriptor, moduleInstanceKey);
+        repository.DesiredWebAppDeployments.Clear();
+        repository.DesiredWebAppDeployments.Add(next);
+
+        await service.DeployDesiredWebAppsAsync(next.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(overlayPath));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.Result.State);
+        Assert.True(last.Result.Applied);
+        var inventory = AppliedOverlayFileInventory.TryRead(descriptor.InstallPath!, out var diagnostic);
+        Assert.Null(diagnostic);
+        Assert.NotNull(inventory);
+        Assert.Empty(inventory.Files);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_FullApply_ModifiedOverlayOwnedExcludedFile_IsLeftAndOwnershipPreserved()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out var moduleInstanceKey, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        const string relativePath = "appsettings.overlay.json";
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, relativePath, """{ "Overlay": true }"""));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, relativePath);
+        File.WriteAllText(overlayPath, """{ "Overlay": "operator" }""");
+
+        repository.ArtifactConfigurationFiles.Clear();
+        var next = CreateSuccessorDescriptor(descriptor, moduleInstanceKey);
+        repository.DesiredWebAppDeployments.Clear();
+        repository.DesiredWebAppDeployments.Add(next);
+
+        await service.DeployDesiredWebAppsAsync(next.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(overlayPath));
+        Assert.Equal("""{ "Overlay": "operator" }""", File.ReadAllText(overlayPath));
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Contains("modified", last.Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+        // Ownership survived the full apply, so a later cycle can still reconcile it.
+        var inventory = AppliedOverlayFileInventory.TryRead(descriptor.InstallPath!, out _);
+        Assert.NotNull(inventory);
+        Assert.Contains(inventory.Files, file => string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_NullFilesInventory_FailsPerAppAndDoesNotAbortSweep()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var first = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        var second = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(first);
+        repository.DesiredWebAppDeployments.Add(second);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(first.ArtifactId, "odv.site.config.js", "// overlay"));
+        ApplyConfigurationForAlreadyAppliedDeployment(repository, CreateTestSettings(), first);
+
+        await service.DeployDesiredWebAppsAsync(first.HostKey, CancellationToken.None);
+        repository.PublishedWebAppResults.Clear();
+
+        // Structurally valid JSON with an explicit null Files list (app-pool writable).
+        var inventoryPath = AppliedOverlayFileInventory.GetPath(first.InstallPath!);
+        Directory.CreateDirectory(Path.GetDirectoryName(inventoryPath)!);
+        File.WriteAllText(inventoryPath, """
+            { "SchemaName": "OpenModulePlatform.AppliedOverlayFiles.v1", "AppInstanceId": "00000000-0000-0000-0000-000000000000", "Files": null }
+            """);
+
+        await service.DeployDesiredWebAppsAsync(first.HostKey, CancellationToken.None);
+
+        // Both deployments were processed: the malformed inventory failed per-app with a
+        // warning instead of aborting the sweep with a NullReferenceException.
+        Assert.True(repository.PublishedWebAppResults.Count >= 2);
+        Assert.Contains("inventory", repository.PublishedWebAppResults[0].Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedWebAppResults.Last().Result.State);
+    }
+
+    private WebAppDeploymentDescriptor CreateSuccessorDescriptor(
+        WebAppDeploymentDescriptor descriptor, string moduleInstanceKey)
+    {
+        var nextSource = Path.Join(Path.GetDirectoryName(descriptor.InstallPath!)!, "source-v2-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(nextSource);
+        File.WriteAllText(Path.Join(nextSource, "app.txt"), "content");
+        _tempPaths.Add(Path.GetDirectoryName(nextSource)!);
+        return new WebAppDeploymentDescriptor
+        {
+            HostId = descriptor.HostId,
+            HostKey = descriptor.HostKey,
+            AppInstanceId = descriptor.AppInstanceId,
+            AppInstanceKey = descriptor.AppInstanceKey,
+            AppKey = descriptor.AppKey,
+            ModuleInstanceKey = moduleInstanceKey,
+            DisplayName = descriptor.DisplayName,
+            ArtifactId = 2,
+            Version = "1.0.1",
+            SourceLocalPath = nextSource,
+            ContentSha256 = "bb22",
+            InstallPath = descriptor.InstallPath,
+            DeploymentState = HostDeploymentStatuses.Succeeded,
+            DeployedArtifactId = 1,
+            DeployedSourceLocalPath = descriptor.SourceLocalPath,
+            DeployedTargetPath = descriptor.InstallPath,
+            DeployedRuntimeName = "TestSite/",
+            DeployedContentSha256 = "AA11"
+        };
+    }
+
+    [Fact]
     public async Task DeployDesiredWebAppsAsync_ForeignInventory_IsNotUsedForRemoval()
     {
         var (service, repository, _) = CreateServiceWithFakeRepository();
@@ -488,7 +614,7 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         Assert.Contains("app instance", last.Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DeployDesiredWebAppsAsync_ReparsePointOverlayOwnedFile_IsLeftInPlaceAndWarns()
     {
         var (service, repository, _) = CreateServiceWithFakeRepository();
@@ -502,10 +628,8 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         File.Delete(overlayPath);
         var victim = Path.Join(descriptor.InstallPath!, "victim.txt");
         File.WriteAllText(victim, "victim");
-        if (!TryCreateFileSymlink(overlayPath, victim))
-        {
-            return; // Symlink privilege unavailable; the guard is covered by its own tests.
-        }
+        Skip.IfNot(TryCreateFileSymlink(overlayPath, victim),
+            "This process cannot create a file symlink (symlink privilege or Developer Mode required); the reparse-point guard was not exercised.");
 
         repository.ArtifactConfigurationFiles.Clear();
         await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);

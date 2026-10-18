@@ -159,6 +159,36 @@ modes. The mode is stored per file in
 `omp.ConfigOverlayConfigurationFiles.MergeMode` (added by the
 `sql/1-setup-openmoduleplatform.sql` migration for ADR 0006).
 
+## Removing an overlay: whole-file ownership (web apps)
+
+An overlay file whose relative path the artifact does not own is an
+*overlay-owned whole file*. When such an overlay is removed (or stops matching)
+and no artifact or lower overlay supplies the path, the file would otherwise
+stay on disk forever. For **web apps**, HostAgent records the overlay-owned
+whole files it applied in `App_Data/omp-applied-overlay-files.json` inside the
+app's target directory (path, byte length and SHA-256 per file, bound to the
+app instance). On later cycles -- both the already-applied fast path and a full
+apply -- it removes a recorded file only when it is still byte-identical and
+not a reparse point. A modified, missing, unsafe or reparse-point file is left
+in place with a diagnostic warning and stays in the inventory, so cleanup is
+retried instead of forgotten. Paths the artifact owns, files merged onto an
+artifact base, the built-in `appsettings.json`, and operator files that were
+never recorded are never removed by this mechanism.
+
+The inventory is written atomically (temp file plus move) and read defensively:
+the whole path including `App_Data` must not be a reparse point, the file is
+size- and entry-count-bounded before deserialization, and a malformed, torn,
+foreign-instance or otherwise invalid inventory disables removal for that cycle
+with an actionable warning (no untrusted schema or file content is echoed). To
+recover, delete `App_Data/omp-applied-overlay-files.json` and let a full
+deployment recreate it; nothing is deleted based on an unreadable inventory.
+
+**Service apps are not covered yet.** The same classification is computed for
+service-app configuration, but the service already-applied fast path does not
+reconcile removed overlay-owned whole files, so such a file can persist after
+its overlay is removed. This is a known, separate follow-up; do not assume
+universal whole-file removal across app kinds.
+
 ## The other layer: artifact-owned configuration
 
 Overlays are only half of the model, and the other half is easy to miss because

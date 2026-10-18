@@ -67,7 +67,7 @@ internal static class AppliedOverlayFileReconciler
         {
             if (readDiagnostic is not null)
             {
-                return new OverlayRemovalPlan(HasRemovals: false, RemoveEntries: [], Warning: readDiagnostic, ShouldRefreshInventory: false);
+                return new OverlayRemovalPlan(HasRemovals: false, RemoveEntries: [], Warning: readDiagnostic, ShouldRefreshInventory: false, RetainedEntries: []);
             }
 
             // No history yet: nothing to remove, but adopt the currently desired set so a later
@@ -76,7 +76,8 @@ internal static class AppliedOverlayFileReconciler
                 HasRemovals: false,
                 RemoveEntries: [],
                 Warning: null,
-                ShouldRefreshInventory: desiredFiles.Count > 0);
+                ShouldRefreshInventory: desiredFiles.Count > 0,
+                RetainedEntries: []);
         }
 
         if (inventory.AppInstanceId != deployment.AppInstanceId)
@@ -85,17 +86,27 @@ internal static class AppliedOverlayFileReconciler
                 HasRemovals: false,
                 RemoveEntries: [],
                 Warning: $"Applied overlay file inventory belongs to app instance '{inventory.AppInstanceId}' and was not used for removal.",
-                ShouldRefreshInventory: false);
+                ShouldRefreshInventory: false,
+                RetainedEntries: []);
         }
 
         var desiredPaths = desiredFiles
             .Select(static file => file.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var removals = new List<AppliedOverlayFileEntry>();
+        var retained = new List<AppliedOverlayFileEntry>();
         var warnings = new List<string>();
 
-        foreach (var entry in inventory.Files)
+        // Defensive: TryRead validates, but never let a null list/member become a
+        // NullReferenceException (not a recordable fault) that aborts the sweep.
+        foreach (var entry in inventory.Files ?? [])
         {
+            if (entry is null || string.IsNullOrWhiteSpace(entry.RelativePath))
+            {
+                warnings.Add("Applied overlay file inventory contains an invalid entry and it was not reconciled; delete the inventory file, then let a full deployment recreate it. No file was removed for that entry.");
+                continue;
+            }
+
             if (desiredPaths.Contains(entry.RelativePath))
             {
                 continue;
@@ -104,6 +115,7 @@ internal static class AppliedOverlayFileReconciler
             if (!TryResolvePath(targetPath, entry.RelativePath, out var path, out var pathWarning))
             {
                 warnings.Add(pathWarning);
+                retained.Add(entry);
                 continue;
             }
 
@@ -117,12 +129,14 @@ internal static class AppliedOverlayFileReconciler
             if (HasReparsePointInPath(path, targetPath))
             {
                 warnings.Add($"Applied overlay file '{entry.RelativePath}' is a reparse point and was left in place.");
+                retained.Add(entry);
                 continue;
             }
 
             if (!FileMatchesEntry(path, entry))
             {
                 warnings.Add($"Applied overlay file '{entry.RelativePath}' was modified after HostAgent wrote it and was left in place; remove it manually if it is no longer needed.");
+                retained.Add(entry);
                 continue;
             }
 
@@ -140,7 +154,41 @@ internal static class AppliedOverlayFileReconciler
             HasRemovals: removals.Count > 0,
             RemoveEntries: removals,
             Warning: warning,
-            ShouldRefreshInventory: shouldRefresh);
+            ShouldRefreshInventory: shouldRefresh,
+            RetainedEntries: retained);
+    }
+
+    /// <summary>
+    /// Inventory to persist after a full apply: the desired set plus every recorded entry
+    /// that is still on disk because it was retained (modified, unsafe, reparse point) or
+    /// whose removal did not complete. Ownership is preserved until cleanup succeeds, so a
+    /// file the generic mirror excludes (appsettings.*.json, App_Data, logs) stays
+    /// reconcilable instead of being silently dropped with the old inventory.
+    /// </summary>
+    internal static IReadOnlyList<AppliedOverlayFileEntry> ResolveInventoryForWrite(
+        string targetPath,
+        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles,
+        OverlayRemovalPlan plan)
+    {
+        var result = new List<AppliedOverlayFileEntry>(desiredFiles);
+        var seen = desiredFiles
+            .Select(static file => file.RelativePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in plan.RetainedEntries.Concat(plan.RemoveEntries))
+        {
+            if (!seen.Add(entry.RelativePath))
+            {
+                continue;
+            }
+
+            if (TryResolvePath(targetPath, entry.RelativePath, out var path, out _)
+                && File.Exists(path))
+            {
+                result.Add(entry);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -164,7 +212,14 @@ internal static class AppliedOverlayFileReconciler
                 continue;
             }
 
-            if (!File.Exists(path) || HasReparsePointInPath(path, targetPath) || !FileMatchesEntry(path, entry))
+            if (!File.Exists(path))
+            {
+                // Already gone (for example the generic mirror removed it first): the goal
+                // is achieved, so this is not a failure to warn about.
+                continue;
+            }
+
+            if (HasReparsePointInPath(path, targetPath) || !FileMatchesEntry(path, entry))
             {
                 logger.LogWarning("Applied overlay file '{RelativePath}' changed before removal and was left in place.", entry.RelativePath);
                 warnings.Add($"Applied overlay file '{entry.RelativePath}' changed before removal and was left in place.");
@@ -263,7 +318,8 @@ internal static class AppliedOverlayFileReconciler
         AppliedOverlayFileInventory inventory,
         IReadOnlyList<AppliedOverlayFileEntry> desiredFiles)
     {
-        var inventoryPaths = inventory.Files
+        var inventoryPaths = (inventory.Files ?? [])
+            .Where(static file => file is not null && !string.IsNullOrWhiteSpace(file.RelativePath))
             .Select(static file => file.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (inventoryPaths.Count != desiredFiles.Count)
@@ -282,4 +338,5 @@ internal sealed record OverlayRemovalPlan(
     bool HasRemovals,
     IReadOnlyList<AppliedOverlayFileEntry> RemoveEntries,
     string? Warning,
-    bool ShouldRefreshInventory);
+    bool ShouldRefreshInventory,
+    IReadOnlyList<AppliedOverlayFileEntry> RetainedEntries);
