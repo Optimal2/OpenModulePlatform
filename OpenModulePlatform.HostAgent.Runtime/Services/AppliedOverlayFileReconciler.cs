@@ -229,8 +229,30 @@ internal static class AppliedOverlayFileReconciler
         WebAppDeploymentDescriptor deployment,
         IReadOnlyList<AppliedOverlayFileEntry> desiredFiles,
         PayloadPathInventory? payload = null)
+        => Plan(stateRoot, targetPath, deployment.AppInstanceId, deployment.HostKey, desiredFiles, payload);
+
+    /// <summary>
+    /// Service-app overload of <see cref="Plan(string, string, WebAppDeploymentDescriptor, IReadOnlyList{AppliedOverlayFileEntry}, PayloadPathInventory?)"/>:
+    /// the same trusted-inventory reconciliation, bound to the app instance and host the
+    /// service deployment carries.
+    /// </summary>
+    internal static OverlayRemovalPlan Plan(
+        string stateRoot,
+        string targetPath,
+        ServiceAppDeploymentDescriptor deployment,
+        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles,
+        PayloadPathInventory? payload = null)
+        => Plan(stateRoot, targetPath, deployment.AppInstanceId, deployment.HostKey, desiredFiles, payload);
+
+    private static OverlayRemovalPlan Plan(
+        string stateRoot,
+        string targetPath,
+        Guid appInstanceId,
+        string? hostKey,
+        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles,
+        PayloadPathInventory? payload)
     {
-        var inventory = AppliedOverlayFileInventory.TryRead(stateRoot, targetPath, deployment.AppInstanceId, out var readDiagnostic);
+        var inventory = AppliedOverlayFileInventory.TryRead(stateRoot, targetPath, appInstanceId, out var readDiagnostic);
         if (inventory is null)
         {
             if (readDiagnostic is not null)
@@ -251,7 +273,7 @@ internal static class AppliedOverlayFileReconciler
         // Name the binding that actually mismatched: the app-instance id is already
         // enforced by TryRead, so the reachable mismatch here is the host key, and
         // blaming the app instance for it would misdirect the operator.
-        if (inventory.AppInstanceId != deployment.AppInstanceId)
+        if (inventory.AppInstanceId != appInstanceId)
         {
             return new OverlayRemovalPlan(
                 HasRemovals: false,
@@ -261,7 +283,7 @@ internal static class AppliedOverlayFileReconciler
                 RetainedEntries: []);
         }
 
-        if (!string.Equals(inventory.HostKey ?? string.Empty, deployment.HostKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(inventory.HostKey ?? string.Empty, hostKey ?? string.Empty, StringComparison.OrdinalIgnoreCase))
         {
             return new OverlayRemovalPlan(
                 HasRemovals: false,
@@ -656,12 +678,41 @@ internal static class AppliedOverlayFileReconciler
         string targetPath,
         WebAppDeploymentDescriptor deployment,
         IReadOnlyList<AppliedOverlayFileEntry> desiredFiles)
-        => AppliedOverlayFileInventory.TryWrite(
+        => TryWriteInventory(
             stateRoot,
             targetPath,
             deployment.AppInstanceId,
             deployment.AppInstanceKey,
             deployment.HostKey,
+            desiredFiles);
+
+    /// <summary>Service-app overload of the trusted-inventory write; same binding, same limits.</summary>
+    internal static string? TryWriteInventory(
+        string stateRoot,
+        string targetPath,
+        ServiceAppDeploymentDescriptor deployment,
+        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles)
+        => TryWriteInventory(
+            stateRoot,
+            targetPath,
+            deployment.AppInstanceId,
+            deployment.AppInstanceKey,
+            deployment.HostKey,
+            desiredFiles);
+
+    private static string? TryWriteInventory(
+        string stateRoot,
+        string targetPath,
+        Guid appInstanceId,
+        string appInstanceKey,
+        string hostKey,
+        IReadOnlyList<AppliedOverlayFileEntry> desiredFiles)
+        => AppliedOverlayFileInventory.TryWrite(
+            stateRoot,
+            targetPath,
+            appInstanceId,
+            appInstanceKey,
+            hostKey,
             desiredFiles);
 
     private static bool TryResolvePath(string targetPath, string relativePath, out string path, out string warning)

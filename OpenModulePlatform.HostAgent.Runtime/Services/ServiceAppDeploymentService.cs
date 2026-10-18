@@ -158,6 +158,7 @@ public sealed class ServiceAppDeploymentService
         var deploymentHealthy = false;
         string? deploymentFailure = null;
         string? deploySetWarning = null;
+        string? overlayRemovalWarning = null;
         if (deploySetWarningsByModuleInstanceKey is not null
             && deploySetWarningsByModuleInstanceKey.TryGetValue(deployment.ModuleInstanceKey, out var foundDeploySetWarning))
         {
@@ -175,6 +176,20 @@ public sealed class ServiceAppDeploymentService
             var combined = string.IsNullOrWhiteSpace(existing)
                 ? deploySetWarning
                 : existing + Environment.NewLine + deploySetWarning;
+            return result.WithDiagnosticWarning(combined);
+        }
+
+        AppDeploymentResult WithOverlayWarning(AppDeploymentResult result)
+        {
+            if (string.IsNullOrWhiteSpace(overlayRemovalWarning))
+            {
+                return result;
+            }
+
+            var existing = result.DiagnosticWarningMessage;
+            var combined = string.IsNullOrWhiteSpace(existing)
+                ? overlayRemovalWarning
+                : existing + Environment.NewLine + overlayRemovalWarning;
             return result.WithDiagnosticWarning(combined);
         }
 
@@ -236,6 +251,31 @@ public sealed class ServiceAppDeploymentService
                 configuredConnectionString,
                 settings,
                 out var replacedOmpConnectionString);
+
+            // F6: reserved HostAgent runtime control paths can never be supplied by a
+            // configuration overlay. Deny them before apply/classification so an overlay
+            // cannot overwrite the deployment lease or other control state; generic user
+            // App_Data files remain allowed. This mirrors the web-app guard.
+            var reservedFiles = configurationFiles
+                .Where(static file => OverlayReservedPaths.IsReserved(file.RelativePath))
+                .ToList();
+            if (reservedFiles.Count > 0)
+            {
+                configurationFiles = configurationFiles
+                    .Where(static file => !OverlayReservedPaths.IsReserved(file.RelativePath))
+                    .ToList();
+                var reservedWarning = "Configuration overlay supplied reserved HostAgent control path(s) and they were not applied: "
+                    + string.Join(", ", reservedFiles.Select(static file => file.RelativePath)) + ".";
+                _logger.LogWarning(
+                    "Service app deployment refused reserved overlay control paths. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Paths={Paths}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    string.Join(", ", reservedFiles.Select(static file => file.RelativePath)));
+                deploySetWarning = string.IsNullOrWhiteSpace(deploySetWarning)
+                    ? reservedWarning
+                    : deploySetWarning + Environment.NewLine + reservedWarning;
+            }
+
             if (replacedOmpConnectionString
                 && _replacedOmpConnectionStringArtifacts.TryAdd((deployment.ArtifactId, deployment.Version), 0))
             {
@@ -296,102 +336,69 @@ public sealed class ServiceAppDeploymentService
                     : deploySetWarning + Environment.NewLine + skipWarning;
             }
 
+            // Overlay-owned whole files the overlay no longer supplies are the one class of
+            // content the already-applied fast path below leaves behind: AreApplied only
+            // examines desired files, so a removed overlay file persisted forever. Resolve
+            // the desired set and plan any reconciliation before the fast path so the
+            // decision is made on the same cycle, exactly as the web app path does.
+            var overlayStateRoot = settings.LocalArtifactCacheRoot;
+            var overlayPayload = AppliedOverlayFileReconciler.EnumeratePayloadPaths(deployment.SourceLocalPath);
+            var desiredOverlayFiles = AppliedOverlayFileReconciler.ResolveDesiredOverlayFiles(
+                configurationFiles,
+                configurationVariables,
+                overlayPayload.Paths);
+            // Payload-overlaid files are recorded too (separately classified): ApplyAsync
+            // writes overlay content over the mirrored payload copy, so without a record a
+            // later overlay removal could not prove the on-disk bytes are the overlay's and
+            // restore the payload bytes. They are planned as restores, never removals.
+            var desiredPayloadOverlaidFiles = AppliedOverlayFileReconciler.ResolveDesiredPayloadOverlaidFiles(
+                configurationFiles,
+                configurationVariables,
+                overlayPayload.Paths);
+            var desiredOverlayInventoryFiles = desiredOverlayFiles.Concat(desiredPayloadOverlaidFiles).ToList();
+            var overlayRemovalPlan = AppliedOverlayFileReconciler.Plan(
+                overlayStateRoot,
+                targetPath,
+                deployment,
+                desiredOverlayInventoryFiles,
+                overlayPayload);
+            overlayRemovalWarning = overlayRemovalPlan.Warning;
+
             // Already-applied is evaluated before the deployment lock, matching the web app
             // path. The other order published a Warning for a deployment that was in fact
             // converged, and Warning drops the row out of the already-applied fast path
             // (which requires Succeeded) -- so the cycle after the operator released the
             // lock ran a full redeploy and stopped and started a healthy service for
             // nothing. Neither branch below writes into the locked directory (R7-D9).
-            if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath)
-                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
+            var alreadyApplied = IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath)
+                && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables);
+
+            if (alreadyApplied && !overlayRemovalPlan.HasRemovals && !overlayRemovalPlan.HasRestores)
             {
-                EnsureWindowsService(deployment, serviceName, targetExecutablePath);
-
-                // Identity repair stops and restarts the service, so it is a change like any
-                // other deployment and must hold the cross-host lease first. A busy lease
-                // skips the repair this cycle WITHOUT degrading the row out of the
-                // already-applied fast path -- a Warning here would trigger a full redeploy
-                // (see the comment below); the wait is surfaced as a diagnostic warning.
-                if (IdentityRepairWouldApply(settings, deployment, serviceName, serviceIdentity))
+                if (overlayRemovalWarning is null && overlayRemovalPlan.ShouldRefreshInventory)
                 {
-                    if (!await deploymentCycle.EnterAsync(deployment.HostId,
-                        string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
-                    {
-                        await _repository.PublishAppDeploymentResultAsync(
-                            deployment,
-                            WithDeploySetWarning(
-                                AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false)
-                                    .WithDiagnosticWarning(deploymentCycle.WaitingMessage)),
-                            cancellationToken);
-                        return;
-                    }
-
-                    enteredDeployment = true;
+                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(
+                        overlayStateRoot,
+                        targetPath,
+                        deployment,
+                        desiredOverlayInventoryFiles);
                 }
 
-                var identityCheck = await EnsureServiceIdentityAsync(
-                    settings,
-                    deployment,
-                    serviceName,
-                    serviceIdentity,
-                    cancellationToken);
-                // Publishing Warning here degraded the row out of the already-applied
-                // fast path (IsAlreadyApplied requires Succeeded), so the next cycle ran a
-                // full redeploy -- stopping and restarting the Windows service -- and the
-                // cycle after that landed here again. A service whose logon account needs
-                // manual attention was therefore stopped and started every other
-                // convergence cycle, indefinitely. R6-D2 fixed the two sibling warning
-                // sites and left this one; it also put the text in ErrorMessage, so the
-                // Portal showed the same condition as an error here and as a warning
-                // there. Fall through to the reconcile call as well: the early return was
-                // the only thing restarting a stopped service on this path, and dropping
-                // it without the fall-through would trade a restart loop for a service
-                // that never comes back (R7-D1).
-                var identityWarning = identityCheck.WarningMessage;
-
-                var reconcileRunningResult = await EnsureServiceRunningIfDesiredAsync(
+                var outcome = await CompleteConvergedServiceAppAsync(
                     settings,
                     deployment,
                     targetPath,
                     serviceName,
-                    identityCheck,
+                    targetExecutablePath,
+                    serviceIdentity,
+                    applied: false,
+                    leaseAlreadyEntered: false,
+                    deploymentCycle,
+                    finalize: result => WithDeploySetWarning(WithOverlayWarning(result)),
                     cancellationToken);
-                if (reconcileRunningResult is not null)
-                {
-                    // Reconcile reports a start attempt (successful or not) as a diagnostic
-                    // warning on a Succeeded result, so the lease outcome must follow the
-                    // service state rather than the presence of that report.
-                    if (IsServiceRunning(serviceName))
-                    {
-                        deploymentHealthy = true;
-                    }
-                    else
-                    {
-                        deploymentFailure = reconcileRunningResult.DiagnosticWarningMessage
-                            ?? reconcileRunningResult.ErrorMessage
-                            ?? "Service app was not confirmed Running after identity repair.";
-                    }
-
-                    await _repository.PublishAppDeploymentResultAsync(
-                        deployment,
-                        WithDeploySetWarning(
-                            AddIdentityCheck(
-                                WithIdentityWarning(reconcileRunningResult, identityWarning),
-                                identityCheck)),
-                        cancellationToken);
-                    return;
-                }
-
-                deploymentHealthy = true;
-                await _repository.PublishAppDeploymentResultAsync(
-                    deployment,
-                    WithDeploySetWarning(
-                        AddIdentityCheck(
-                            WithIdentityWarning(
-                                AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
-                                identityWarning),
-                            identityCheck)),
-                    cancellationToken);
+                enteredDeployment = outcome.EnteredDeployment;
+                deploymentHealthy = outcome.Healthy;
+                deploymentFailure = outcome.Failure;
                 return;
             }
 
@@ -468,6 +475,55 @@ public sealed class ServiceAppDeploymentService
                 deployment,
                 WithDeploySetWarning(AppDeploymentResult.Running(targetPath, runningRuntimeName)),
                 cancellationToken);
+
+            if (alreadyApplied)
+            {
+                // Targeted reconciliation: only files recorded as overlay-owned whole files
+                // are removed, and recorded payload files are restored to the artifact
+                // payload bytes. The generic full mirror is not an owned-path proof and would
+                // delete unrelated operator files, so it is deliberately not used here; the
+                // service is already deployed and running, so it is not stopped or restarted.
+                var removal = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, removal.Warning);
+                var restoration = AppliedOverlayFileReconciler.RestorePayloadFiles(
+                    targetPath,
+                    deployment.SourceLocalPath,
+                    overlayRemovalPlan,
+                    _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, restoration.Warning);
+                if (overlayRemovalWarning is null)
+                {
+                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(
+                        overlayStateRoot,
+                        targetPath,
+                        deployment,
+                        desiredOverlayInventoryFiles);
+                }
+
+                _logger.LogInformation(
+                    "Service app overlay-owned files reconciled. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Removed={Removed}, Restored={Restored}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    removal.RemovedCount,
+                    restoration.RestoredCount);
+
+                var outcome = await CompleteConvergedServiceAppAsync(
+                    settings,
+                    deployment,
+                    targetPath,
+                    serviceName,
+                    targetExecutablePath,
+                    serviceIdentity,
+                    applied: true,
+                    leaseAlreadyEntered: true,
+                    deploymentCycle,
+                    finalize: result => WithDeploySetWarning(WithOverlayWarning(result)),
+                    cancellationToken);
+                enteredDeployment = outcome.EnteredDeployment;
+                deploymentHealthy = outcome.Healthy;
+                deploymentFailure = outcome.Failure;
+                return;
+            }
 
             if (settings.StopServiceForServiceAppDeployment)
             {
@@ -563,13 +619,49 @@ public sealed class ServiceAppDeploymentService
                     renameCleanup.ServiceSkipReason);
             }
 
+            // Full-apply cycles must honour the same plan: the generic mirror skips excluded
+            // entries (appsettings.*.json, App_Data, logs), so a stale overlay-owned file
+            // there would survive the mirror and, if the inventory were then rewritten with
+            // only the desired set, lose its ownership record forever. Remove planned files
+            // first and preserve ownership below for anything left in place.
+            if (overlayRemovalPlan.HasRemovals)
+            {
+                var fullRemoval = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRemoval.Warning);
+            }
+
+            // Restoring before the mirror also covers payload files under mirror exclusions
+            // (App_Data, appsettings.*.json); for other paths the mirror then copies the
+            // same payload bytes again.
+            if (overlayRemovalPlan.HasRestores)
+            {
+                var fullRestore = AppliedOverlayFileReconciler.RestorePayloadFiles(
+                    targetPath,
+                    deployment.SourceLocalPath,
+                    overlayRemovalPlan,
+                    _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRestore.Warning);
+            }
+
+            // Retained (modified/unsafe) files must survive the mirror's stale-entry deletion
+            // exactly as the warning states; reuse the mirror exclusion mechanism.
+            var retainedOverlayPaths = AppliedOverlayFileReconciler.ResolveRetainedRelativePaths(targetPath, overlayRemovalPlan);
             ArtifactDirectoryMirror.MirrorDirectory(
                 deployment.SourceLocalPath,
                 targetPath,
-                settings.ServiceAppDeploymentExcludedEntries,
+                retainedOverlayPaths.Count > 0
+                    ? [.. settings.ServiceAppDeploymentExcludedEntries, .. retainedOverlayPaths]
+                    : settings.ServiceAppDeploymentExcludedEntries,
                 cancellationToken);
 
             await ArtifactConfigurationFileWriter.ApplyAsync(targetPath, configurationFiles, configurationVariables, cancellationToken);
+
+            var inventoryWriteWarning = AppliedOverlayFileReconciler.TryWriteInventory(
+                overlayStateRoot,
+                targetPath,
+                deployment,
+                AppliedOverlayFileReconciler.ResolveInventoryForWrite(targetPath, desiredOverlayInventoryFiles, overlayRemovalPlan));
+            overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, inventoryWriteWarning);
 
             EnsureWindowsService(deployment, serviceName, targetExecutablePath);
 
@@ -608,11 +700,12 @@ public sealed class ServiceAppDeploymentService
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
                     WithDeploySetWarning(
-                        AddIdentityCheck(
-                            AppDeploymentResult
-                                .Succeeded(targetPath, serviceName, applied: true)
-                                .WithDiagnosticWarning(postDeployIdentityCheck.WarningMessage),
-                            postDeployIdentityCheck)),
+                        WithOverlayWarning(
+                            AddIdentityCheck(
+                                AppDeploymentResult
+                                    .Succeeded(targetPath, serviceName, applied: true)
+                                    .WithDiagnosticWarning(postDeployIdentityCheck.WarningMessage),
+                                postDeployIdentityCheck))),
                     cancellationToken);
                 return;
             }
@@ -620,9 +713,10 @@ public sealed class ServiceAppDeploymentService
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
                 WithDeploySetWarning(
-                    AddIdentityCheck(
-                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: true),
-                        postDeployIdentityCheck)),
+                    WithOverlayWarning(
+                        AddIdentityCheck(
+                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: true),
+                            postDeployIdentityCheck))),
                 cancellationToken);
 
             _logger.LogInformation(
@@ -670,6 +764,135 @@ public sealed class ServiceAppDeploymentService
             if (enteredDeployment)
                 await deploymentCycle.CompleteAppAsync(deploymentHealthy ? null : deploymentFailure ?? "Deployment interrupted before health confirmation.");
         }
+    }
+
+    /// <summary>
+    /// Completes a converged (already-applied) service app: ensure the Windows service
+    /// exists, repair its identity when needed (holding the cross-host lease when it is not
+    /// already held), reconcile the desired running state, and publish a Succeeded result
+    /// that keeps the row on the already-applied fast path. Reports the lease/health outcome
+    /// so the caller can drive the finally-block lease release.
+    /// </summary>
+    private async Task<ConvergedDeploymentOutcome> CompleteConvergedServiceAppAsync(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string targetPath,
+        string serviceName,
+        string targetExecutablePath,
+        ServiceAppIdentityResolution serviceIdentity,
+        bool applied,
+        bool leaseAlreadyEntered,
+        AppDeploymentLeaseCycle deploymentCycle,
+        Func<AppDeploymentResult, AppDeploymentResult> finalize,
+        CancellationToken cancellationToken)
+    {
+        EnsureWindowsService(deployment, serviceName, targetExecutablePath);
+
+        var enteredDeployment = leaseAlreadyEntered;
+
+        // Identity repair stops and restarts the service, so it is a change like any
+        // other deployment and must hold the cross-host lease first. A busy lease
+        // skips the repair this cycle WITHOUT degrading the row out of the
+        // already-applied fast path -- a Warning here would trigger a full redeploy
+        // (see the comment below); the wait is surfaced as a diagnostic warning.
+        if (IdentityRepairWouldApply(settings, deployment, serviceName, serviceIdentity))
+        {
+            if (!enteredDeployment)
+            {
+                if (!await deploymentCycle.EnterAsync(deployment.HostId,
+                    string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
+                {
+                    await _repository.PublishAppDeploymentResultAsync(
+                        deployment,
+                        finalize(
+                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false)
+                                .WithDiagnosticWarning(deploymentCycle.WaitingMessage)),
+                        cancellationToken);
+                    return new ConvergedDeploymentOutcome(false, false, null);
+                }
+
+                enteredDeployment = true;
+            }
+        }
+
+        var identityCheck = await EnsureServiceIdentityAsync(
+            settings,
+            deployment,
+            serviceName,
+            serviceIdentity,
+            cancellationToken);
+        // Publishing Warning here degraded the row out of the already-applied
+        // fast path (IsAlreadyApplied requires Succeeded), so the next cycle ran a
+        // full redeploy -- stopping and restarting the Windows service -- and the
+        // cycle after that landed here again. A service whose logon account needs
+        // manual attention was therefore stopped and started every other
+        // convergence cycle, indefinitely. R6-D2 fixed the two sibling warning
+        // sites and left this one; it also put the text in ErrorMessage, so the
+        // Portal showed the same condition as an error here and as a warning
+        // there. Fall through to the reconcile call as well: the early return was
+        // the only thing restarting a stopped service on this path, and dropping
+        // it without the fall-through would trade a restart loop for a service
+        // that never comes back (R7-D1).
+        var identityWarning = identityCheck.WarningMessage;
+
+        var reconcileRunningResult = await EnsureServiceRunningIfDesiredAsync(
+            settings,
+            deployment,
+            targetPath,
+            serviceName,
+            identityCheck,
+            cancellationToken);
+        if (reconcileRunningResult is not null)
+        {
+            // Reconcile reports a start attempt (successful or not) as a diagnostic
+            // warning on a Succeeded result, so the lease outcome must follow the
+            // service state rather than the presence of that report.
+            var healthy = IsServiceRunning(serviceName);
+            await _repository.PublishAppDeploymentResultAsync(
+                deployment,
+                finalize(
+                    AddIdentityCheck(
+                        WithIdentityWarning(
+                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: applied || identityCheck.Applied)
+                                .WithDiagnosticWarning(reconcileRunningResult.DiagnosticWarningMessage),
+                            identityWarning),
+                        identityCheck)),
+                cancellationToken);
+            return new ConvergedDeploymentOutcome(
+                enteredDeployment,
+                healthy,
+                healthy ? null : reconcileRunningResult.DiagnosticWarningMessage
+                    ?? reconcileRunningResult.ErrorMessage
+                    ?? "Service app was not confirmed Running after identity repair.");
+        }
+
+        await _repository.PublishAppDeploymentResultAsync(
+            deployment,
+            finalize(
+                AddIdentityCheck(
+                    WithIdentityWarning(
+                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: applied || identityCheck.Applied),
+                        identityWarning),
+                    identityCheck)),
+            cancellationToken);
+        return new ConvergedDeploymentOutcome(enteredDeployment, true, null);
+    }
+
+    private sealed record ConvergedDeploymentOutcome(bool EnteredDeployment, bool Healthy, string? Failure);
+
+    private static string? CombineWarnings(string? first, string? second)
+    {
+        if (string.IsNullOrWhiteSpace(first))
+        {
+            return second;
+        }
+
+        if (string.IsNullOrWhiteSpace(second))
+        {
+            return first;
+        }
+
+        return first + Environment.NewLine + second;
     }
 
     /// <summary>

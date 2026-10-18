@@ -353,6 +353,34 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeployDesiredWebAppsAsync_OverlayContentEdit_ChangesDeployedContentOnNextCycle()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, relativePath, "// overlay v1"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(descriptor.InstallPath!, relativePath);
+        Assert.Equal("// overlay v1", File.ReadAllText(overlayPath));
+
+        // Overlay content edit with unchanged artifact identity: the already-applied
+        // fast path must notice the desired bytes changed and re-apply on the next cycle.
+        repository.ArtifactConfigurationFiles.Clear();
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(descriptor.ArtifactId, relativePath, "// overlay v2"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.Equal("// overlay v2", File.ReadAllText(overlayPath));
+        var last = repository.PublishedWebAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.State);
+        Assert.True(last.Applied);
+    }
+
+    [Fact]
     public async Task DeployDesiredWebAppsAsync_OverlayOwnedFile_ReplacedWhenArtifactNowOwnsThePath()
     {
         var (service, repository, _) = CreateServiceWithFakeRepository();

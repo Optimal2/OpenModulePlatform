@@ -426,6 +426,106 @@ public sealed class OmpHostArtifactRepositoryOverlayOwnershipTests
         }
     }
 
+    [Fact]
+    public void Plan_ServiceAppDeploymentDescriptor_UsesSameTrustedInventory()
+    {
+        var root = Path.Join(Path.GetTempPath(), "omp-service-plan-" + Guid.NewGuid().ToString("N"));
+        var stateRoot = Path.Join(root, "state");
+        var target = Path.Join(root, "target");
+        var source = Path.Join(root, "source");
+        Directory.CreateDirectory(stateRoot);
+        Directory.CreateDirectory(target);
+        Directory.CreateDirectory(source);
+        try
+        {
+            const string content = "// overlay";
+            File.WriteAllText(Path.Join(target, "odv.site.config.js"), content);
+            var appInstanceId = Guid.NewGuid();
+            var entry = new AppliedOverlayFileEntry
+            {
+                RelativePath = "odv.site.config.js",
+                ContentLength = System.Text.Encoding.UTF8.GetByteCount(content),
+                ContentSha256 = ComputeSha256(content)
+            };
+            Assert.Null(AppliedOverlayFileInventory.TryWrite(stateRoot, target, appInstanceId, "app", "host", [entry]));
+
+            var deployment = new ServiceAppDeploymentDescriptor
+            {
+                HostId = Guid.NewGuid(),
+                HostKey = "host",
+                AppInstanceId = appInstanceId,
+                AppInstanceKey = "app",
+                AppKey = "app",
+                ModuleInstanceKey = "module",
+                DisplayName = "Test Service",
+                ArtifactId = 1,
+                Version = "1.0.0",
+                SourceLocalPath = source,
+                InstallPath = target
+            };
+            var payload = AppliedOverlayFileReconciler.EnumeratePayloadPaths(source);
+            Assert.True(payload.IsComplete);
+
+            var plan = AppliedOverlayFileReconciler.Plan(stateRoot, target, deployment, desiredFiles: [], payload: payload);
+
+            Assert.True(plan.HasRemovals);
+            var removal = Assert.Single(plan.RemoveEntries);
+            Assert.Equal("odv.site.config.js", removal.RelativePath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryWriteInventory_ServiceAppDeploymentDescriptor_WritesSameBinding()
+    {
+        var root = Path.Join(Path.GetTempPath(), "omp-service-inventory-" + Guid.NewGuid().ToString("N"));
+        var stateRoot = Path.Join(root, "state");
+        var target = Path.Join(root, "target");
+        Directory.CreateDirectory(stateRoot);
+        Directory.CreateDirectory(target);
+        try
+        {
+            var appInstanceId = Guid.NewGuid();
+            var deployment = new ServiceAppDeploymentDescriptor
+            {
+                HostId = Guid.NewGuid(),
+                HostKey = "host",
+                AppInstanceId = appInstanceId,
+                AppInstanceKey = "app",
+                AppKey = "app",
+                ModuleInstanceKey = "module",
+                DisplayName = "Test Service",
+                ArtifactId = 1,
+                Version = "1.0.0",
+                SourceLocalPath = Path.Join(root, "source"),
+                InstallPath = target
+            };
+            var entry = new AppliedOverlayFileEntry
+            {
+                RelativePath = "odv.site.config.js",
+                ContentLength = System.Text.Encoding.UTF8.GetByteCount("// overlay"),
+                ContentSha256 = ComputeSha256("// overlay")
+            };
+
+            Assert.Null(AppliedOverlayFileReconciler.TryWriteInventory(stateRoot, target, deployment, [entry]));
+
+            var inventory = AppliedOverlayFileInventory.TryRead(stateRoot, target, appInstanceId, out var diagnostic);
+            Assert.Null(diagnostic);
+            Assert.NotNull(inventory);
+            Assert.Equal("host", inventory.HostKey);
+            Assert.Equal("app", inventory.AppInstanceKey);
+            var recorded = Assert.Single(inventory.Files);
+            Assert.Equal("odv.site.config.js", recorded.RelativePath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string ComputeSha256(string content)
         => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(content))).ToLowerInvariant();

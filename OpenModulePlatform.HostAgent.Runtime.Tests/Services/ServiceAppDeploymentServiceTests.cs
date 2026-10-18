@@ -1181,6 +1181,311 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Null(Assert.Single(repository.ReleasedAppLeases).Reason);
     }
 
+    [Fact]
+    public async Task ServiceOverlay_EditChangesDeployedContentOnNextCycle()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay v1"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        Assert.Equal("// overlay v1", File.ReadAllText(overlayPath));
+
+        // Overlay content edit with unchanged artifact identity: the already-applied
+        // fast path must notice the desired bytes changed and re-apply on the next cycle.
+        repository.ArtifactConfigurationFiles.Clear();
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay v2"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        Assert.Equal("// overlay v2", File.ReadAllText(overlayPath));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.State);
+        Assert.True(last.Applied);
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_RemovedOverlayOwnedFile_ReconciledOnFastPathWithoutRestart()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        Assert.True(File.Exists(overlayPath));
+
+        // Overlay removed, artifact unchanged: the already-applied path must remove the
+        // recorded file WITHOUT stopping or restarting the running service.
+        control.StopAttempts.Clear();
+        control.StartAttempts.Clear();
+        repository.ArtifactConfigurationFiles.Clear();
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(overlayPath));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.State);
+        Assert.True(last.Applied);
+        Assert.Empty(control.StopAttempts);
+        Assert.Empty(control.StartAttempts);
+        Assert.True(control.IsServiceRunning(deployment.DeployedRuntimeName!));
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_RemovedOverlayOwnedFile_ReconciledOnFullPath()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        Assert.True(File.Exists(overlayPath));
+
+        // Overlay removed and artifact content changed: a full apply (not the fast path)
+        // still removes the unchanged overlay-owned file.
+        repository.ArtifactConfigurationFiles.Clear();
+        var next = CreateServiceSuccessorDescriptor(deployment, targetPath);
+        repository.DesiredServiceAppDeployments.Clear();
+        repository.DesiredServiceAppDeployments.Add(next);
+
+        await service.DeployDesiredServiceAppsAsync(next.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(overlayPath));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.State);
+        Assert.True(last.Applied);
+        Assert.NotEmpty(control.StopAttempts);
+        Assert.NotEmpty(control.StartAttempts);
+
+        var inventory = AppliedOverlayFileInventory.TryRead(_tempRoot, targetPath, deployment.AppInstanceId, out var diagnostic);
+        Assert.Null(diagnostic);
+        Assert.NotNull(inventory);
+        Assert.Empty(inventory.Files);
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_PayloadOverlaidFile_RestoresPayloadBytesOnFastPath()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        File.WriteAllText(Path.Join(deployment.SourceLocalPath, "payload.config.js"), "// payload");
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, "payload.config.js", "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var payloadPath = Path.Join(targetPath, "payload.config.js");
+        Assert.Equal("// overlay", File.ReadAllText(payloadPath));
+
+        // Overlay removed: the payload-owned file is never deleted, its current artifact
+        // payload bytes are restored instead, and the service is not restarted.
+        control.StopAttempts.Clear();
+        control.StartAttempts.Clear();
+        repository.ArtifactConfigurationFiles.Clear();
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(payloadPath));
+        Assert.Equal("// payload", File.ReadAllText(payloadPath));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.True(last.Applied);
+        Assert.Empty(control.StopAttempts);
+        Assert.Empty(control.StartAttempts);
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_ModifiedOverlayOwnedFile_IsLeftInPlaceAndWarns()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        File.WriteAllText(overlayPath, "// operator modified");
+
+        control.StopAttempts.Clear();
+        control.StartAttempts.Clear();
+        repository.ArtifactConfigurationFiles.Clear();
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(overlayPath));
+        Assert.Equal("// operator modified", File.ReadAllText(overlayPath));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.State);
+        Assert.False(last.Applied);
+        Assert.Contains("modified", last.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(control.StopAttempts);
+        Assert.Empty(control.StartAttempts);
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_UnrelatedManualFile_IsPreservedDuringReconcile()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var manualPath = Path.Join(targetPath, "operator-notes.txt");
+        File.WriteAllText(manualPath, "operator");
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        Assert.False(File.Exists(Path.Join(targetPath, relativePath)));
+        Assert.True(File.Exists(manualPath));
+        Assert.Equal("operator", File.ReadAllText(manualPath));
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_Reconcile_IsIdempotentAcrossCycles()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        Assert.True(File.Exists(overlayPath));
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        Assert.False(File.Exists(overlayPath));
+        Assert.True(repository.PublishedServiceAppResults.Last().Result.Applied);
+
+        // A restart-safe retry reports applied:false and changes nothing further.
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        Assert.False(File.Exists(overlayPath));
+        Assert.False(repository.PublishedServiceAppResults.Last().Result.Applied);
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_BusyLease_LeavesOverlayFileUntouched()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        repository.EnabledHostCount = 2;
+        repository.DeploymentSettings["DeploymentLockScope"] = "app";
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        Assert.True(File.Exists(overlayPath));
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await repository.AcquireAppDeploymentLeaseAsync("app:" + deployment.AppKey, Guid.NewGuid(), "Other host", 600, default);
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+
+        Assert.True(File.Exists(overlayPath));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Warning, last.State);
+        Assert.Contains("Waiting for lease", last.DiagnosticWarningMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ServiceOverlay_ReservedControlPathOverlay_IsNotApplied()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        repository.ArtifactConfigurationFiles.Add(
+            CreateOverlayOwnedFile(deployment.ArtifactId, @"App_Data\omp-deployment.lock.json", "{ \"forged\": true }"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        var lockPath = Path.Join(targetPath, "App_Data", "omp-deployment.lock.json");
+        Assert.False(File.Exists(lockPath) && File.ReadAllText(lockPath).Contains("forged", StringComparison.Ordinal));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Contains("reserved", last.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [SkippableFact]
+    public async Task ServiceOverlay_ReparsePointOverlayOwnedFile_IsLeftInPlaceAndWarns()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+        const string relativePath = "odv.site.config.js";
+        repository.ArtifactConfigurationFiles.Add(CreateOverlayOwnedFile(deployment.ArtifactId, relativePath, "// overlay"));
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        var overlayPath = Path.Join(targetPath, relativePath);
+        File.Delete(overlayPath);
+        var victim = Path.Join(targetPath, "victim.txt");
+        File.WriteAllText(victim, "victim");
+        Skip.IfNot(TryCreateFileSymlink(overlayPath, victim),
+            "This process cannot create a file symlink (symlink privilege or Developer Mode required); the reparse-point guard was not exercised.");
+
+        repository.ArtifactConfigurationFiles.Clear();
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+
+        Assert.True(File.Exists(victim));
+        Assert.Equal("victim", File.ReadAllText(victim));
+        var last = repository.PublishedServiceAppResults.Last().Result;
+        Assert.False(last.Applied);
+        Assert.Contains("reparse point", last.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ServiceAppDeploymentDescriptor CreateServiceSuccessorDescriptor(
+        ServiceAppDeploymentDescriptor deployment,
+        string targetPath)
+        => new()
+        {
+            HostId = deployment.HostId,
+            HostKey = deployment.HostKey,
+            AppInstanceId = deployment.AppInstanceId,
+            AppInstanceKey = deployment.AppInstanceKey,
+            ModuleInstanceKey = deployment.ModuleInstanceKey,
+            AppKey = deployment.AppKey,
+            DisplayName = deployment.DisplayName,
+            ArtifactId = deployment.ArtifactId,
+            Version = deployment.Version,
+            SourceLocalPath = deployment.SourceLocalPath,
+            ContentSha256 = "bb22",
+            InstallPath = targetPath,
+            DeployedArtifactId = deployment.ArtifactId,
+            DeploymentState = HostDeploymentStatuses.Succeeded,
+            DeployedSourceLocalPath = deployment.SourceLocalPath,
+            DeployedTargetPath = targetPath,
+            DeployedRuntimeName = deployment.DeployedRuntimeName,
+            DeployedContentSha256 = null
+        };
+
+    private static ArtifactConfigurationFileDescriptor CreateOverlayOwnedFile(
+        int artifactId,
+        string relativePath,
+        string fileContent)
+        => new()
+        {
+            ArtifactConfigurationFileId = 100,
+            ArtifactId = artifactId,
+            RelativePath = relativePath,
+            FileContent = fileContent,
+            IsOverlayOwnedWholeFile = true
+        };
+
+    private static bool TryCreateFileSymlink(string linkPath, string targetPath)
+    {
+        try
+        {
+            File.CreateSymbolicLink(linkPath, targetPath);
+            return File.Exists(linkPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return false;
+        }
+    }
+
     private static void ConfigureLocalServiceIdentityRepair(HostAgentSettings settings)
     {
         settings.ServiceAppUserName = @"NT AUTHORITY\LocalService";

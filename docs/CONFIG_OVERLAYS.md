@@ -159,16 +159,16 @@ modes. The mode is stored per file in
 `omp.ConfigOverlayConfigurationFiles.MergeMode` (added by the
 `sql/1-setup-openmoduleplatform.sql` migration for ADR 0006).
 
-## Removing an overlay: whole-file ownership (web apps)
+## Removing an overlay: whole-file ownership (web and service apps)
 
 An overlay file whose relative path the artifact does not own is an
 *overlay-owned whole file*. When such an overlay is removed (or stops matching)
 and no artifact or lower overlay supplies the path, the file would otherwise
-stay on disk forever. For **web apps**, HostAgent records the overlay-owned
-whole files it applied in a trusted inventory under
-`HostAgent:LocalArtifactCacheRoot` (`.overlay-state/`, outside every web root;
-path, byte length and SHA-256 per file, bound to the app instance and the
-deployment target path). On later cycles -- both the already-applied fast path
+stay on disk forever. HostAgent records the overlay-owned whole files it
+applied in a trusted inventory under `HostAgent:LocalArtifactCacheRoot`
+(`.overlay-state/`, outside every deployed app root; path, byte length and
+SHA-256 per file, bound to the app instance and the deployment target path).
+The same mechanism runs for web apps and service apps. On later cycles -- both the already-applied fast path
 and a full apply -- it removes a recorded file only when it is still
 byte-identical, not a reparse point, not shipped in the artifact payload, and
 not a reserved runtime control path (`App_Data/omp-applied-overlay-files.json`,
@@ -221,11 +221,10 @@ deployment continues (no untrusted schema or file content is echoed). To
 recover, delete the stale inventory file and let a full deployment recreate
 it; nothing is deleted based on an unreadable inventory.
 
-**Service apps are not covered yet.** The same classification is computed for
-service-app configuration, but the service already-applied fast path does not
-reconcile removed overlay-owned whole files, so such a file can persist after
-its overlay is removed. This is a known, separate follow-up; do not assume
-universal whole-file removal across app kinds.
+The same classification and reconciliation run for service-app configuration:
+the service already-applied fast path removes recorded overlay-owned whole
+files and restores recorded payload files exactly as the web app path does, and
+service apps refuse reserved HostAgent control paths before any write.
 
 ### Previous inventories and concurrent writers
 
