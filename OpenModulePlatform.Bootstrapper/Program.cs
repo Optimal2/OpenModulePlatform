@@ -27,6 +27,11 @@ internal static partial class Program
         try
         {
             var cli = CliOptions.Parse(args);
+            if (cli.MaintainPlatformCore)
+            {
+                EnsureConsole();
+                return await RunPlatformCoreMaintenanceAsync(cli);
+            }
             if (cli.RefreshInstallerPackage)
             {
                 return await RunInstallerPackageRefreshAsync(cli);
@@ -457,6 +462,7 @@ internal static partial class Program
         Console.WriteLine("OpenModulePlatform.Bootstrapper");
         Console.WriteLine();
         Console.WriteLine("Usage:");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --maintain-platform-core --config <bootstrap.json> --payload-root <path> --expected-core-version <version> [--plan-only | --yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--full-content-check] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--full-content-check]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --uninstall [--remove-runtime-files] [--remove-database-objects] [--yes]");
@@ -467,6 +473,8 @@ internal static partial class Program
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --check-developer-source-status --config <bootstrap.json> [--payload-root <path>] [--json]");
         Console.WriteLine();
         Console.WriteLine("Updating an EXISTING installation:");
+        Console.WriteLine("  When an old executor cannot import new core SQL, refresh the runner, sync package objects,");
+        Console.WriteLine("  then run --maintain-platform-core before staging artifacts. Use --plan-only for offline preflight.");
         Console.WriteLine("  Use --refresh-and-stage-package. It refreshes the installer data folder from every configured");
         Console.WriteLine("  source repository, builds one global universal package, and stages it in this host's HostAgent");
         Console.WriteLine("  import folder (resolved from the config). Add --wait-for-import to follow the HostAgent import.");
@@ -1052,6 +1060,10 @@ internal sealed class CliOptions
 
     public bool UpgradeOrComplete { get; private init; }
 
+    public bool MaintainPlatformCore { get; private init; }
+    public bool PlanOnly { get; private init; }
+    public string ExpectedCoreVersion { get; private init; } = string.Empty;
+
     public bool Uninstall { get; private init; }
 
     public bool RemoveRuntimeFiles { get; private init; }
@@ -1129,6 +1141,15 @@ internal sealed class CliOptions
                 case "--upgrade-or-complete":
                     options.UpgradeOrComplete = true;
                     break;
+                case "--maintain-platform-core":
+                    options.MaintainPlatformCore = true;
+                    break;
+                case "--plan-only":
+                    options.PlanOnly = true;
+                    break;
+                case "--expected-core-version":
+                    options.ExpectedCoreVersion = ReadValue(args, ref i, arg);
+                    break;
                 case "--uninstall":
                     options.Uninstall = true;
                     break;
@@ -1202,6 +1223,10 @@ internal sealed class CliOptions
 
         public bool UpgradeOrComplete { get; set; }
 
+        public bool MaintainPlatformCore { get; set; }
+        public bool PlanOnly { get; set; }
+        public string ExpectedCoreVersion { get; set; } = string.Empty;
+
         public bool Uninstall { get; set; }
 
         public bool RemoveRuntimeFiles { get; set; }
@@ -1216,12 +1241,25 @@ internal sealed class CliOptions
 
         public CliOptions ToOptions()
         {
-            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects, RefreshAndStagePackage, CheckDeveloperSourceStatus }
+            var selectedModes = new[] { MaintainPlatformCore, UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects, RefreshAndStagePackage, CheckDeveloperSourceStatus }
                 .Count(static item => item);
             if (selectedModes > 1)
             {
-                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, refresh-installer-package, sync-package-objects, refresh-and-stage-package, or check-developer-source-status.");
+                throw new InvalidOperationException("Choose only one operation mode: bootstrap, maintain-platform-core, upgrade/complete, uninstall, refresh-installer-package, sync-package-objects, refresh-and-stage-package, or check-developer-source-status.");
             }
+
+            if ((PlanOnly || ExpectedCoreVersion.Length > 0) && !MaintainPlatformCore)
+                throw new InvalidOperationException("--plan-only and --expected-core-version require --maintain-platform-core.");
+
+            if (MaintainPlatformCore && !ShowHelp
+                && (string.IsNullOrWhiteSpace(ConfigPath) || string.IsNullOrWhiteSpace(PayloadRoot)
+                    || string.IsNullOrWhiteSpace(ExpectedCoreVersion)))
+                throw new InvalidOperationException("Core maintenance requires explicit --config, --payload-root and --expected-core-version.");
+
+            if (MaintainPlatformCore && (Gui || PayloadZipPath.Length > 0 || ConfigDirectory.Length > 0
+                || SyncPackageObjectsBeforeAction || FullContentCheck || RestartGui || ParentProcessId != 0
+                || LogFilePath.Length > 0 || SkipRefresh || WaitForImportSeconds != 0 || (PlanOnly && Yes)))
+                throw new InvalidOperationException("Core maintenance accepts only its explicit inputs and either --plan-only or --yes; no GUI, package refresh, ZIP or bootstrap modifiers.");
 
             if (Json && !CheckDeveloperSourceStatus)
             {
@@ -1262,6 +1300,9 @@ internal sealed class CliOptions
                 SyncPackageObjectsBeforeAction = SyncPackageObjectsBeforeAction,
                 FullContentCheck = FullContentCheck,
                 UpgradeOrComplete = UpgradeOrComplete,
+                MaintainPlatformCore = MaintainPlatformCore,
+                PlanOnly = PlanOnly,
+                ExpectedCoreVersion = ExpectedCoreVersion,
                 Uninstall = Uninstall,
                 RemoveRuntimeFiles = RemoveRuntimeFiles,
                 RemoveDatabaseObjects = RemoveDatabaseObjects,

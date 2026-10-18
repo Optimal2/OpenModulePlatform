@@ -1,5 +1,12 @@
 # OpenModulePlatform Sample Installer
 
+For an existing installation whose old importer cannot execute new core SQL,
+follow the [executor-before-core transition](../docs/HOST_AGENT_FIRST_INSTALL.md#existing-installation-executor-before-core-transition):
+refresh the runner through its signature gate, sync objects without staging, plan/apply
+`--maintain-platform-core`, then stage the unchanged library with `--skip-refresh`.
+The maintenance action does not install services or rewrite runtime settings or
+credentials. An offline plan alone is not permission to stage artifacts.
+
 This folder is the public repository counterpart to the private universal
 installer layout:
 

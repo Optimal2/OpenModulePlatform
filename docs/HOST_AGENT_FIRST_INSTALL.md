@@ -503,9 +503,10 @@ the selected host profile.
 Use `Install or update` for first installation, deliberate repair, or a full
 reconfiguration pass. That path runs the full bootstrap, uses install/update
 artifact handling, and reconfigures the HostAgent service from the selected host
-profile when HostAgent installation is enabled. Use `Upgrade / complete` for
-normal package catch-up on an existing installation when existing runtime
-folders and HostAgent service configuration should be left unchanged.
+profile when HostAgent installation is enabled. For ordinary existing-installation
+upgrades, use `--refresh-and-stage-package`. Use `Upgrade / complete` only for
+deliberate package catch-up with its runtime-settings and credential-store
+refresh behavior understood; it is not a core-only migration action.
 
 The graphical installer enables `Fast mode (trust version numbers)` by default.
 Fast mode skips expensive same-version content verification during package
@@ -748,6 +749,7 @@ The verbs below are listed as the usage text in
 
 | Option | What it does |
 | --- | --- |
+| `--maintain-platform-core` | Explicit existing-database maintenance: imports exactly the canonical `omp_core` definition through the guarded InstallationEngine importer and compiled platform migration. Requires `--config`, `--payload-root`, and `--expected-core-version`. `--plan-only` performs offline preflight; otherwise confirmation or `--yes` is required. No artifact stage, service installation, runtime-settings write, credential-store write, database creation, or runtime access grant. |
 | `--refresh-installer-package` | Pulls the configured source repositories, rebuilds the whole installer package from source (`scripts/deployment/package-hostagent-first.ps1`, including the installer binaries) and swaps the installed package root for the rebuilt one. This is a different, much slower operation than the data-folder refresh below. Optional: `--parent-process-id`, `--restart-gui`, `--log-file`. |
 | `--refresh-and-stage-package` | Refreshes the installer's data folder (`data/global`, `data/hosts`) from every configured source repository, builds one global universal package and stages it in this host's HostAgent import folder so the next import picks it up. It does not rebuild the installer binaries. This is the normal loop for updating an existing installation. Optional: `--full-content-check`, `--skip-refresh`, and one of `--wait-for-import` or `--wait-for-import-seconds <n>`. |
 | `--skip-refresh` | With `--refresh-and-stage-package`: stages what is already in the data folder without refreshing it first. Use it when the data folder was just refreshed by another step. |
@@ -757,13 +759,98 @@ The verbs below are listed as the usage text in
 
 ### How this differs from `--sync-package-objects`
 
-`--sync-package-objects` copies package OBJECTS (module definitions, artifacts,
-host object archives) into an existing installation. It does not rebuild
-anything from source and does not touch the installer runner.
+`--sync-package-objects` refreshes package OBJECTS (module definitions, artifacts,
+host object archives) in the installer library from configured source repositories.
+It can pull those repositories and build missing or changed artifact packages;
+it does not stage/import objects into SQL or update the installer runner.
 `--refresh-installer-package` goes the other way round: it rebuilds from source
 and replaces the installed package. Reach for the sync options when the
 installation needs the objects a package already contains; reach for the refresh
 options when the source repository has moved ahead of the installation.
+
+### Existing-installation executor-before-core transition
+
+A new HostAgent inside a staged package cannot update the process already
+importing that package. When portable core SQL needs a newer compiled platform
+migration, update the standalone Bootstrapper executor first, apply core with
+that executor, and only then stage artifacts. Installing a service manually
+before its module minimum is satisfied is not a substitute.
+
+For the HostScope transition, the required core identity is `omp_core` version
+`0.3.270`. The Bootstrapper/installer package containing this maintenance verb is
+repository version `0.3.1031` or later. The core definition and its SQL are
+unchanged by the maintenance verb. Portal and HostAgent artifacts still require
+core `0.3.270`; their executors do not have to be running before this maintenance.
+
+Prerequisites: select the intended host's existing trusted bootstrap profile,
+check its explicit `sql.server` and `sql.database`, and use SQL credentials with
+the existing core import's DDL/DML/catalog permissions. The profile must retain
+its valid `sql.bootstrapPortalAdminPrincipal`: the standard guarded core import
+also validates/repairs embedded, idempotent baseline SQL. This is not a schema-only
+SQL runner. The existing Bootstrapper EXE manifest requests Administrator
+elevation, including for `--plan-only`; use an elevated operator console. The
+maintenance action itself does not administer services or require a restart.
+Keep other imports/repairs and package-library writers idle until
+the sequence finishes; the normal SQL repair lock is retained. A runner refresh
+may require closing an installer GUI and must pass the existing signing gate.
+
+The following is a generic operator sequence, after source approval/publication.
+`$omp`, `$pkg`, and `$cfg` must already identify the approved source repository,
+installer package root, and selected host profile. Do not select another host's
+profile or change credentials to make a failed preflight pass.
+
+```powershell
+& "$omp\scripts\deployment\update-installer-runner-only.ps1" -PackageRoot $pkg -RepositoryRoot $omp
+if ($LASTEXITCODE -ne 0) { throw 'Runner refresh failed; stop.' }
+$exe = Join-Path $pkg 'OpenModulePlatform.Bootstrapper.exe'
+
+# Refresh the old object library without staging anything. Stop on any warning.
+& $exe --sync-package-objects --config $cfg --payload-root $pkg --full-content-check
+if ($LASTEXITCODE -ne 0) { throw 'Object refresh failed; stop.' }
+$core = Join-Path $pkg 'data\global\module-definitions\omp_core.module-definition.json'
+$coreHash = (Get-FileHash -LiteralPath $core -Algorithm SHA256).Hash
+
+& $exe --maintain-platform-core --config $cfg --payload-root $pkg --expected-core-version 0.3.270 --plan-only
+if ($LASTEXITCODE -ne 0) { throw 'Offline preflight failed; stop.' }
+# Review target, canonical definition path, version and normalized JSON hash.
+& $exe --maintain-platform-core --config $cfg --payload-root $pkg --expected-core-version 0.3.270 --yes
+if ($LASTEXITCODE -ne 0) { throw 'Core maintenance failed; do not stage artifacts.' }
+if ((Get-FileHash -LiteralPath $core -Algorithm SHA256).Hash -ne $coreHash) {
+    throw 'Core payload changed; repeat maintenance before staging.'
+}
+
+# Preserve the just-verified payload; do not refresh core again during stage.
+& $exe --refresh-and-stage-package --config $cfg --payload-root $pkg --skip-refresh --full-content-check --wait-for-import-seconds 180
+if ($LASTEXITCODE -ne 0) { throw 'Artifact stage/import did not complete successfully.' }
+```
+
+Plan exit `0` means offline preflight only: it opens no SQL connection and cannot
+prove the database identity, permissions, or upgrade. Apply requires exactly one
+canonical applied core row in an existing database. It refuses an older target,
+same-version hash drift (including an unapplied target-version document), duplicate
+or wrong identities, missing/ambiguous definitions, malformed payloads, invalid
+embedded SQL hashes, non-idempotent setup, and SQL ownership/safety violations.
+Other installer modes and bootstrap/refresh modifiers cannot be combined with
+this verb. It reads only the canonical core from `data/global/module-definitions`;
+it does not import other definitions or use `sql.scripts` from the profile.
+
+Apply success additionally verifies the exact applied core version/hash, successful
+SQL execution history, healthy core validation, and the HostScope column with its
+enabled, trusted constraint. It always ensures the idempotent compiled migration,
+even when an older executor recorded portable SQL success without upgrading the
+existing configuration table. Repeating the same healthy core revalidates without
+executing portable setup SQL again; failed SQL remains repairable through the same importer.
+As with ordinary import, catalog storage precedes repair: a failed repair can
+leave the definition stored/applied. Its version alone is therefore never proof
+that staging is safe. A failure or cancellation (`2`) stops this sequence; there
+is no automatic fallback to bootstrap, manual SQL, or version stamping.
+
+Keep the successful maintenance output and payload hash with deployment evidence.
+The existing definition-library and artifact version/content stage gates still
+apply, including with `--skip-refresh`. If source/payload/core changes, repeat
+preflight and maintenance rather than treating an earlier success as durable
+authorization. After import, verify desired/runtime artifact convergence and
+feature behavior using the normal operator acceptance workflow.
 
 ### The runner signature gate
 

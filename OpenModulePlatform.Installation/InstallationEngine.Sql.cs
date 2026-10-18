@@ -386,8 +386,26 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
             packageDefinitions.Add((definitionPath, candidate));
         }
 
-        await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
+        await ImportSelectedModuleDefinitionsAsync(config.Sql, payloadRoot, packageDefinitions, onlyNewerOrChanged, trustSameVersion);
+    }
+
+    // Also used by core-only maintenance: selection is snapshotted before confirmation.
+    internal static async Task ImportSelectedModuleDefinitionsAsync(
+        SqlBootstrapOptions sql,
+        string payloadRoot,
+        IReadOnlyList<(string DefinitionPath, ModuleDefinitionDocument Definition)> packageDefinitions,
+        bool onlyNewerOrChanged,
+        bool trustSameVersion,
+        bool requireExistingCore = false)
+    {
+        if (requireExistingCore && (packageDefinitions.Count != 1 || packageDefinitions[0].Definition.ModuleKey != "omp_core"))
+            throw new InvalidOperationException("Core maintenance requires exactly one omp_core definition.");
+
+        await using var connection = new SqlConnection(BuildConnectionString(sql, sql.Database));
         await connection.OpenAsync();
+
+        if (requireExistingCore)
+            await AcquireModuleDefinitionSqlExecutionLockAsync(connection, sql.CommandTimeoutSeconds);
 
         foreach (var (definitionPath, definition) in packageDefinitions)
         {
@@ -401,105 +419,93 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
                 continue;
             }
 
-            if (onlyNewerOrChanged)
+            var current = onlyNewerOrChanged || requireExistingCore
+                ? await QueryAppliedModuleDefinitionAsync(connection, definition.ModuleKey, sql.CommandTimeoutSeconds)
+                : null;
+            if (requireExistingCore)
             {
-                var current = await QueryAppliedModuleDefinitionAsync(
-                    connection,
-                    definition.ModuleKey,
-                    config.Sql.CommandTimeoutSeconds);
-                if (current is not null
-                    && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) < 0)
-                {
-                    InstallOutput.Info(
-                        $"  {definition.ModuleKey} {definition.DefinitionVersion} skipped; installed definition {current.DefinitionVersion} is newer.");
-                    continue;
-                }
-
-                if (current is not null
-                    && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) == 0
-                    && trustSameVersion)
-                {
-                    InstallOutput.Info(
-                        $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; fast mode trusted the installed version and skipped same-version content checks.");
-                    continue;
-                }
-
-                if (current is not null
-                    && CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion) == 0
-                    && string.Equals(definition.DefinitionSha256, current.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    await ApplyModuleDefinitionCatalogMetadataAsync(
-                        connection,
-                        null,
-                        current.ModuleDefinitionDocumentId,
-                        config.Sql.CommandTimeoutSeconds);
-
-                    var skippedRepairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
-                        connection,
-                        config.Sql,
-                        payloadRoot,
-                        current.ModuleDefinitionDocumentId,
-                        definition);
-                    InstallOutput.Info(
-                        skippedRepairCount > 0
-                            ? $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; executed {skippedRepairCount} SQL repair script(s)."
-                            : $"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; skipped.");
-                    continue;
-                }
+                await AssertSingleAppliedCoreAsync(connection, sql.CommandTimeoutSeconds);
+                ValidateExistingCoreTransition(definition, current);
+                await AssertCoreDefinitionHashAsync(connection, definition, sql.CommandTimeoutSeconds);
             }
 
-            int documentId;
-            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+            await ImportDefinitionWithOperationsAsync(definition, current, onlyNewerOrChanged, trustSameVersion,
+                async () =>
+                {
+                    int documentId;
+                    await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
 
-            try
-            {
-                documentId = await UpsertModuleDefinitionDocumentAsync(
-                    connection,
-                    transaction,
-                    definition,
-                    Path.GetFileName(definitionPath),
-                    config.Sql.CommandTimeoutSeconds);
+                    try
+                    {
+                        documentId = await UpsertModuleDefinitionDocumentAsync(
+                            connection,
+                            transaction,
+                            definition,
+                            Path.GetFileName(definitionPath),
+                            sql.CommandTimeoutSeconds);
 
-                await ReplaceModuleDefinitionCompatibilityAsync(
-                    connection,
-                    transaction,
-                    documentId,
-                    definition.CompatibleArtifacts,
-                    config.Sql.CommandTimeoutSeconds);
+                        await ReplaceModuleDefinitionCompatibilityAsync(
+                            connection,
+                            transaction,
+                            documentId,
+                            definition.CompatibleArtifacts,
+                            sql.CommandTimeoutSeconds);
 
-                await MarkOnlyModuleDefinitionAppliedAsync(
-                    connection,
-                    transaction,
-                    definition.ModuleKey,
-                    documentId,
-                    config.Sql.CommandTimeoutSeconds);
+                        await MarkOnlyModuleDefinitionAppliedAsync(
+                            connection,
+                            transaction,
+                            definition.ModuleKey,
+                            documentId,
+                            sql.CommandTimeoutSeconds);
 
-                await ApplyModuleDefinitionCatalogMetadataAsync(
-                    connection,
-                    transaction,
-                    documentId,
-                    config.Sql.CommandTimeoutSeconds);
+                        await ApplyModuleDefinitionCatalogMetadataAsync(
+                            connection,
+                            transaction,
+                            documentId,
+                            sql.CommandTimeoutSeconds);
 
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                        await transaction.CommitAsync();
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
 
-            var repairCount = await ExecuteModuleDefinitionSqlRepairsAsync(
-                connection,
-                config.Sql,
-                payloadRoot,
-                documentId,
-                definition);
+                    return documentId;
+                },
+                id => ApplyModuleDefinitionCatalogMetadataAsync(connection, null, id, sql.CommandTimeoutSeconds),
+                id => ExecuteModuleDefinitionSqlRepairsAsync(connection, sql, payloadRoot, id, definition, ensureCoreMigration: requireExistingCore));
 
-            InstallOutput.Info(
-                repairCount > 0
-                    ? $"  {definition.ModuleKey} {definition.DefinitionVersion}; executed {repairCount} SQL repair script(s)."
-                    : $"  {definition.ModuleKey} {definition.DefinitionVersion}");
+            if (requireExistingCore)
+                await VerifyCoreMaintenanceAsync(connection, definition, sql, payloadRoot);
         }
+    }
+
+    // The orchestration is shared with the normal importer; only database operations are substituted in offline tests.
+    internal static async Task ImportDefinitionWithOperationsAsync(
+        ModuleDefinitionDocument definition, AppliedModuleDefinition? current, bool onlyNewerOrChanged, bool trustSameVersion,
+        Func<Task<int>> store, Func<int, Task> metadata, Func<int, Task<int>> repair)
+    {
+        var comparison = current is null ? 1 : CompareVersionText(definition.DefinitionVersion, current.DefinitionVersion);
+        if (onlyNewerOrChanged && current is not null)
+        {
+            if (comparison < 0 || (comparison == 0 && trustSameVersion))
+            {
+                InstallOutput.Info($"  {definition.ModuleKey} {definition.DefinitionVersion} skipped; installed version {current.DefinitionVersion}.");
+                return;
+            }
+            if (comparison == 0 && string.Equals(definition.DefinitionSha256, current.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                await metadata(current.ModuleDefinitionDocumentId);
+                var repaired = await repair(current.ModuleDefinitionDocumentId);
+                InstallOutput.Info($"  {definition.ModuleKey} {definition.DefinitionVersion} already applied; executed {repaired} SQL repair script(s).");
+                return;
+            }
+        }
+        var documentId = await store();
+        var repairCount = await repair(documentId);
+        InstallOutput.Info($"  {definition.ModuleKey} {definition.DefinitionVersion}; executed {repairCount} SQL repair script(s).");
     }
 
     internal static bool IsSupersededByNewerPackageDefinition(
@@ -1342,8 +1348,23 @@ END;";
         SqlBootstrapOptions sql,
         string payloadRoot,
         int documentId,
-        ModuleDefinitionDocument definition)
+        ModuleDefinitionDocument definition,
+        bool ensureCoreMigration = false)
+        => await ExecuteModuleDefinitionSqlRepairsAsync(sql, payloadRoot, definition, new ModuleDefinitionSqlRepairOperations(
+            () => AcquireModuleDefinitionSqlExecutionLockAsync(connection, sql.CommandTimeoutSeconds),
+            scripts => HasUnexecutedModuleDefinitionSqlAsync(connection, documentId, scripts, sql.CommandTimeoutSeconds),
+            text => ExecuteModuleDefinitionValidationSqlAsync(connection, text, sql.CommandTimeoutSeconds),
+            (script, hash) => InsertModuleDefinitionSqlExecutionAsync(connection, documentId, script, hash, sql.CommandTimeoutSeconds),
+            key => OpenModulePlatform.ModuleDefinitions.PlatformConfigurationMigration.ApplyForDefinitionAsync(connection, definition.DefinitionJson, key, CancellationToken.None, sql.CommandTimeoutSeconds),
+            text => ExecuteModuleDefinitionSqlBatchesAsync(connection, sql, text, $"module definition '{definition.ModuleKey}'"),
+            (id, status, error) => CompleteModuleDefinitionSqlExecutionAsync(connection, id, status, error, sql.CommandTimeoutSeconds)), ensureCoreMigration);
+
+    internal static async Task<int> ExecuteModuleDefinitionSqlRepairsAsync(
+        SqlBootstrapOptions sql, string payloadRoot, ModuleDefinitionDocument definition, ModuleDefinitionSqlRepairOperations operations,
+        bool ensureCoreMigration = false)
     {
+        if (ensureCoreMigration)
+            ValidateCoreMaintenancePayload(definition, definition.DefinitionVersion, sql, payloadRoot);
         var scripts = ReadPortableSqlScripts(definition.DefinitionJson)
             .OrderBy(static script => script.Order)
             .ThenBy(static script => script.Key, StringComparer.OrdinalIgnoreCase)
@@ -1353,16 +1374,21 @@ END;";
             return 0;
         }
 
-        await AcquireModuleDefinitionSqlExecutionLockAsync(connection, sql.CommandTimeoutSeconds);
+        await operations.AcquireLock();
+
+        if (ensureCoreMigration)
+        {
+            // An older executor may have recorded all portable SQL as successful without
+            // performing this compiled migration. Generic validation/history cannot prove it.
+            if (definition.ModuleKey != "omp_core" || scripts.Count(s => s.Key == "setup-core-schema") != 1)
+                throw new InvalidOperationException("Compiled core maintenance requires the canonical core setup identity.");
+            await operations.PlatformMigration("setup-core-schema");
+        }
 
         var validationScripts = scripts.Where(IsValidationScript).ToList();
         if (validationScripts.Count > 0)
         {
-            var hasUnexecutedSql = await HasUnexecutedModuleDefinitionSqlAsync(
-                connection,
-                documentId,
-                scripts.Where(static script => !IsValidationScript(script)),
-                sql.CommandTimeoutSeconds);
+            var hasUnexecutedSql = await operations.HasUnexecuted(scripts.Where(static script => !IsValidationScript(script)));
             var needsRepair = false;
             foreach (var validationScript in validationScripts)
             {
@@ -1391,10 +1417,7 @@ END;";
 
                 try
                 {
-                    var validation = await ExecuteModuleDefinitionValidationSqlAsync(
-                        connection,
-                        validationSql,
-                        sql.CommandTimeoutSeconds);
+                    var validation = await operations.Validate(validationSql);
                     needsRepair = needsRepair || !validation.IsHealthy;
                 }
                 catch (Exception ex) when (ex is SqlException or InvalidOperationException)
@@ -1451,37 +1474,19 @@ END;";
                 throw new InvalidOperationException($"Module definition SQL script '{script.Key}' was blocked: {safety}");
             }
 
-            var executionId = await InsertModuleDefinitionSqlExecutionAsync(
-                connection,
-                documentId,
-                script,
-                scriptSha256,
-                sql.CommandTimeoutSeconds);
+            var executionId = await operations.Start(script, scriptSha256);
 
             try
             {
-                await OpenModulePlatform.ModuleDefinitions.PlatformConfigurationMigration.ApplyForDefinitionAsync(connection, definition.DefinitionJson, script.Key, CancellationToken.None, sql.CommandTimeoutSeconds);
-                await ExecuteModuleDefinitionSqlBatchesAsync(
-                    connection,
-                    sql,
-                    sqlText,
-                    $"module definition '{definition.ModuleKey}' script '{script.Key}'");
-                await CompleteModuleDefinitionSqlExecutionAsync(
-                    connection,
-                    executionId,
-                    "Succeeded",
-                    null,
-                    sql.CommandTimeoutSeconds);
+                if (!ensureCoreMigration || script.Key != "setup-core-schema")
+                    await operations.PlatformMigration(script.Key);
+                await operations.Execute(sqlText);
+                await operations.Complete(executionId, "Succeeded", null);
                 executed++;
             }
             catch (Exception ex) when (ex is SqlException or InvalidOperationException)
             {
-                await CompleteModuleDefinitionSqlExecutionAsync(
-                    connection,
-                    executionId,
-                    "Failed",
-                    ex.Message,
-                    sql.CommandTimeoutSeconds);
+                await operations.Complete(executionId, "Failed", ex.Message);
                 throw new InvalidOperationException($"Module definition SQL script '{script.Key}' failed: {ex.Message}", ex);
             }
         }
