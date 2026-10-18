@@ -572,11 +572,14 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         await service.DeployDesiredWebAppsAsync(first.HostKey, CancellationToken.None);
         repository.PublishedWebAppResults.Clear();
 
-        // Structurally valid JSON with an explicit null Files list (app-pool writable).
+        // Structurally valid JSON with an explicit null Files list (app-pool writable),
+        // bound to the real app instance: a foreign id would hit the foreign-instance early
+        // return before the null list is ever enumerated, and the pre-fix sweep abort would
+        // not be exercised.
         var inventoryPath = AppliedOverlayFileInventory.GetPath(first.InstallPath!);
         Directory.CreateDirectory(Path.GetDirectoryName(inventoryPath)!);
-        File.WriteAllText(inventoryPath, """
-            { "SchemaName": "OpenModulePlatform.AppliedOverlayFiles.v1", "AppInstanceId": "00000000-0000-0000-0000-000000000000", "Files": null }
+        File.WriteAllText(inventoryPath, $$"""
+            { "SchemaName": "OpenModulePlatform.AppliedOverlayFiles.v1", "AppInstanceId": "{{first.AppInstanceId}}", "Files": null }
             """);
 
         await service.DeployDesiredWebAppsAsync(first.HostKey, CancellationToken.None);
