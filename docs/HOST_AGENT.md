@@ -316,18 +316,33 @@ SHA-256 per file). If the overlay later stops supplying the path, HostAgent
 removes the recorded file on both the already-applied fast path and a full
 apply -- but only when the file is still byte-identical, neither it nor its
 parent chain is a reparse point, the path is not shipped in the artifact
-payload, and it is not a reserved runtime control path. A modified or unsafe
+payload, and it is not a reserved runtime control path. All of these comparisons
+use one canonical relative-path identity, so dot-segment, duplicate-separator
+and slash aliases of a reserved or payload path are treated as that path, and
+unsafe or ambiguous paths are rejected before any write. A modified or unsafe
 file is left in place (including across a full apply: retained files are passed
 to the mirror as exclusions so its stale-entry deletion cannot remove them),
 reported as a diagnostic warning on the deployment row, and kept in the
 inventory so the warning repeats until an operator resolves it (edit the file
 back, remove it manually, or remove the stale inventory entry by deleting the
-inventory file and letting a full deployment recreate it). Removal logs and
+inventory file and letting a full deployment recreate it). A recorded file
+that no longer exists is dropped from the inventory silently and without a
+warning: it was already removed, so the goal is achieved. Removal logs and
 results report the number of files actually deleted, not the planned count.
-When the artifact payload inventory is unavailable or incomplete (missing or
-unreadable artifact source), a payload collision cannot be ruled out: removal
-is skipped for that cycle with an actionable warning while the deployment
-itself proceeds, and the entry is retained so a later healthy cycle retries.
+
+A payload file supplied by an overlay is never deleted. The overlay content
+written over the mirrored payload copy is recorded the same way, and when the
+overlay stops supplying the path the current artifact payload bytes are
+restored (fast path and full apply alike) only under the same byte-identical
+proof, with no reparse point on either side and a readable payload source;
+a modified, unverifiable or unreadable payload file is left untouched with a
+diagnostic warning and stays in the inventory. When the artifact payload
+inventory is unavailable or incomplete (missing or unreadable artifact
+source; the inventory enumerates strictly and never silently skips an
+inaccessible directory), a payload collision cannot be ruled out: removal
+and restoration are skipped for that cycle with an actionable warning while
+the deployment itself proceeds, and the entry is retained so a later healthy
+cycle retries.
 A trusted inventory whose host binding does not match names the recorded host
 in its warning rather than blaming the app instance.
 

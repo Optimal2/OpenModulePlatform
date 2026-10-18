@@ -114,6 +114,129 @@ public sealed class OmpHostArtifactRepositoryOverlayOwnershipTests
         Assert.Equal(@"App_Data\feature.json", entry.RelativePath);
     }
 
+    [Theory]
+    [InlineData("App_Data/./omp-deployment.lock.json", true)]
+    [InlineData("App_Data//omp-deployment.lock.json", true)]
+    [InlineData("./App_Data/omp-deployment.lock.json", true)]
+    [InlineData(@"App_Data\omp-deployment.lock.json", true)]
+    [InlineData("App_Data/feature.json", false)]
+    [InlineData("payload.config.js", false)]
+    public void IsReserved_CanonicalAliasesMatchControlPaths(string relativePath, bool expected)
+        => Assert.Equal(expected, OverlayReservedPaths.IsReserved(relativePath));
+
+    [Theory]
+    [InlineData("./x", "x")]
+    [InlineData("x//y", "x/y")]
+    [InlineData(@"x\y", "x/y")]
+    [InlineData("a/./b/../c", null)]
+    [InlineData("../x", null)]
+    [InlineData("/x", null)]
+    [InlineData("C:/x", null)]
+    public void TryCanonicalize_CollapsesAliasesAndRejectsUnsafe(string relativePath, string? expected)
+        => Assert.Equal(expected, CanonicalRelativePath.TryCanonicalize(relativePath));
+
+    [Fact]
+    public void ResolveDesiredOverlayFiles_ExcludesReservedAndPayloadAliases()
+    {
+        var files = new[]
+        {
+            new ArtifactConfigurationFileDescriptor { ArtifactConfigurationFileId = 1, ArtifactId = 42, RelativePath = "App_Data/./omp-deployment.lock.json", FileContent = "{ }", IsOverlayOwnedWholeFile = true },
+            new ArtifactConfigurationFileDescriptor { ArtifactConfigurationFileId = 2, ArtifactId = 42, RelativePath = "App_Data//omp-deployment.lock.json", FileContent = "{ }", IsOverlayOwnedWholeFile = true },
+            new ArtifactConfigurationFileDescriptor { ArtifactConfigurationFileId = 3, ArtifactId = 42, RelativePath = "./payload.config.js", FileContent = "// overlay", IsOverlayOwnedWholeFile = true },
+            new ArtifactConfigurationFileDescriptor { ArtifactConfigurationFileId = 4, ArtifactId = 42, RelativePath = "x//y", FileContent = "// overlay", IsOverlayOwnedWholeFile = true },
+            new ArtifactConfigurationFileDescriptor { ArtifactConfigurationFileId = 5, ArtifactId = 42, RelativePath = @"App_Data\feature.json", FileContent = "{ }", IsOverlayOwnedWholeFile = true }
+        };
+        var payloadPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "payload.config.js", "x/y" };
+
+        var entries = AppliedOverlayFileReconciler.ResolveDesiredOverlayFiles(
+            files, new Dictionary<string, string>(), payloadPaths);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal(@"App_Data\feature.json", entry.RelativePath);
+
+        var payloadOverlaid = AppliedOverlayFileReconciler.ResolveDesiredPayloadOverlaidFiles(
+            files, new Dictionary<string, string>(), payloadPaths);
+        Assert.Equal(2, payloadOverlaid.Count);
+        Assert.Contains(payloadOverlaid, file => string.Equals(file.RelativePath, "payload.config.js", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(payloadOverlaid, file => string.Equals(file.RelativePath, @"x\y", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Plan_PayloadOverlaidFile_PlansRestoreNotRemovalAndRestoreWritesPayloadBytes()
+    {
+        var root = Path.Join(Path.GetTempPath(), "omp-restore-plan-" + Guid.NewGuid().ToString("N"));
+        var stateRoot = Path.Join(root, "state");
+        var target = Path.Join(root, "target");
+        var source = Path.Join(root, "source");
+        Directory.CreateDirectory(stateRoot);
+        Directory.CreateDirectory(target);
+        Directory.CreateDirectory(source);
+        try
+        {
+            const string relativePath = "payload.config.js";
+            File.WriteAllText(Path.Join(source, relativePath), "// payload");
+            File.WriteAllText(Path.Join(target, relativePath), "// overlay");
+            var appInstanceId = Guid.NewGuid();
+            var entry = new AppliedOverlayFileEntry
+            {
+                RelativePath = relativePath,
+                ContentLength = System.Text.Encoding.UTF8.GetByteCount("// overlay"),
+                ContentSha256 = ComputeSha256("// overlay")
+            };
+            Assert.Null(AppliedOverlayFileInventory.TryWrite(stateRoot, target, appInstanceId, "app", "host", [entry]));
+            var deployment = new WebAppDeploymentDescriptor
+            {
+                HostId = Guid.NewGuid(), HostKey = "host", AppInstanceId = appInstanceId,
+                AppInstanceKey = "app", AppKey = "app", ModuleInstanceKey = "module",
+                DisplayName = "Test App", ArtifactId = 1, Version = "1.0.0",
+                SourceLocalPath = source, InstallPath = target
+            };
+            var payload = AppliedOverlayFileReconciler.EnumeratePayloadPaths(source);
+            Assert.True(payload.IsComplete);
+
+            var plan = AppliedOverlayFileReconciler.Plan(stateRoot, target, deployment, desiredFiles: [], payload: payload);
+
+            Assert.False(plan.HasRemovals);
+            Assert.Empty(plan.RemoveEntries);
+            Assert.True(plan.HasRestores);
+            Assert.Single(plan.RestoreEntries);
+            Assert.Null(plan.Warning);
+
+            var result = AppliedOverlayFileReconciler.RestorePayloadFiles(
+                target, source, plan, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+            Assert.Equal(1, result.RestoredCount);
+            Assert.Null(result.Warning);
+            Assert.Equal("// payload", File.ReadAllText(Path.Join(target, relativePath)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EnumeratePayloadPaths_UnauthorizedMidEnumeration_IsIncomplete()
+    {
+        var root = Path.Join(Path.GetTempPath(), "omp-strict-payload-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Join(root, "a.txt"), "a");
+            var inventory = AppliedOverlayFileReconciler.EnumeratePayloadPaths(root, FailWithUnauthorized);
+            Assert.False(inventory.IsComplete);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static IEnumerable<string> FailWithUnauthorized(string source)
+    {
+        yield return Path.Join(source, "a.txt");
+        throw new UnauthorizedAccessException("Simulated inaccessible payload subdirectory.");
+    }
+
     [Fact]
     public void Plan_UnknownPayloadInventory_PlansNoRemovalWarnsAndRetains()
     {

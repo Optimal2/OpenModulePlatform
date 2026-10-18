@@ -345,22 +345,31 @@ public sealed class WebAppDeploymentService
                 configurationFiles,
                 configurationVariables,
                 payload.Paths);
+            // Payload-overlaid files are recorded too (separately classified): ApplyAsync
+            // writes overlay content over the mirrored payload copy, so without a record a
+            // later overlay removal could not prove the on-disk bytes are the overlay's and
+            // restore the payload bytes (F1). They are planned as restores, never removals.
+            var desiredPayloadOverlaidFiles = AppliedOverlayFileReconciler.ResolveDesiredPayloadOverlaidFiles(
+                configurationFiles,
+                configurationVariables,
+                payload.Paths);
+            var desiredInventoryFiles = desiredOverlayFiles.Concat(desiredPayloadOverlaidFiles).ToList();
             var overlayRemovalPlan = AppliedOverlayFileReconciler.Plan(
                 overlayStateRoot,
                 targetPath,
                 deployment,
-                desiredOverlayFiles,
+                desiredInventoryFiles,
                 payload);
             var overlayRemovalWarning = overlayRemovalPlan.Warning;
 
             var alreadyApplied = IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables);
 
-            if (alreadyApplied && !overlayRemovalPlan.HasRemovals)
+            if (alreadyApplied && !overlayRemovalPlan.HasRemovals && !overlayRemovalPlan.HasRestores)
             {
                 if (overlayRemovalWarning is null && overlayRemovalPlan.ShouldRefreshInventory)
                 {
-                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(overlayStateRoot, targetPath, deployment, desiredOverlayFiles);
+                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(overlayStateRoot, targetPath, deployment, desiredInventoryFiles);
                 }
 
                 await _repository.PublishAppDeploymentResultAsync(
@@ -448,20 +457,25 @@ public sealed class WebAppDeploymentService
             if (alreadyApplied)
             {
                 // Targeted reconciliation: only files recorded as overlay-owned whole files are
-                // removed. The generic full mirror is not an owned-path proof and would delete
+                // removed, and recorded payload files are restored to the artifact payload
+                // bytes. The generic full mirror is not an owned-path proof and would delete
                 // unrelated operator files, so it is deliberately not used here.
                 var removal = AppliedOverlayFileReconciler.RemoveOwnedFiles(targetPath, overlayRemovalPlan, _logger);
                 overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, removal.Warning);
+                var restoration = AppliedOverlayFileReconciler.RestorePayloadFiles(
+                    targetPath, deployment.SourceLocalPath, overlayRemovalPlan, _logger);
+                overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, restoration.Warning);
                 if (overlayRemovalWarning is null)
                 {
-                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(overlayStateRoot, targetPath, deployment, desiredOverlayFiles);
+                    overlayRemovalWarning = AppliedOverlayFileReconciler.TryWriteInventory(overlayStateRoot, targetPath, deployment, desiredInventoryFiles);
                 }
 
                 _logger.LogInformation(
-                    "Web app overlay-owned files reconciled. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Removed={Removed}",
+                    "Web app overlay-owned files reconciled. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Removed={Removed}, Restored={Restored}",
                     deployment.AppInstanceId,
                     deployment.ArtifactId,
-                    removal.RemovedCount);
+                    removal.RemovedCount,
+                    restoration.RestoredCount);
             }
             else
             {
@@ -507,6 +521,16 @@ public sealed class WebAppDeploymentService
                     overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRemoval.Warning);
                 }
 
+                // Restoring before the mirror also covers payload files under mirror
+                // exclusions (App_Data, appsettings.*.json); for other paths the mirror
+                // then copies the same payload bytes again.
+                if (overlayRemovalPlan.HasRestores)
+                {
+                    var fullRestore = AppliedOverlayFileReconciler.RestorePayloadFiles(
+                        targetPath, deployment.SourceLocalPath, overlayRemovalPlan, _logger);
+                    overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, fullRestore.Warning);
+                }
+
                 // F5: retained (modified/unsafe) files must survive the mirror's stale-entry
                 // deletion exactly as the warning states. Reuse the mirror exclusion mechanism.
                 var retainedPaths = AppliedOverlayFileReconciler.ResolveRetainedRelativePaths(targetPath, overlayRemovalPlan);
@@ -532,7 +556,7 @@ public sealed class WebAppDeploymentService
                     overlayStateRoot,
                     targetPath,
                     deployment,
-                    AppliedOverlayFileReconciler.ResolveInventoryForWrite(targetPath, desiredOverlayFiles, overlayRemovalPlan));
+                    AppliedOverlayFileReconciler.ResolveInventoryForWrite(targetPath, desiredInventoryFiles, overlayRemovalPlan));
                 overlayRemovalWarning = CombineWarnings(overlayRemovalWarning, inventoryWriteWarning);
             }
 

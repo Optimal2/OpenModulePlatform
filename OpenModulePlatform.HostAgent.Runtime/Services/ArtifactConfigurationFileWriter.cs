@@ -296,10 +296,19 @@ internal static class ArtifactConfigurationFileWriter
                 $"Artifact configuration file '{file.ArtifactConfigurationFileId}' has no relative path.");
         }
 
-        var relativePath = file.RelativePath.Trim().Replace('/', Path.DirectorySeparatorChar);
+        // The writer target uses the same canonical identity as the reserved-path,
+        // payload-collision and inventory checks: './x', 'x//y' and 'x/y' are one file,
+        // and an unsafe or ambiguous path is rejected before any write.
+        var canonical = CanonicalRelativePath.TryCanonicalize(file.RelativePath);
+        if (canonical is null)
+        {
+            throw new InvalidOperationException(
+                $"Artifact configuration file '{file.ArtifactConfigurationFileId}' has an unsafe or ambiguous relative path.");
+        }
+
         return DeploymentPath.CombineUnderRoot(
             targetRoot,
-            relativePath,
+            CanonicalRelativePath.ToOsPath(canonical),
             $"Artifact configuration file '{file.ArtifactConfigurationFileId}' RelativePath");
     }
 
@@ -608,10 +617,7 @@ internal static class ArtifactConfigurationFileWriter
         => files.Any(IsAppSettingsJson);
 
     private static bool IsAppSettingsJson(ArtifactConfigurationFileDescriptor file)
-        => string.Equals(
-            file.RelativePath.Trim().Replace('\\', '/'),
-            AppSettingsRelativePath,
-            StringComparison.OrdinalIgnoreCase);
+        => CanonicalRelativePath.AreEqual(file.RelativePath, AppSettingsRelativePath);
 
     /// <summary>
     /// Effective merge behavior for an overlay configuration file: an explicit

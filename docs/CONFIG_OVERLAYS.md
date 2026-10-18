@@ -174,16 +174,38 @@ byte-identical, not a reparse point, not shipped in the artifact payload, and
 not a reserved runtime control path (`App_Data/omp-applied-overlay-files.json`,
 `App_Data/omp-deployment.lock.json`,
 `App_Data/omp-runtime-stopped-for-deployment.json` can never be supplied by an
-overlay). A modified, missing, unsafe or reparse-point file is left in place
+overlay). Reserved, payload-collision, inventory and writer-target comparisons
+all use one canonical relative-path identity, so dot segments, duplicate
+separators and slash variants (`App_Data/./omp-deployment.lock.json`,
+`App_Data//omp-deployment.lock.json`, `./x`, `x//y`) cannot bypass a control-path
+restriction or a payload collision check; unsafe or ambiguous paths are rejected
+before any write. A modified, unsafe or reparse-point file is left in place
 with a diagnostic warning and stays in the inventory, so cleanup is retried
-instead of forgotten. Paths the artifact owns (configuration rows or payload
-files), files merged onto an artifact base, the built-in `appsettings.json`,
-and operator files that were never recorded are never removed by this mechanism.
-When the artifact payload inventory is unavailable or incomplete (missing or
-unreadable artifact source), a payload collision cannot be ruled out, so
-removal is skipped for that cycle with an actionable warning while the
-deployment itself proceeds; the entry is retained so a later healthy cycle
-retries instead of forgetting it.
+instead of forgotten. A file that no longer exists was already removed: it is
+dropped from the rewritten inventory silently, without a warning, because the
+reconciliation goal is already achieved -- that idempotent treatment is
+intentional, and it is the one case that leaves neither a file nor an inventory
+entry. Paths the artifact owns as configuration rows, files merged onto an
+artifact base, the built-in `appsettings.json`, and operator files that were
+never recorded are never removed by this mechanism.
+
+A payload file the overlay supplied is a separate case: it is never deleted,
+but the overlay content the writer placed over the mirrored payload copy is
+recorded (path, byte length and SHA-256) so it can be undone. When the overlay
+stops supplying such a path, HostAgent restores the actual current artifact
+payload bytes -- on the already-applied fast path as well as on a full apply --
+only when the on-disk file is still byte-identical to the recorded overlay
+content, neither side is a reparse point, and the payload source is readable.
+A modified file keeps its modified content, an unverifiable or unreadable
+payload leaves the file untouched, and both stay in the inventory with a
+diagnostic warning; no payload file is ever deleted or overwritten on
+suspicion. When the artifact payload inventory is unavailable or incomplete
+(missing or unreadable artifact source -- the deletion/restoration inventory
+enumerates strictly and never silently skips an inaccessible directory), a
+payload collision cannot be ruled out, so removal and restoration are skipped
+for that cycle with an actionable warning while the deployment itself
+proceeds; the entry is retained so a later healthy cycle retries instead of
+forgetting it.
 
 The legacy `App_Data/omp-applied-overlay-files.json` location is app-pool
 writable and is never trusted as proof of ownership: it is treated as UNKNOWN,

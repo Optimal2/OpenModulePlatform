@@ -3593,10 +3593,14 @@ WHERE parent_object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
                 continue;
             }
 
-            if (!rows.TryGetValue(candidate.Descriptor.RelativePath, out var group))
+            // Group by canonical identity: './x' and 'x//y' are the same file as 'x/y'
+            // to the writer, so they must compete as one row group, not two winners.
+            var groupKey = CanonicalRelativePath.TryCanonicalize(candidate.Descriptor.RelativePath)
+                ?? candidate.Descriptor.RelativePath;
+            if (!rows.TryGetValue(groupKey, out var group))
             {
                 group = [];
-                rows[candidate.Descriptor.RelativePath] = group;
+                rows[groupKey] = group;
             }
 
             group.Add(candidate);
@@ -3772,7 +3776,8 @@ WHERE ar.ArtifactId = @artifactId;";
         int sourcePriority,
         string relativePath,
         IReadOnlySet<string> artifactOwnedPaths)
-        => sourcePriority > 0 && !artifactOwnedPaths.Contains(relativePath);
+        => sourcePriority > 0
+            && !artifactOwnedPaths.Any(owned => CanonicalRelativePath.AreEqual(owned, relativePath));
 
     /// <summary>
     /// Deterministic winner selection when several rows supply the same relative path:

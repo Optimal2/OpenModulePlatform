@@ -22,13 +22,11 @@ internal static class OverlayReservedPaths
 
     internal static bool IsReserved(string? relativePath)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
-        {
-            return false;
-        }
-
-        var normalized = relativePath.Trim().Replace('\\', '/').Trim('/');
-        return Reserved.Contains(normalized);
+        // Compared in canonical form: 'App_Data/./omp-deployment.lock.json' and
+        // 'App_Data//omp-deployment.lock.json' are the reserved control file, and a
+        // non-canonicalizable path is never a safe non-reserved identity either.
+        var canonical = CanonicalRelativePath.TryCanonicalize(relativePath);
+        return canonical is not null && Reserved.Contains(canonical);
     }
 }
 
@@ -75,8 +73,13 @@ internal static class AppliedOverlayFileReconciler
                 continue;
             }
 
-            var relativePath = file.RelativePath.Trim().Replace('/', Path.DirectorySeparatorChar);
-            if (payloadPaths is not null && payloadPaths.Contains(NormalizeRelative(file.RelativePath)))
+            var canonical = CanonicalRelativePath.TryCanonicalize(file.RelativePath);
+            if (canonical is null)
+            {
+                continue;
+            }
+
+            if (payloadPaths is not null && payloadPaths.Contains(canonical))
             {
                 continue;
             }
@@ -84,7 +87,58 @@ internal static class AppliedOverlayFileReconciler
             var content = ArtifactConfigurationFileWriter.Render(file.FileContent, variables);
             entries.Add(new AppliedOverlayFileEntry
             {
-                RelativePath = relativePath,
+                RelativePath = CanonicalRelativePath.ToOsPath(canonical),
+                ContentLength = Utf8NoBom.GetByteCount(content),
+                ContentSha256 = ComputeContentSha256(content)
+            });
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// Overlay whole files whose canonical path the artifact payload itself ships. These are
+    /// not standalone overlay-owned files (the payload file must never be deleted), but the
+    /// overlay content <see cref="ArtifactConfigurationFileWriter.ApplyAsync"/> writes over
+    /// the mirrored payload copy must still be recorded: without the recorded overlay hash a
+    /// later overlay removal has no proof that the on-disk bytes are HostAgent's overlay
+    /// rather than an independent modification, so the payload bytes could never be safely
+    /// restored (F1). Recorded here, planned as restores -- never removals -- by
+    /// <see cref="Plan"/>.
+    /// </summary>
+    internal static IReadOnlyList<AppliedOverlayFileEntry> ResolveDesiredPayloadOverlaidFiles(
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
+        IReadOnlyDictionary<string, string> variables,
+        IReadOnlySet<string>? payloadPaths)
+    {
+        var entries = new List<AppliedOverlayFileEntry>();
+        if (payloadPaths is null)
+        {
+            return entries;
+        }
+
+        foreach (var file in files)
+        {
+            if (!file.IsOverlayOwnedWholeFile || string.IsNullOrWhiteSpace(file.RelativePath))
+            {
+                continue;
+            }
+
+            if (OverlayReservedPaths.IsReserved(file.RelativePath))
+            {
+                continue;
+            }
+
+            var canonical = CanonicalRelativePath.TryCanonicalize(file.RelativePath);
+            if (canonical is null || !payloadPaths.Contains(canonical))
+            {
+                continue;
+            }
+
+            var content = ArtifactConfigurationFileWriter.Render(file.FileContent, variables);
+            entries.Add(new AppliedOverlayFileEntry
+            {
+                RelativePath = CanonicalRelativePath.ToOsPath(canonical),
                 ContentLength = Utf8NoBom.GetByteCount(content),
                 ContentSha256 = ComputeContentSha256(content)
             });
@@ -121,9 +175,21 @@ internal static class AppliedOverlayFileReconciler
 
         try
         {
+            // Deletion/restoration decisions need a completeness proof, so this
+            // enumeration is strict: it never follows a reparse point and never silently
+            // skips an inaccessible directory (IgnoreInaccessible=false). An unreadable
+            // entry throws and the catch below marks the inventory incomplete (F4). The
+            // shared RecursiveNoFollow options (IgnoreInaccessible=true) stay unchanged
+            // for the mirror and other best-effort enumerations.
+            var strictNoFollow = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = false
+            };
             var files = enumerateFiles is not null
                 ? enumerateFiles(sourceLocalPath)
-                : Directory.EnumerateFiles(sourceLocalPath, "*", OmpReparsePointGuard.RecursiveNoFollow);
+                : Directory.EnumerateFiles(sourceLocalPath, "*", strictNoFollow);
             foreach (var file in files)
             {
                 paths.Add(NormalizeRelative(Path.GetRelativePath(sourceLocalPath, file)));
@@ -141,16 +207,20 @@ internal static class AppliedOverlayFileReconciler
     }
 
     internal static string NormalizeRelative(string relativePath)
-        => relativePath.Trim().Replace('\\', '/').Trim('/');
+        => CanonicalRelativePath.TryCanonicalize(relativePath)
+            ?? relativePath.Trim().Replace('\\', '/').Trim('/');
 
     /// <summary>
-    /// Plans removal against the persisted trusted inventory. A missing inventory has nothing
-    /// to remove (and no warning unless a legacy untrusted file is present); an unreadable,
-    /// foreign-schema or foreign-instance inventory warns and plans nothing. A recorded file
-    /// that is no longer desired is removable only when it still exists as a regular file, is
-    /// not a reparse point, is provably not payload-owned or reserved, and hashes to the
-    /// recorded content. A null or incomplete payload inventory cannot prove the absence of
-    /// a collision, so it plans no removal: the entries are retained (the inventory is
+    /// Plans removal/restoration against the persisted trusted inventory. A missing inventory
+    /// has nothing to reconcile (and no warning unless a legacy untrusted file is present);
+    /// an unreadable, foreign-schema or foreign-instance inventory warns and plans nothing.
+    /// A recorded file that is no longer desired is removable only when it still exists as a
+    /// regular file, is not a reparse point, is provably not payload-owned or reserved, and
+    /// hashes to the recorded content. A recorded file whose path the payload owns is never
+    /// removed: it is planned as a payload restoration (the recorded overlay bytes are
+    /// replaced by the current artifact payload bytes) under the same byte-identical proof.
+    /// A null or incomplete payload inventory cannot prove the absence of a collision, so it
+    /// plans neither removal nor restoration: the entries are retained (the inventory is
     /// preserved, the warning repeats) and the deployment itself proceeds.
     /// </summary>
     internal static OverlayRemovalPlan Plan(
@@ -202,9 +272,12 @@ internal static class AppliedOverlayFileReconciler
         }
 
         var desiredPaths = desiredFiles
-            .Select(static file => file.RelativePath)
+            .Select(static file => CanonicalRelativePath.TryCanonicalize(file.RelativePath))
+            .Where(static path => path is not null)
+            .Cast<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var removals = new List<AppliedOverlayFileEntry>();
+        var restores = new List<AppliedOverlayFileEntry>();
         var retained = new List<AppliedOverlayFileEntry>();
         var warnings = new List<string>();
         var payloadUnknownWarned = false;
@@ -219,7 +292,15 @@ internal static class AppliedOverlayFileReconciler
                 continue;
             }
 
-            if (desiredPaths.Contains(entry.RelativePath))
+            var canonicalEntry = CanonicalRelativePath.TryCanonicalize(entry.RelativePath);
+            if (canonicalEntry is null)
+            {
+                warnings.Add($"Applied overlay file '{entry.RelativePath}' has an unsafe or ambiguous relative path and was not reconciled; it was left in place. Remove the stale inventory entry by deleting the inventory file, then let a full deployment recreate it.");
+                retained.Add(entry);
+                continue;
+            }
+
+            if (desiredPaths.Contains(canonicalEntry))
             {
                 continue;
             }
@@ -232,9 +313,10 @@ internal static class AppliedOverlayFileReconciler
             }
 
             // Without a complete payload inventory a collision cannot be ruled out,
-            // so no removal is authorized for this entry: retain it (the inventory
-            // is preserved, the warning repeats) and let a later cycle retry. This
-            // says the inventory is unknown -- never that the file is protected.
+            // so neither removal nor payload restoration is authorized for this entry:
+            // retain it (the inventory is preserved, the warning repeats) and let a
+            // later cycle retry. This says the inventory is unknown -- never that the
+            // file is protected.
             if (payload is null || !payload.IsComplete)
             {
                 if (!payloadUnknownWarned)
@@ -247,12 +329,7 @@ internal static class AppliedOverlayFileReconciler
                 continue;
             }
 
-            // Payload-owned paths are never overlay-owned: drop the record without
-            // deleting. The artifact mirror owns the payload file's content.
-            if (payload.Paths.Contains(NormalizeRelative(entry.RelativePath)))
-            {
-                continue;
-            }
+            var isPayloadOwned = payload.Paths.Contains(canonicalEntry);
 
             if (!TryResolvePath(targetPath, entry.RelativePath, out var path, out var pathWarning))
             {
@@ -262,7 +339,8 @@ internal static class AppliedOverlayFileReconciler
             }
 
             // A file that no longer exists was already removed; it is dropped from the
-            // rewritten inventory without a warning.
+            // rewritten inventory without a warning. That is intentional and idempotent:
+            // the reconciliation goal (the overlay bytes are gone) is already achieved.
             if (!File.Exists(path))
             {
                 continue;
@@ -277,8 +355,19 @@ internal static class AppliedOverlayFileReconciler
 
             if (!FileMatchesEntry(path, entry))
             {
-                warnings.Add($"Applied overlay file '{entry.RelativePath}' was modified after HostAgent wrote it and was left in place; remove it manually if it is no longer needed.");
+                warnings.Add(isPayloadOwned
+                    ? $"Applied overlay file '{entry.RelativePath}' was modified after HostAgent wrote it and was left in place; the artifact payload content was not restored over the modified file."
+                    : $"Applied overlay file '{entry.RelativePath}' was modified after HostAgent wrote it and was left in place; remove it manually if it is no longer needed.");
                 retained.Add(entry);
+                continue;
+            }
+
+            // A payload-owned path is never deleted. The on-disk bytes are still exactly
+            // the recorded overlay bytes, so the only safe reconciliation is to restore
+            // the current artifact payload bytes over them (F1).
+            if (isPayloadOwned)
+            {
+                restores.Add(entry);
                 continue;
             }
 
@@ -297,7 +386,142 @@ internal static class AppliedOverlayFileReconciler
             RemoveEntries: removals,
             Warning: warning,
             ShouldRefreshInventory: shouldRefresh,
-            RetainedEntries: retained);
+            RetainedEntries: retained)
+        {
+            RestoreEntries = restores
+        };
+    }
+
+    /// <summary>
+    /// Restores planned payload files to the current artifact payload bytes. A payload file
+    /// is never deleted and never overwritten on suspicion: the target must still hash to
+    /// the recorded overlay content (re-verified immediately before the write), neither
+    /// side may be a reparse point, and the payload source must be readable under the
+    /// deployment source root. Any failure leaves the file in place with a warning and the
+    /// inventory record survives because the caller only refreshes it on a clean result.
+    /// The write is atomic (same-directory temp file plus move).
+    /// </summary>
+    internal static OverlayRestoreResult RestorePayloadFiles(
+        string targetPath,
+        string? sourceLocalPath,
+        OverlayRemovalPlan plan,
+        ILogger logger)
+    {
+        var warnings = new List<string>();
+        var restored = 0;
+        if (plan.RestoreEntries.Count == 0)
+        {
+            return new OverlayRestoreResult(0, null);
+        }
+
+        if (string.IsNullOrWhiteSpace(sourceLocalPath) || !Directory.Exists(sourceLocalPath))
+        {
+            var unavailable = "Artifact payload source is unavailable, so a previously overlaid payload file could not be restored to the artifact content and was left in place. Let a later deployment retry. No payload file was deleted or overwritten.";
+            logger.LogWarning("{Warning}", unavailable);
+            return new OverlayRestoreResult(0, unavailable);
+        }
+
+        foreach (var entry in plan.RestoreEntries)
+        {
+            if (OverlayReservedPaths.IsReserved(entry.RelativePath))
+            {
+                continue;
+            }
+
+            var canonical = CanonicalRelativePath.TryCanonicalize(entry.RelativePath);
+            if (canonical is null)
+            {
+                logger.LogWarning("Applied overlay file '{RelativePath}' could not be resolved for payload restoration and was left in place.", entry.RelativePath);
+                warnings.Add($"Applied overlay file '{entry.RelativePath}' has an unsafe or ambiguous relative path; the artifact payload content was not restored and the file was left in place.");
+                continue;
+            }
+
+            if (!TryResolvePath(targetPath, entry.RelativePath, out var targetFile, out var targetWarning))
+            {
+                logger.LogWarning("Applied overlay file '{RelativePath}' could not be resolved for payload restoration and was left in place.", entry.RelativePath);
+                warnings.Add(targetWarning);
+                continue;
+            }
+
+            string sourceFile;
+            try
+            {
+                sourceFile = DeploymentPath.CombineUnderRoot(
+                    sourceLocalPath, CanonicalRelativePath.ToOsPath(canonical), "Artifact payload file");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or PathTooLongException)
+            {
+                logger.LogWarning("Applied overlay file '{RelativePath}' payload source could not be resolved and was left in place.", entry.RelativePath);
+                warnings.Add($"Artifact payload file '{entry.RelativePath}' could not be resolved; the previously overlaid file was left in place and no content was overwritten.");
+                continue;
+            }
+
+            if (!File.Exists(targetFile))
+            {
+                // Already gone: nothing to restore over. A full apply recreates payload files.
+                continue;
+            }
+
+            if (!File.Exists(sourceFile)
+                || HasReparsePointInPath(sourceFile, sourceLocalPath)
+                || HasReparsePointInPath(targetFile, targetPath)
+                || !FileMatchesEntry(targetFile, entry))
+            {
+                logger.LogWarning("Applied overlay file '{RelativePath}' changed or could not be verified before payload restoration and was left in place.", entry.RelativePath);
+                warnings.Add($"Applied overlay file '{entry.RelativePath}' changed or could not be verified before payload restoration and was left in place; no content was overwritten.");
+                continue;
+            }
+
+            byte[] payloadBytes;
+            try
+            {
+                payloadBytes = File.ReadAllBytes(sourceFile);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "Artifact payload file '{RelativePath}' could not be read for restoration.", entry.RelativePath);
+                warnings.Add($"Artifact payload file '{entry.RelativePath}' could not be read, so the previously overlaid file was left in place; no content was overwritten.");
+                continue;
+            }
+
+            var directory = Path.GetDirectoryName(targetFile)!;
+            var tempPath = Path.Join(directory, "." + Path.GetFileName(targetFile) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                File.WriteAllBytes(tempPath, payloadBytes);
+                // Re-verify immediately before the atomic replace: a file modified since
+                // planning is independent content and must never be overwritten.
+                if (!FileMatchesEntry(targetFile, entry))
+                {
+                    warnings.Add($"Applied overlay file '{entry.RelativePath}' changed before payload restoration and was left in place; no content was overwritten.");
+                    continue;
+                }
+
+                File.Move(tempPath, targetFile, overwrite: true);
+                restored++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "Applied overlay file '{RelativePath}' could not be restored to the artifact payload content.", entry.RelativePath);
+                warnings.Add($"Applied overlay file '{entry.RelativePath}' could not be restored to the artifact payload content and was left in place.");
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Best-effort temp cleanup; the restore result stands.
+                }
+            }
+        }
+
+        return new OverlayRestoreResult(restored, warnings.Count > 0 ? string.Join(" ", warnings) : null);
     }
 
     /// <summary>
@@ -314,17 +538,35 @@ internal static class AppliedOverlayFileReconciler
     {
         var result = new List<AppliedOverlayFileEntry>(desiredFiles);
         var seen = desiredFiles
-            .Select(static file => file.RelativePath)
+            .Select(static file => CanonicalRelativePath.TryCanonicalize(file.RelativePath) ?? file.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in plan.RetainedEntries.Concat(plan.RemoveEntries))
         {
-            if (!seen.Add(entry.RelativePath))
+            if (!seen.Add(CanonicalRelativePath.TryCanonicalize(entry.RelativePath) ?? entry.RelativePath))
             {
                 continue;
             }
 
             if (TryResolvePath(targetPath, entry.RelativePath, out var path, out _)
                 && File.Exists(path))
+            {
+                result.Add(entry);
+            }
+        }
+
+        // A restore entry is kept only when the on-disk bytes are still the recorded
+        // overlay bytes (restoration did not happen); once the payload bytes are in
+        // place the record is complete and must not be carried over.
+        foreach (var entry in plan.RestoreEntries)
+        {
+            if (!seen.Add(CanonicalRelativePath.TryCanonicalize(entry.RelativePath) ?? entry.RelativePath))
+            {
+                continue;
+            }
+
+            if (TryResolvePath(targetPath, entry.RelativePath, out var path, out _)
+                && File.Exists(path)
+                && FileMatchesEntry(path, entry))
             {
                 result.Add(entry);
             }
@@ -491,14 +733,15 @@ internal static class AppliedOverlayFileReconciler
     {
         var inventoryPaths = (inventory.Files ?? [])
             .Where(static file => file is not null && !string.IsNullOrWhiteSpace(file.RelativePath))
-            .Select(static file => file.RelativePath)
+            .Select(static file => CanonicalRelativePath.TryCanonicalize(file.RelativePath) ?? file.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (inventoryPaths.Count != desiredFiles.Count)
         {
             return false;
         }
 
-        return desiredFiles.All(file => inventoryPaths.Contains(file.RelativePath));
+        return desiredFiles.All(file => inventoryPaths.Contains(
+            CanonicalRelativePath.TryCanonicalize(file.RelativePath) ?? file.RelativePath));
     }
 
     private static string ComputeContentSha256(string content)
@@ -510,6 +753,14 @@ internal sealed record OverlayRemovalPlan(
     IReadOnlyList<AppliedOverlayFileEntry> RemoveEntries,
     string? Warning,
     bool ShouldRefreshInventory,
-    IReadOnlyList<AppliedOverlayFileEntry> RetainedEntries);
+    IReadOnlyList<AppliedOverlayFileEntry> RetainedEntries)
+{
+    /// <summary>Recorded payload-owned files to restore to artifact payload bytes, never delete.</summary>
+    internal IReadOnlyList<AppliedOverlayFileEntry> RestoreEntries { get; init; } = [];
+
+    internal bool HasRestores => RestoreEntries.Count > 0;
+}
 
 internal sealed record OverlayRemovalResult(int RemovedCount, string? Warning);
+
+internal sealed record OverlayRestoreResult(int RestoredCount, string? Warning);
