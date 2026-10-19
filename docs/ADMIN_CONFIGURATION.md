@@ -648,6 +648,30 @@ deployable payload and the configuration files with their relative deployment
 paths. Manual configuration-file editing remains available for repair and
 inspection.
 
+Upload and import errors that say "put runtime configuration in the artifact
+package configuration-files section" use the hyphenated phrase as prose. The
+literal manifest key is `configurationFiles` in `omp-artifact-package.json`:
+
+```json
+{
+  "formatVersion": 1,
+  "payload": {
+    "type": "directory",
+    "path": "payload/"
+  },
+  "configurationFiles": [
+    {
+      "relativePath": "odv.site.config.js",
+      "source": "configuration/odv.site.config.js"
+    }
+  ]
+}
+```
+
+`relativePath` is the deployed path relative to the artifact root, and `source`
+is the file's path inside the package zip. The full
+envelope format is in [`ARTIFACT_PACKAGES.md`](ARTIFACT_PACKAGES.md).
+
 The upload page blocks duplicate artifact content by comparing the extracted
 directory-content SHA-256 with existing artifact rows. Zip metadata such as
 timestamps and compression settings is intentionally ignored; two zip files

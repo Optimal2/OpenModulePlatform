@@ -882,7 +882,12 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
 
     private static string CreateWorkRoot()
     {
-        var root = Path.Join(Path.GetTempPath(), "OmpSeedSqlOrderingTests", Guid.NewGuid().ToString("N"));
+        // These tests extract zips; under system %TEMP% antivirus scanning
+        // locks the fresh files and makes them flaky. scripts/local-ci.ps1
+        // points OMP_TEST_TEMP_ROOT at a repository-local folder instead.
+        var tempRoot = Environment.GetEnvironmentVariable("OMP_TEST_TEMP_ROOT");
+        var baseRoot = string.IsNullOrWhiteSpace(tempRoot) ? Path.GetTempPath() : tempRoot;
+        var root = Path.Join(baseRoot, "OmpSeedSqlOrderingTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
     }

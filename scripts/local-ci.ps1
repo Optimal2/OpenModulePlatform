@@ -57,6 +57,20 @@ else {
     Write-Warning 'Local-ci telemetry helper not found (scripts\local-ci-telemetry.ps1); this run writes no telemetry.'
 }
 
+# Tests that extract zips write under OMP_TEST_TEMP_ROOT when it is set.
+# Under the system %TEMP% antivirus scanning locks freshly extracted files and
+# makes those tests flaky, so point them at a repository-local folder (ignored
+# through TestResults/). The variable reaches only this process and the test
+# processes it starts, the previous value is restored in the finally block, and
+# TEMP itself is never changed.
+$previousOmpTestTempRoot = $env:OMP_TEST_TEMP_ROOT
+if ([string]::IsNullOrWhiteSpace($env:OMP_TEST_TEMP_ROOT)) {
+    $env:OMP_TEST_TEMP_ROOT = Join-Path $repoRoot 'TestResults\omp-test-temp'
+}
+if (-not (Test-Path -LiteralPath $env:OMP_TEST_TEMP_ROOT)) {
+    $null = New-Item -ItemType Directory -Path $env:OMP_TEST_TEMP_ROOT
+}
+
 $failures = New-Object System.Collections.Generic.List[string]
 
 function Invoke-Step {
@@ -340,5 +354,6 @@ try {
     exit 1
 }
 finally {
+    $env:OMP_TEST_TEMP_ROOT = $previousOmpTestTempRoot
     Pop-Location
 }

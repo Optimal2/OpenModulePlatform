@@ -16,15 +16,16 @@ public sealed class PortalPageInvariantTests(PlaywrightSessionFixture playwright
 {
     public static TheoryData<string, int, int> Cases()
     {
-        // Excluded page:
-        // - "/": the dashboard canvas deliberately widens the page chrome to
-        //   the widget extents (portal-dashboard.js sets
-        //   --portal-page-chrome-width) so the document pans horizontally at
-        //   1366x768 and 375x812. The no-horizontal-overflow invariant cannot
-        //   hold for the dashboard by design; re-add if the dashboard gets a
-        //   viewport-contained scroll wrapper.
+        // "/" (the dashboard) is scanned like every other page, except for
+        // the no-horizontal-overflow invariant: the dashboard canvas
+        // deliberately widens the page chrome to the widget extents
+        // (portal-dashboard.js sets --portal-page-chrome-width), so the
+        // document pans horizontally at 1366x768 and 375x812 by design. See
+        // ExemptFindingPrefixes; drop the exemption if the dashboard gets a
+        // viewport-contained scroll wrapper.
         string[] pages =
         [
+            "/",
             "/Notifications",
             "/status/404",
             "/Admin/Overview",
@@ -34,6 +35,13 @@ public sealed class PortalPageInvariantTests(PlaywrightSessionFixture playwright
         return PageInvariantCases.Expand(pages);
     }
 
+    // Per-page findings that are expected by design, matched by the finding
+    // prefix UiInvariantScanner emits. Everything else still fails the page.
+    private static readonly Dictionary<string, string[]> ExemptFindingPrefixes = new(StringComparer.Ordinal)
+    {
+        ["/"] = ["horizontal overflow:"],
+    };
+
     [SkippableTheory]
     [MemberData(nameof(Cases))]
     public async Task Page_has_no_broken_ui_patterns(string path, int width, int height)
@@ -41,7 +49,9 @@ public sealed class PortalPageInvariantTests(PlaywrightSessionFixture playwright
         Skip.IfNot(playwright.Available, playwright.UnavailableReason);
         Skip.IfNot(app.Available, app.UnavailableReason);
 
-        await PageInvariantCases.AssertPageInvariantsAsync(playwright, app, path, width, height);
+        await PageInvariantCases.AssertPageInvariantsAsync(
+            playwright, app, path, width, height,
+            ExemptFindingPrefixes.GetValueOrDefault(path) ?? []);
     }
 }
 
@@ -87,7 +97,8 @@ internal static class PageInvariantCases
     }
 
     public static async Task AssertPageInvariantsAsync(
-        PlaywrightSessionFixture playwright, WebAppProcessFixture app, string path, int width, int height)
+        PlaywrightSessionFixture playwright, WebAppProcessFixture app, string path, int width, int height,
+        string[]? exemptFindingPrefixes = null)
     {
         await using var context = await playwright.Browser!.NewContextAsync(new BrowserNewContextOptions
         {
@@ -106,7 +117,10 @@ internal static class PageInvariantCases
             : 200;
         Assert.True(response.Status == expectedStatus, $"{path} answered {response.Status}, expected {expectedStatus}");
 
-        var findings = await UiInvariantScanner.ScanAsync(page);
+        var findings = (await UiInvariantScanner.ScanAsync(page))
+            .Where(finding => exemptFindingPrefixes is null
+                || !exemptFindingPrefixes.Any(prefix => finding.StartsWith(prefix, StringComparison.Ordinal)))
+            .ToList();
 
         Assert.True(findings.Count == 0,
             $"{path} at {width}x{height}:\n - " + string.Join("\n - ", findings));
