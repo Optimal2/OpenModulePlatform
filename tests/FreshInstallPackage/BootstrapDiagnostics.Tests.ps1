@@ -13,6 +13,10 @@ Describe 'Bootstrap input diagnostics do not disclose secrets' {
         @{ EntryPoint = 'builder' }
         @{ EntryPoint = 'protector' }
     ) {
+        # Pester containers share the runspace $Error: records left by earlier
+        # suites (including raw exceptions without an Exception property from
+        # failed PowerShell 7 module shadows) must not enter this history.
+        $errorsBeforeIt = @($Error)
         $profile = Join-Path $TestDrive $EntryPoint
         New-Item -ItemType Directory -Path $profile -Force | Out-Null
         $path = Join-Path $profile 'bootstrap.json'
@@ -34,7 +38,7 @@ Describe 'Bootstrap input diagnostics do not disclose secrets' {
                 $_.Exception.ToString()
             }
         } *>&1 | Out-String -Width 4096
-        $history = @($Error)
+        $history = @($Error | Where-Object { $errorsBeforeIt -notcontains $_ })
         $historyText = & {
             foreach ($record in $history) {
                 $record | Format-List * -Force | Out-String -Width 4096

@@ -17,6 +17,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+
+function Get-OmpDeterministicFileHash {
+    # SHA-256 via .NET rather than Get-FileHash: under Windows PowerShell 5.1
+    # on a machine whose PSModulePath also lists PowerShell 7 module folders,
+    # Microsoft.PowerShell.Utility resolves to the 7.x copy and Get-FileHash
+    # is unrecognized. Uppercase hex, like Get-FileHash -Algorithm SHA256.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '')
+}
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path ([IO.Path]::GetTempPath()) ('omp-determinism-' + [Guid]::NewGuid().ToString('N'))
 }
@@ -93,9 +102,9 @@ try {
             $hashes = [ordered]@{}
             foreach ($file in Get-ChildItem -LiteralPath $publish -File -Recurse | Sort-Object FullName) {
                 $name = $file.FullName.Substring($publish.Length).TrimStart('\', '/').Replace('\', '/')
-                $hashes[$name] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+                $hashes[$name] = Get-OmpDeterministicFileHash -Path $file.FullName
             }
-            $results += [pscustomobject]@{ Project = $projectName; Leg = $leg; Files = $hashes; PackageSha256 = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash }
+            $results += [pscustomobject]@{ Project = $projectName; Leg = $leg; Files = $hashes; PackageSha256 = Get-OmpDeterministicFileHash -Path $zip }
             $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputRoot 'hashes.json') -Encoding UTF8
         }
     }

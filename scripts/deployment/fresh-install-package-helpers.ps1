@@ -207,7 +207,17 @@ function Find-ClearTextPasswordFields {
 
     $psd1Path = Join-Path $ProfileFolder 'package.psd1'
     if (Test-Path -LiteralPath $psd1Path -PathType Leaf) {
-        $data = Import-PowerShellDataFile -LiteralPath $psd1Path
+        $data = if (Get-Command Import-PowerShellDataFile -ErrorAction SilentlyContinue) {
+            Import-PowerShellDataFile -LiteralPath $psd1Path
+        }
+        else {
+            # Windows PowerShell 5.1 on a machine whose PSModulePath also lists
+            # PowerShell 7 module folders resolves Utility to the 7.x copy and
+            # the function commands are unrecognized. package.psd1 is a
+            # repository-owned data file, so evaluating it is an acceptable
+            # compatibility fallback (same pattern as package-hostagent-first).
+            & ([scriptblock]::Create((Get-Content -LiteralPath $psd1Path -Raw)))
+        }
         foreach ($field in (Find-PasswordFields -Node $data -Path 'package.psd1')) {
             $bad.Add($field)
         }
@@ -532,13 +542,22 @@ function Get-HostingBundleRelease {
     throw "No Windows hosting bundle (dotnet-hosting-*-win.exe) found in Microsoft's release metadata for .NET $Major."
 }
 
+function Get-OmpFileSha512 {
+    # SHA-512 via .NET rather than Get-FileHash: under Windows PowerShell 5.1
+    # on a machine whose PSModulePath also lists PowerShell 7 module folders,
+    # Microsoft.PowerShell.Utility resolves to the 7.x copy and Get-FileHash
+    # is unrecognized. Uppercase hex, like Get-FileHash -Algorithm SHA512.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    [BitConverter]::ToString([System.Security.Cryptography.SHA512]::Create().ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '')
+}
+
 function Test-FileSha512 {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$ExpectedHash
     )
 
-    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA512).Hash
+    $actual = Get-OmpFileSha512 -Path $Path
     return [string]::Equals($actual, $ExpectedHash, [StringComparison]::OrdinalIgnoreCase)
 }
 
@@ -578,7 +597,7 @@ function Get-HostingBundleInstaller {
 
         $destination = Join-Path $DestinationFolder $fileName
         Copy-Item -LiteralPath $supplied -Destination $destination -Force
-        $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA512).Hash.ToLowerInvariant()
+        $hash = (Get-OmpFileSha512 -Path $destination).ToLowerInvariant()
         return [ordered]@{
             Path = $destination
             Version = $version

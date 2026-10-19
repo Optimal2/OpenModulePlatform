@@ -3,6 +3,18 @@
 param()
 
 Describe 'Artifact package deterministic bytes' {
+    BeforeAll {
+        # Hash via .NET rather than Get-FileHash: on a machine whose
+        # PSModulePath also lists PowerShell 7 module folders, Windows
+        # PowerShell 5.1 resolves Microsoft.PowerShell.Utility 7.x first and
+        # its 10 function commands (including Get-FileHash) stay unrecognized
+        # (same hazard as SharedToolingFindings and HostAgentFirstModuleSeed).
+        function Get-DeterministicTestFileHash {
+            param([Parameter(Mandatory = $true)][string]$Path)
+            [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '')
+        }
+    }
+
     It 'Ignores creation order and timestamps, including generated worker compatibility metadata' {
         $packer = Join-Path $PSScriptRoot '../scripts/deployment/new-omp-artifact-package.ps1'
         $hashes = @()
@@ -21,13 +33,13 @@ Describe 'Artifact package deterministic bytes' {
             $zip = Join-Path $root 'package.zip'
             & $packer -ModuleKey test -AppKey worker -PackageType worker -TargetName worker `
                 -Version 1.0.0 -MinWorkerHostVersion 1.0.0 -PayloadPath $payload -OutputPath $zip
-            $hashes += (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+            $hashes += Get-DeterministicTestFileHash -Path $zip
         }
         $hashes[0] | Should -Be $hashes[1]
         # The guard must still notice a real content change.
         [IO.File]::WriteAllText((Join-Path $payload 'a.txt'), 'changed')
         & $packer -ModuleKey test -AppKey worker -PackageType worker -TargetName worker `
             -Version 1.0.0 -MinWorkerHostVersion 1.0.0 -PayloadPath $payload -OutputPath $zip
-        (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash | Should -Not -Be $hashes[0]
+        Get-DeterministicTestFileHash -Path $zip | Should -Not -Be $hashes[0]
     }
 }

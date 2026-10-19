@@ -34,6 +34,29 @@ if ([string]::IsNullOrWhiteSpace($repoRoot)) {
     $repoRoot = (Resolve-Path (Join-Path (Get-Location) '..')).Path
 }
 Push-Location $repoRoot
+# --- Inbox Utility pre-import (Windows PowerShell 5.1 only; best-effort) ----
+# On a machine whose PSModulePath also lists PowerShell 7 module folders, the
+# first use of a Utility *function* command (Get-FileHash,
+# Import-PowerShellDataFile, ...) inside a Pester container resolves
+# Microsoft.PowerShell.Utility 7.x first; that import fails under 5.1 with no
+# fallback, and the 10 inbox function commands stay unrecognized in every
+# session state of the process (measured 2026-10-20: Artifact + FreshInstall
+# suites and the deterministic-publish step fail exactly this way). Importing
+# the inbox copy by full path up front makes every later resolution serve the
+# already-loaded module instead of searching the path. Warn-only: a machine
+# without the inbox copy must still reach the real gate diagnostics.
+if ($PSVersionTable.PSVersion.Major -le 5) {
+    try {
+        $inboxUtilityManifest = Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'
+        if (Test-Path -LiteralPath $inboxUtilityManifest -PathType Leaf) {
+            Import-Module $inboxUtilityManifest -Force -ErrorAction Stop
+        }
+        $null = Get-Command Get-FileHash -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Inbox Utility pre-import failed, continuing without it: $($_.Exception.Message)"
+    }
+}
 # --- Local-ci telemetry (best-effort; never changes the gate's exit code) ----
 # One compact JSONL line per run under
 # %APPDATA%\@private\ai-orchestrator\local-ci-telemetry\OpenModulePlatform.jsonl.
