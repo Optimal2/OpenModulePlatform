@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Management;
@@ -182,4 +183,90 @@ public sealed class HostAgentRpcClient
         return "unknown-process";
     }
 
+}
+
+/// <summary>
+/// Memoizes successful ensureArtifact results per artifact identity and version.
+/// </summary>
+/// <remarks>
+/// With the host artifact cache disabled, every reconcile cycle asked the HostAgent to
+/// ensure every worker's artifact again, although an artifact id + version names immutable
+/// content and the answer -- the local path it lives at -- cannot change while the files are
+/// still there. On a host with many workers that was a steady stream of identical RPCs over
+/// the HostAgent's shared pipe, every RefreshSeconds, forever.
+///
+/// Only a proven-stable answer is kept: a successful response with a local path. A failure,
+/// a timeout, an exception or a null response is never memoized, so a HostAgent outage is
+/// retried on the next cycle exactly as before. A memoized answer is dropped again when the
+/// caller's validity check says its files are gone, when the catalog stops listing that
+/// artifact version (<see cref="RetainOnly"/>), or when the version changes (it is part of
+/// the key). Concurrent callers for the same key share one in-flight RPC, so the
+/// per-worker fan-out of the first cycle no longer issues N identical calls either.
+/// </remarks>
+internal sealed class HostAgentEnsureArtifactCache
+{
+    private readonly ConcurrentDictionary<(int ArtifactId, string? ArtifactVersion), Lazy<Task<HostAgentEnsureArtifactResponse?>>> _entries = new();
+
+    public async Task<HostAgentEnsureArtifactResponse?> GetOrEnsureAsync(
+        int artifactId,
+        string? artifactVersion,
+        Func<CancellationToken, Task<HostAgentEnsureArtifactResponse?>> ensureArtifact,
+        Func<HostAgentEnsureArtifactResponse, bool> isStillValid,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ensureArtifact);
+        ArgumentNullException.ThrowIfNull(isStillValid);
+
+        var key = (artifactId, artifactVersion);
+        if (_entries.TryGetValue(key, out var existing)
+            && existing.IsValueCreated
+            && existing.Value.IsCompletedSuccessfully
+            && existing.Value.Result is { } memoized
+            && !isStillValid(memoized))
+        {
+            _entries.TryRemove(KeyValuePair.Create(key, existing));
+        }
+
+        var entry = _entries.GetOrAdd(
+            key,
+            _ => new Lazy<Task<HostAgentEnsureArtifactResponse?>>(
+                () => ensureArtifact(cancellationToken),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+
+        HostAgentEnsureArtifactResponse? response;
+        try
+        {
+            response = await entry.Value;
+        }
+        catch
+        {
+            _entries.TryRemove(KeyValuePair.Create(key, entry));
+            throw;
+        }
+
+        if (!IsStable(response))
+        {
+            _entries.TryRemove(KeyValuePair.Create(key, entry));
+        }
+
+        return response;
+    }
+
+    /// <summary>
+    /// Drops every memoized artifact the catalog no longer asks for.
+    /// </summary>
+    public void RetainOnly(IEnumerable<(int ArtifactId, string? ArtifactVersion)> liveKeys)
+    {
+        var live = liveKeys.ToHashSet();
+        foreach (var key in _entries.Keys)
+        {
+            if (!live.Contains(key))
+            {
+                _entries.TryRemove(key, out _);
+            }
+        }
+    }
+
+    private static bool IsStable(HostAgentEnsureArtifactResponse? response)
+        => response is { Success: true } && !string.IsNullOrWhiteSpace(response.LocalPath);
 }

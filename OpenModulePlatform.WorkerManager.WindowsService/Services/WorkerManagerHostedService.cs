@@ -36,6 +36,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
     private readonly OmpWorkerRuntimeRepository _runtimeRepository;
     private readonly HostAgentRpcClient _hostAgentRpcClient;
     private readonly Dictionary<Guid, ManagedWorkerProcess> _managedWorkers = new();
+    private readonly HostAgentEnsureArtifactCache _ensureArtifactCache = new();
+
+    // Owns every worker process this manager starts, so they die with the manager however
+    // it dies; see WorkerProcessJobObject. Null off Windows or when the OS refuses the job.
+    private readonly WorkerProcessJobObject? _workerJobObject;
 
     public WorkerManagerHostedService(
         ILogger<WorkerManagerHostedService> logger,
@@ -51,6 +56,24 @@ public sealed class WorkerManagerHostedService : BackgroundService
         _catalog = catalog;
         _runtimeRepository = runtimeRepository;
         _hostAgentRpcClient = hostAgentRpcClient;
+        _workerJobObject = OperatingSystem.IsWindows() ? WorkerProcessJobObject.TryCreate() : null;
+        if (OperatingSystem.IsWindows() && _workerJobObject is null)
+        {
+            _logger.LogWarning(
+                "WorkerManager could not create the job object that ties worker processes to its own lifetime; workers that outlive a crashed manager are left to the startup orphan cleanup.");
+        }
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        // Closing the handle is the kill-on-close trigger. By now StopAllWorkersAsync has
+        // drained and stopped every worker it could; this only takes down the ones it could
+        // not, which would otherwise be orphans.
+        if (OperatingSystem.IsWindows())
+        {
+            _workerJobObject?.Dispose();
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -447,6 +470,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         var resolvedResults = await Task.WhenAll(resolveTasks);
 
+        // An artifact version the catalog no longer lists is never asked for again; drop
+        // its memoized ensureArtifact answer instead of keeping it for the service's life.
+        _ensureArtifactCache.RetainOnly(desiredWorkers
+            .Where(desired => desired.ArtifactId.HasValue)
+            .Select(desired => (desired.ArtifactId!.Value, desired.ArtifactVersion)));
+
         return resolvedResults
             .Where(resolved => resolved is not null)
             .Select(resolved => resolved!)
@@ -463,9 +492,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         if (shouldAskHostAgent)
         {
-            var response = await _hostAgentRpcClient.EnsureArtifactAsync(
-                desired.ArtifactId!.Value,
-                null,
+            // Memoized per artifact id + version (HostAgentEnsureArtifactCache): with the
+            // host artifact cache disabled this branch runs for every worker on every cycle,
+            // and the answer for an unchanged artifact whose files are still there is the
+            // same every time.
+            var artifactId = desired.ArtifactId!.Value;
+            var response = await _ensureArtifactCache.GetOrEnsureAsync(
+                artifactId,
+                desired.ArtifactVersion,
+                ct => _hostAgentRpcClient.EnsureArtifactAsync(artifactId, null, ct),
+                memoized => IsEnsuredArtifactStillPresent(desired, memoized),
                 cancellationToken);
 
             if (response?.Success == true && !string.IsNullOrWhiteSpace(response.LocalPath))
@@ -493,6 +529,25 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         return resolved;
+    }
+
+    private static bool IsEnsuredArtifactStillPresent(
+        DesiredWorkerInstance desired,
+        HostAgentEnsureArtifactResponse memoized)
+    {
+        if (string.IsNullOrWhiteSpace(memoized.LocalPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return File.Exists(DesiredWorkerInstance.ResolvePluginAssemblyPath(memoized.LocalPath, desired.PluginRelativePath));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     private async Task EnsureWorkerRunningAsync(
@@ -580,11 +635,18 @@ public sealed class WorkerManagerHostedService : BackgroundService
         startupResources.AttachProcess(process);
 
         managed.ResetStandardError();
-        StartWorkerProcess(
+        var ownedByJob = StartWorkerProcess(
             process,
             managed.Definition.WorkerInstanceId,
             workerProcessPath,
-            managed.RecordStandardError);
+            managed.RecordStandardError,
+            jobObject: _workerJobObject);
+        if (!ownedByJob && _workerJobObject is not null)
+        {
+            _logger.LogWarning(
+                "Worker process could not be assigned to the WorkerManager job object; if the manager dies it is stopped only by the next startup orphan cleanup. WorkerInstanceId={WorkerInstanceId}",
+                managed.Definition.WorkerInstanceId);
+        }
 
         managed.AttachProcess(
             process,
@@ -644,10 +706,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
         // deployed) for a graceful exit, and the host's ShutdownTimeout is 30 s, so
         // stopping serially meant two unresponsive workers consumed the entire budget:
         // the host stopped waiting and the process exited mid-loop, leaving the
-        // remaining worker hosts alive as orphans. They are not in a job object, so
-        // they survived until the next start's orphan cleanup killed them with their
-        // whole process tree -- losing exactly the in-flight jobs that drain exists to
-        // protect (R6-F5). Each worker keeps its own best-effort error handling.
+        // remaining worker hosts alive as orphans until the next start's orphan cleanup
+        // killed them with their whole process tree -- losing exactly the in-flight jobs
+        // that drain exists to protect (R6-F5). The manager's kill-on-close job object now
+        // takes them down with a manager that runs out of budget, so stopping them
+        // gracefully here is still the point. Each worker keeps its own best-effort
+        // error handling.
         async Task StopOneAsync(ManagedWorkerProcess managed)
         {
             try
@@ -1135,11 +1199,21 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
     }
 
-    internal static void StartWorkerProcess(
+    /// <summary>
+    /// Starts the worker process and, when a job object is supplied, assigns it to that
+    /// job. Returns true when the process is owned by the job.
+    /// </summary>
+    /// <remarks>
+    /// The assignment follows Start immediately. A process the worker host starts in the
+    /// instant before that is outside the job; the WorkerProcessHost starts none that
+    /// early, and the startup orphan cleanup still covers anything that escapes.
+    /// </remarks>
+    internal static bool StartWorkerProcess(
         Process process,
         Guid workerInstanceId,
         string workerProcessPath,
-        Action<string?>? onStandardError = null)
+        Action<string?>? onStandardError = null,
+        WorkerProcessJobObject? jobObject = null)
     {
         if (process.StartInfo.RedirectStandardError && onStandardError is not null)
         {
@@ -1154,10 +1228,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     $"Failed to start worker process for WorkerInstanceId '{workerInstanceId}'.");
             }
 
+            var ownedByJob = jobObject is not null
+                && OperatingSystem.IsWindows()
+                && jobObject.TryAssign(process);
+
             if (process.StartInfo.RedirectStandardError && onStandardError is not null)
             {
                 process.BeginErrorReadLine();
             }
+
+            return ownedByJob;
         }
         catch (Exception ex) when (ex is DirectoryNotFoundException
             or FileNotFoundException

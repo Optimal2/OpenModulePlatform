@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/OmpWorkerRuntimeRepository.cs
+using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
@@ -92,7 +93,7 @@ WHERE HostKey = @hostKey;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        AddParameter(cmd, "@hostKey", SqlDbType.NVarChar, 128, hostKey);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -170,7 +171,7 @@ ORDER BY
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        AddParameter(cmd, "@hostKey", SqlDbType.NVarChar, 128, hostKey);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -353,13 +354,82 @@ BEGIN
 END
 ";
 
-    public async Task PublishObservationAsync(
+    /// <summary>
+    /// SQL Server error 1205: the transaction was chosen as the deadlock victim.
+    /// </summary>
+    internal const int DeadlockVictimErrorNumber = 1205;
+
+    private const int MaxPublishAttempts = 3;
+    private static readonly TimeSpan PublishDeadlockRetryDelay = TimeSpan.FromMilliseconds(200);
+
+    internal static bool IsDeadlockVictim(Exception ex)
+        => ex is SqlException { Number: DeadlockVictimErrorNumber };
+
+    /// <summary>
+    /// Publishes one worker observation, retrying only when SQL Server picked the publish
+    /// as a deadlock victim.
+    /// </summary>
+    /// <remarks>
+    /// Every worker under one app instance publishes into the same per-instance row set and
+    /// the same summary row, so two publishes can deadlock on the MERGE range locks and the
+    /// summary update. SQL Server then rolls the victim back completely (XACT_ABORT plus the
+    /// explicit transaction), and the publish is idempotent -- it writes the observation as
+    /// it stands -- so running it again is safe. Without the retry the observation was simply
+    /// lost and logged, and a worker that kept losing went stale and was downgraded to
+    /// Unknown. Only 1205 is retried (the AdRolePrincipalMigrationRepository rule); every
+    /// other failure keeps going straight to the caller.
+    /// </remarks>
+    public Task PublishObservationAsync(
         WorkerRuntimeObservation observation,
         bool touchAppInstanceHeartbeat,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(observation);
 
+        return ExecuteWithDeadlockRetryAsync(
+            attemptCt => PublishObservationCoreAsync(observation, touchAppInstanceHeartbeat, attemptCt),
+            IsDeadlockVictim,
+            MaxPublishAttempts,
+            PublishDeadlockRetryDelay,
+            ct);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="operation"/> up to <paramref name="maxAttempts"/> times while it
+    /// fails with an exception <paramref name="isRetryable"/> accepts, waiting
+    /// <paramref name="retryDelay"/> between attempts. Cancellation ends the loop
+    /// immediately; the last failure is rethrown once the attempts are spent.
+    /// </summary>
+    internal static async Task ExecuteWithDeadlockRetryAsync(
+        Func<CancellationToken, Task> operation,
+        Func<Exception, bool> isRetryable,
+        int maxAttempts,
+        TimeSpan retryDelay,
+        CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await operation(ct);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && isRetryable(ex))
+            {
+                // Spread the retries out a little so the two deadlocked publishers do not
+                // collide again on the very next attempt. A cancelled token ends the wait,
+                // and with it the retry, with OperationCanceledException.
+                ct.ThrowIfCancellationRequested();
+                await Task.Delay(retryDelay * attempt, ct);
+            }
+        }
+    }
+
+    private async Task PublishObservationCoreAsync(
+        WorkerRuntimeObservation observation,
+        bool touchAppInstanceHeartbeat,
+        CancellationToken ct)
+    {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -558,13 +628,13 @@ END
 COMMIT TRANSACTION;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@appInstanceId", observation.AppInstanceId);
-        cmd.Parameters.AddWithValue("@workerInstanceId", observation.WorkerInstanceId == Guid.Empty ? observation.AppInstanceId : observation.WorkerInstanceId);
-        cmd.Parameters.AddWithValue("@workerInstanceKey", ToNullableStringValue(observation.WorkerInstanceKey, 150));
-        cmd.Parameters.AddWithValue("@runtimeKind", observation.RuntimeKind.Trim());
-        cmd.Parameters.AddWithValue("@workerTypeKey", observation.WorkerTypeKey.Trim());
-        cmd.Parameters.AddWithValue("@observedState", observation.ObservedState);
-        cmd.Parameters.AddWithValue("@processId", (object?)observation.ProcessId ?? DBNull.Value);
+        AddParameter(cmd, "@appInstanceId", SqlDbType.UniqueIdentifier, 0, observation.AppInstanceId);
+        AddParameter(cmd, "@workerInstanceId", SqlDbType.UniqueIdentifier, 0, observation.WorkerInstanceId == Guid.Empty ? observation.AppInstanceId : observation.WorkerInstanceId);
+        AddParameter(cmd, "@workerInstanceKey", SqlDbType.NVarChar, 150, ToNullableStringValue(observation.WorkerInstanceKey, 150));
+        AddParameter(cmd, "@runtimeKind", SqlDbType.NVarChar, 100, observation.RuntimeKind.Trim());
+        AddParameter(cmd, "@workerTypeKey", SqlDbType.NVarChar, 200, observation.WorkerTypeKey.Trim());
+        AddParameter(cmd, "@observedState", SqlDbType.TinyInt, 0, observation.ObservedState);
+        AddParameter(cmd, "@processId", SqlDbType.Int, 0, observation.ProcessId);
         // R8-P3-12: bound explicitly rather than through AddWithValue. AddWithValue infers
         // datetime2 at the default scale of 7 for a DateTime, and the three target columns are
         // datetime2(3), so SQL Server rounds on the way in. Every value written here is later read
@@ -573,15 +643,15 @@ COMMIT TRANSACTION;";
         AddDateTime2(cmd, "@startedUtc", observation.StartedUtc);
         AddDateTime2(cmd, "@lastSeenUtc", observation.LastSeenUtc);
         AddDateTime2(cmd, "@lastExitUtc", observation.LastExitUtc);
-        cmd.Parameters.AddWithValue("@lastExitCode", (object?)observation.LastExitCode ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@statusMessage", ToStatusMessageValue(observation.StatusMessage));
-        cmd.Parameters.AddWithValue("@touchAppInstanceHeartbeat", touchAppInstanceHeartbeat);
+        AddParameter(cmd, "@lastExitCode", SqlDbType.Int, 0, observation.LastExitCode);
+        AddParameter(cmd, "@statusMessage", SqlDbType.NVarChar, 500, ToStatusMessageValue(observation.StatusMessage));
+        AddParameter(cmd, "@touchAppInstanceHeartbeat", SqlDbType.Bit, 0, touchAppInstanceHeartbeat);
         if (hasArtifactColumns)
         {
-            cmd.Parameters.AddWithValue("@runtimeArtifactId", (object?)observation.RuntimeArtifactId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@runtimeArtifactVersion", ToNullableStringValue(observation.RuntimeArtifactVersion, 50));
-            cmd.Parameters.AddWithValue("@runtimeHostArtifactId", (object?)observation.RuntimeHostArtifactId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@runtimeHostArtifactVersion", ToNullableStringValue(observation.RuntimeHostArtifactVersion, 50));
+            AddParameter(cmd, "@runtimeArtifactId", SqlDbType.Int, 0, observation.RuntimeArtifactId);
+            AddParameter(cmd, "@runtimeArtifactVersion", SqlDbType.NVarChar, 50, ToNullableStringValue(observation.RuntimeArtifactVersion, 50));
+            AddParameter(cmd, "@runtimeHostArtifactId", SqlDbType.Int, 0, observation.RuntimeHostArtifactId);
+            AddParameter(cmd, "@runtimeHostArtifactVersion", SqlDbType.NVarChar, 50, ToNullableStringValue(observation.RuntimeHostArtifactVersion, 50));
         }
 
         await cmd.ExecuteNonQueryAsync(ct);
@@ -691,8 +761,8 @@ SELECT DISTINCT AppInstanceId FROM @stale;";
         var affectedAppInstances = new List<Guid>();
         await using (var cmd = new SqlCommand(sql, conn))
         {
-            cmd.Parameters.AddWithValue("@hostKey", hostKey);
-            cmd.Parameters.AddWithValue("@staleAfterSeconds", staleAfterSeconds);
+            AddParameter(cmd, "@hostKey", SqlDbType.NVarChar, 128, hostKey);
+            AddParameter(cmd, "@staleAfterSeconds", SqlDbType.Int, 0, staleAfterSeconds);
 
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
@@ -743,7 +813,7 @@ END
 COMMIT TRANSACTION;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
+        AddParameter(cmd, "@appInstanceId", SqlDbType.UniqueIdentifier, 0, appInstanceId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -757,9 +827,30 @@ COMMIT TRANSACTION;";
     /// </summary>
     private static void AddDateTime2(SqlCommand cmd, string name, DateTimeOffset? value)
     {
-        var parameter = cmd.Parameters.Add(name, System.Data.SqlDbType.DateTime2);
+        var parameter = cmd.Parameters.Add(name, SqlDbType.DateTime2);
         parameter.Scale = 3;
         parameter.Value = ToDbValue(value);
+    }
+
+    /// <summary>
+    /// Binds a parameter with the type and size of the column it is compared with or
+    /// written to, instead of the type AddWithValue would infer from the CLR value.
+    /// </summary>
+    /// <remarks>
+    /// AddWithValue sends every string as nvarchar sized to the value and every null as
+    /// an untyped parameter, so the same statement compiles into a different plan for
+    /// every distinct string length. Size 0 leaves the provider default for fixed-size
+    /// types. A null value is sent as DBNull.
+    /// </remarks>
+    private static void AddParameter(SqlCommand cmd, string name, SqlDbType type, int size, object? value)
+    {
+        var parameter = cmd.Parameters.Add(name, type);
+        if (size > 0)
+        {
+            parameter.Size = size;
+        }
+
+        parameter.Value = value ?? DBNull.Value;
     }
 
     private static object ToNullableStringValue(string? value, int maxLength)

@@ -1,5 +1,8 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Runtime/ManagedWorkerProcess.cs
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using Microsoft.Win32.SafeHandles;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
 
 namespace OpenModulePlatform.WorkerManager.WindowsService.Runtime;
@@ -400,5 +403,158 @@ public sealed class ManagedWorkerProcess
             source.SetResult(true);
         }
         return source;
+    }
+}
+
+/// <summary>
+/// A Windows job object that kills every worker process assigned to it when its last
+/// handle closes.
+/// </summary>
+/// <remarks>
+/// The WorkerManager holds the only handle. A graceful stop still drains and stops each
+/// worker first (StopAllWorkersAsync); this is the guarantee for every other way the
+/// manager can end -- killed from Task Manager, a crash, a service-control timeout -- in
+/// which case the kernel closes the handle and takes the workers (and anything they
+/// started) with it. Before this the workers survived as orphans until the next manager
+/// start found and killed them, so in the meantime a second generation could be started
+/// next to them. The startup orphan scan stays as the second line of defence for a worker
+/// that escaped the job (a failed assignment, or one started by an older manager build).
+///
+/// Only the manager's own worker processes are assigned; the manager itself is not in
+/// this job, and the handle is created non-inheritable so a worker can never keep its
+/// own job alive.
+/// </remarks>
+[SupportedOSPlatform("windows")]
+internal sealed class WorkerProcessJobObject : IDisposable
+{
+    private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JobObjectLimitKillOnJobClose = 0x00002000;
+
+    private readonly SafeFileHandle _handle;
+
+    private WorkerProcessJobObject(SafeFileHandle handle)
+    {
+        _handle = handle;
+    }
+
+    /// <summary>
+    /// Creates the job, or returns null when the operating system refuses it. A manager
+    /// without a job still runs exactly as before; it only loses the kill-on-close
+    /// guarantee.
+    /// </summary>
+    public static WorkerProcessJobObject? TryCreate()
+    {
+        var handle = NativeMethods.CreateJobObject(IntPtr.Zero, null);
+        if (handle.IsInvalid)
+        {
+            handle.Dispose();
+            return null;
+        }
+
+        var info = new NativeMethods.JobObjectExtendedLimitInformation
+        {
+            BasicLimitInformation = new NativeMethods.JobObjectBasicLimitInformation
+            {
+                LimitFlags = JobObjectLimitKillOnJobClose
+            }
+        };
+
+        if (!NativeMethods.SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                ref info,
+                (uint)Marshal.SizeOf<NativeMethods.JobObjectExtendedLimitInformation>()))
+        {
+            handle.Dispose();
+            return null;
+        }
+
+        return new WorkerProcessJobObject(handle);
+    }
+
+    /// <summary>
+    /// Assigns a started process to the job. Returns false when the process has already
+    /// exited or the assignment is refused; the caller decides whether that is worth a
+    /// warning, because the worker itself is unaffected either way.
+    /// </summary>
+    public bool TryAssign(Process process)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+
+        if (_handle.IsClosed)
+        {
+            return false;
+        }
+
+        try
+        {
+            return NativeMethods.AssignProcessToJobObject(_handle, process.Handle);
+        }
+        catch (InvalidOperationException)
+        {
+            // The process exited (or was never started) before it could be assigned.
+            return false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _handle.Dispose();
+    }
+
+    private static class NativeMethods
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct JobObjectBasicLimitInformation
+        {
+            internal long PerProcessUserTimeLimit;
+            internal long PerJobUserTimeLimit;
+            internal uint LimitFlags;
+            internal UIntPtr MinimumWorkingSetSize;
+            internal UIntPtr MaximumWorkingSetSize;
+            internal uint ActiveProcessLimit;
+            internal UIntPtr Affinity;
+            internal uint PriorityClass;
+            internal uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct IoCounters
+        {
+            internal ulong ReadOperationCount;
+            internal ulong WriteOperationCount;
+            internal ulong OtherOperationCount;
+            internal ulong ReadTransferCount;
+            internal ulong WriteTransferCount;
+            internal ulong OtherTransferCount;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct JobObjectExtendedLimitInformation
+        {
+            internal JobObjectBasicLimitInformation BasicLimitInformation;
+            internal IoCounters IoInfo;
+            internal UIntPtr ProcessMemoryLimit;
+            internal UIntPtr JobMemoryLimit;
+            internal UIntPtr PeakProcessMemoryUsed;
+            internal UIntPtr PeakJobMemoryUsed;
+        }
+
+        [DllImport("kernel32.dll", EntryPoint = "CreateJobObjectW", CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern SafeFileHandle CreateJobObject(IntPtr lpJobAttributes, string? lpName);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetInformationJobObject(
+            SafeFileHandle hJob,
+            int jobObjectInfoClass,
+            ref JobObjectExtendedLimitInformation lpJobObjectInfo,
+            uint cbJobObjectInfoLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool AssignProcessToJobObject(
+            SafeFileHandle hJob,
+            IntPtr hProcess);
     }
 }
