@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
+using System.Data;
 using System.Globalization;
 using System.Security.Claims;
 
@@ -488,7 +489,7 @@ FROM omp.auth_providers
 WHERE display_name = @display_name;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@display_name", displayName);
+        AddNVarChar(cmd, "@display_name", displayName, DisplayNameMaxLength);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -581,11 +582,11 @@ ORDER BY ua.user_auth_id;";
         await using var cmd = tx is null
             ? new SqlCommand(sql, conn)
             : new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@provider_id", providerId);
-        cmd.Parameters.AddWithValue("@active_account_status", ActiveAccountStatus);
+        cmd.Parameters.Add("@provider_id", SqlDbType.Int).Value = providerId;
+        cmd.Parameters.Add("@active_account_status", SqlDbType.Int).Value = ActiveAccountStatus;
         for (var i = 0; i < keys.Length; i++)
         {
-            cmd.Parameters.AddWithValue("@key" + i, keys[i]);
+            AddNVarChar(cmd, "@key" + i, keys[i], ProviderUserKeyColumnLength);
         }
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -657,10 +658,10 @@ WHERE ua.provider_id = @provider_id
 ORDER BY ua.user_auth_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@provider_id", providerId);
+        cmd.Parameters.Add("@provider_id", SqlDbType.Int).Value = providerId;
         for (var i = 0; i < keys.Length; i++)
         {
-            cmd.Parameters.AddWithValue("@key" + i, keys[i]);
+            AddNVarChar(cmd, "@key" + i, keys[i], ProviderUserKeyColumnLength);
         }
 
         var matches = new List<OmpAdLinkedUserCandidate>();
@@ -878,15 +879,15 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         await using var cmd = new SqlCommand(sql, conn);
         for (var i = 0; i < rolePrincipals.Length; i++)
         {
-            cmd.Parameters.AddWithValue("@pt" + i, rolePrincipals[i].PrincipalType);
-            cmd.Parameters.AddWithValue("@p" + i, rolePrincipals[i].Principal);
+            AddNVarChar(cmd, "@pt" + i, rolePrincipals[i].PrincipalType, PrincipalTypeColumnLength);
+            AddNVarChar(cmd, "@p" + i, rolePrincipals[i].Principal, PrincipalColumnLength);
         }
 
-        cmd.Parameters.AddWithValue("@everyoneRoleName", OmpRbacDefaults.EveryoneRoleName);
-        cmd.Parameters.AddWithValue("@authenticatedUsersRoleName", OmpRbacDefaults.AuthenticatedUsersRoleName);
-        cmd.Parameters.AddWithValue("@systemPrincipalType", OmpRbacDefaults.SystemPrincipalType);
-        cmd.Parameters.AddWithValue("@everyonePrincipal", OmpRbacDefaults.EveryonePrincipal);
-        cmd.Parameters.AddWithValue("@authenticatedUsersPrincipal", OmpRbacDefaults.AuthenticatedUsersPrincipal);
+        AddNVarChar(cmd, "@everyoneRoleName", OmpRbacDefaults.EveryoneRoleName, RoleNameColumnLength);
+        AddNVarChar(cmd, "@authenticatedUsersRoleName", OmpRbacDefaults.AuthenticatedUsersRoleName, RoleNameColumnLength);
+        AddNVarChar(cmd, "@systemPrincipalType", OmpRbacDefaults.SystemPrincipalType, PrincipalTypeColumnLength);
+        AddNVarChar(cmd, "@everyonePrincipal", OmpRbacDefaults.EveryonePrincipal, PrincipalColumnLength);
+        AddNVarChar(cmd, "@authenticatedUsersPrincipal", OmpRbacDefaults.AuthenticatedUsersPrincipal, PrincipalColumnLength);
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is not null and not DBNull;
@@ -1182,8 +1183,8 @@ OUTPUT inserted.user_id, inserted.security_stamp
 VALUES(@display_name, @account_status, SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@display_name", displayName);
-        cmd.Parameters.AddWithValue("@account_status", ActiveAccountStatus);
+        AddNVarChar(cmd, "@display_name", displayName, DisplayNameMaxLength);
+        cmd.Parameters.Add("@account_status", SqlDbType.Int).Value = ActiveAccountStatus;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -1208,9 +1209,9 @@ VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), N'enabled',
 SELECT CAST(SCOPE_IDENTITY() AS int);";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@user_id", userId);
-        cmd.Parameters.AddWithValue("@provider_id", providerId);
-        cmd.Parameters.AddWithValue("@provider_user_key", providerUserKey);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@provider_id", SqlDbType.Int).Value = providerId;
+        AddNVarChar(cmd, "@provider_user_key", providerUserKey, ProviderUserKeyColumnLength);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
@@ -1231,7 +1232,7 @@ FROM omp.auth_provider_lpwd
 WHERE user_name COLLATE " + LocalPasswordIdentity.UserNameBinaryCollation + @" = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@user_name", userName);
+        AddNVarChar(cmd, "@user_name", userName, LocalUserNameColumnLength);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture) > 0;
     }
@@ -1248,8 +1249,8 @@ INSERT INTO omp.auth_provider_lpwd(user_name, password_hash)
 VALUES(@user_name, @password_hash);";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@user_name", userName);
-        cmd.Parameters.AddWithValue("@password_hash", passwordHash);
+        AddNVarChar(cmd, "@user_name", userName, LocalUserNameColumnLength);
+        AddNVarChar(cmd, "@password_hash", passwordHash, PasswordHashColumnLength);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -1270,7 +1271,7 @@ FROM omp.auth_provider_lpwd
 WHERE user_name COLLATE " + LocalPasswordIdentity.UserNameBinaryCollation + @" = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@user_name", userName);
+        AddNVarChar(cmd, "@user_name", userName, LocalUserNameColumnLength);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result as string;
     }
@@ -1348,7 +1349,7 @@ WHERE rp.PrincipalType = N'ADGroup';";
             await using var cmd = new SqlCommand(sql, conn);
             for (var i = 0; i < chunk.Length; i++)
             {
-                cmd.Parameters.AddWithValue("@group" + i, chunk[i]);
+                AddNVarChar(cmd, "@group" + i, chunk[i], PrincipalColumnLength);
             }
 
             await using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -1383,9 +1384,28 @@ SET last_login_at = SYSUTCDATETIME(),
 WHERE user_id = @user_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@user_auth_id", userAuthId);
-        cmd.Parameters.AddWithValue("@user_id", userId);
+        cmd.Parameters.Add("@user_auth_id", SqlDbType.Int).Value = userAuthId;
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // Parameter sizes follow the omp schema (sql/1-setup-openmoduleplatform.sql).
+    private const int ProviderUserKeyColumnLength = 1000;
+    private const int LocalUserNameColumnLength = 256;
+    private const int PasswordHashColumnLength = 1000;
+    private const int RoleNameColumnLength = 200;
+    private const int PrincipalTypeColumnLength = 50;
+    private const int PrincipalColumnLength = 256;
+
+    /// <summary>
+    /// Adds an nvarchar parameter sized to its column. A longer value keeps its own
+    /// length instead of being truncated by SqlClient, so an over-long write still
+    /// fails and an over-long lookup still finds nothing, exactly as before.
+    /// </summary>
+    private static void AddNVarChar(SqlCommand cmd, string name, string? value, int columnLength)
+    {
+        var size = value is not null && value.Length > columnLength ? value.Length : columnLength;
+        cmd.Parameters.Add(name, SqlDbType.NVarChar, size).Value = (object?)value ?? DBNull.Value;
     }
 
     private readonly record struct ProviderRow(int ProviderId, bool IsEnabled);

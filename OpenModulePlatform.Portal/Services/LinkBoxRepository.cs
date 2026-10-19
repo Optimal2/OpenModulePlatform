@@ -2,6 +2,7 @@
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
+using System.Data;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -12,6 +13,15 @@ namespace OpenModulePlatform.Portal.Services;
 // as their own text, so user-entered free text just works).
 public sealed class LinkBoxRepository
 {
+    // Parameter sizes follow omp.link_boxes and omp.link_box_items
+    // (sql/1-setup-openmoduleplatform.sql).
+    private const int BoxKeyColumnLength = 200;
+    private const int TitleColumnLength = 200;
+    private const int RequiredPermissionColumnLength = 200;
+    private const int LabelColumnLength = 200;
+    private const int UrlColumnLength = 400;
+    private const int GroupKeyColumnLength = 100;
+
     private readonly SqlConnectionFactory _db;
 
     public LinkBoxRepository(SqlConnectionFactory db)
@@ -29,7 +39,7 @@ WHERE box_key = @boxKey;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@boxKey", boxKey);
+        AddNVarChar(cmd, "@boxKey", boxKey, BoxKeyColumnLength);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
         {
@@ -73,9 +83,9 @@ WHEN NOT MATCHED THEN
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@boxKey", boxKey);
-        cmd.Parameters.AddWithValue("@title", title);
-        cmd.Parameters.AddWithValue("@requiredPermission", (object?)requiredPermission ?? DBNull.Value);
+        AddNVarChar(cmd, "@boxKey", boxKey, BoxKeyColumnLength);
+        AddNVarChar(cmd, "@title", title, TitleColumnLength);
+        AddNVarChar(cmd, "@requiredPermission", requiredPermission, RequiredPermissionColumnLength);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -91,7 +101,7 @@ ORDER BY sort_order, label;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@boxKey", boxKey);
+        AddNVarChar(cmd, "@boxKey", boxKey, BoxKeyColumnLength);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -142,11 +152,11 @@ SELECT @boxKey, @label, @url, @groupKey,
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@boxKey", boxKey);
-        cmd.Parameters.AddWithValue("@label", label);
-        cmd.Parameters.AddWithValue("@url", url);
-        cmd.Parameters.AddWithValue("@groupKey", (object?)groupKey ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@requiredPermission", (object?)requiredPermission ?? DBNull.Value);
+        AddNVarChar(cmd, "@boxKey", boxKey, BoxKeyColumnLength);
+        AddNVarChar(cmd, "@label", label, LabelColumnLength);
+        AddNVarChar(cmd, "@url", url, UrlColumnLength);
+        AddNVarChar(cmd, "@groupKey", groupKey, GroupKeyColumnLength);
+        AddNVarChar(cmd, "@requiredPermission", requiredPermission, RequiredPermissionColumnLength);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -160,11 +170,11 @@ WHERE link_box_item_id = @id;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@id", linkBoxItemId);
-        cmd.Parameters.AddWithValue("@label", label);
-        cmd.Parameters.AddWithValue("@url", url);
-        cmd.Parameters.AddWithValue("@groupKey", (object?)groupKey ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@requiredPermission", (object?)requiredPermission ?? DBNull.Value);
+        cmd.Parameters.Add("@id", SqlDbType.BigInt).Value = linkBoxItemId;
+        AddNVarChar(cmd, "@label", label, LabelColumnLength);
+        AddNVarChar(cmd, "@url", url, UrlColumnLength);
+        AddNVarChar(cmd, "@groupKey", groupKey, GroupKeyColumnLength);
+        AddNVarChar(cmd, "@requiredPermission", requiredPermission, RequiredPermissionColumnLength);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -180,9 +190,9 @@ WHERE link_box_item_id = @id AND box_key = @boxKey;";
         for (var index = 0; index < orderedIds.Count; index++)
         {
             await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@id", orderedIds[index]);
-            cmd.Parameters.AddWithValue("@boxKey", boxKey);
-            cmd.Parameters.AddWithValue("@sortOrder", index);
+            cmd.Parameters.Add("@id", SqlDbType.BigInt).Value = orderedIds[index];
+            AddNVarChar(cmd, "@boxKey", boxKey, BoxKeyColumnLength);
+            cmd.Parameters.Add("@sortOrder", SqlDbType.Int).Value = index;
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }
@@ -199,9 +209,9 @@ WHERE box_key = @boxKey AND group_key = @oldGroup;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@boxKey", boxKey);
-        cmd.Parameters.AddWithValue("@oldGroup", oldGroup);
-        cmd.Parameters.AddWithValue("@newGroup", (object?)newGroup ?? DBNull.Value);
+        AddNVarChar(cmd, "@boxKey", boxKey, BoxKeyColumnLength);
+        AddNVarChar(cmd, "@oldGroup", oldGroup, GroupKeyColumnLength);
+        AddNVarChar(cmd, "@newGroup", newGroup, GroupKeyColumnLength);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -215,7 +225,7 @@ WHERE box_key = @boxKey AND group_key = @oldGroup;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@id", linkBoxItemId);
+        cmd.Parameters.Add("@id", SqlDbType.BigInt).Value = linkBoxItemId;
         return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
@@ -234,6 +244,17 @@ WHERE box_key = @boxKey AND group_key = @oldGroup;";
         }
 
         return names;
+    }
+
+    /// <summary>
+    /// Adds an nvarchar parameter sized to its column. A longer value keeps its own
+    /// length instead of being truncated by SqlClient, so an over-long write still
+    /// fails and an over-long lookup still finds nothing, exactly as before.
+    /// </summary>
+    private static void AddNVarChar(SqlCommand cmd, string name, string? value, int columnLength)
+    {
+        var size = value is not null && value.Length > columnLength ? value.Length : columnLength;
+        cmd.Parameters.Add(name, SqlDbType.NVarChar, size).Value = (object?)value ?? DBNull.Value;
     }
 
     private static LinkBoxRow ReadBox(SqlDataReader rdr)

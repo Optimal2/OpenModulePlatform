@@ -795,11 +795,12 @@ WHERE conversation_id = @conversation_id;";
         // Everyone still in the group refreshes; the one who left gets a push too,
         // so an open thread page learns it is no longer theirs and the top bar
         // recounts.
-        foreach (var participantUserId in remainingUserIds.Append(targetUserId).Distinct())
+        var pushUserIds = remainingUserIds.Append(targetUserId).Distinct().ToArray();
+        var unreadCounts = await GetUnreadMessageCountsAsync(conn, pushUserIds, ct);
+        foreach (var participantUserId in pushUserIds)
         {
-            var unreadCount = await GetUnreadMessageCountAsync(conn, participantUserId, ct);
             await PublishPushEventBestEffortAsync(
-                CreateMembershipChangedPushEvent(participantUserId, conversationId, unreadCount),
+                CreateMembershipChangedPushEvent(participantUserId, conversationId, unreadCounts[participantUserId]),
                 ct);
         }
 
@@ -1127,11 +1128,11 @@ WHERE c.conversation_id = @conversation_id;";
     private async Task PushMembershipChangedToAllAsync(SqlConnection conn, long conversationId, CancellationToken ct)
     {
         var participantUserIds = await GetConversationParticipantUserIdsAsync(conn, tx: null, conversationId, excludedUserId: 0, ct);
+        var unreadCounts = await GetUnreadMessageCountsAsync(conn, participantUserIds, ct);
         foreach (var participantUserId in participantUserIds)
         {
-            var unreadCount = await GetUnreadMessageCountAsync(conn, participantUserId, ct);
             await PublishPushEventBestEffortAsync(
-                CreateMembershipChangedPushEvent(participantUserId, conversationId, unreadCount),
+                CreateMembershipChangedPushEvent(participantUserId, conversationId, unreadCounts[participantUserId]),
                 ct);
         }
     }
@@ -1489,11 +1490,13 @@ WHERE conversation_id = @conversation_id;";
             throw;
         }
 
+        // One query counts every recipient's unread messages; a query per recipient
+        // made the sender's request grow with the size of the group.
+        var unreadCounts = await GetUnreadMessageCountsAsync(conn, recipientUserIds, ct);
         foreach (var recipientUserId in recipientUserIds)
         {
-            var unreadCount = await GetUnreadMessageCountAsync(conn, recipientUserId, ct);
             await PublishPushEventBestEffortAsync(
-                CreateMessageSentPushEvent(recipientUserId, conversationId, messageId, unreadCount),
+                CreateMessageSentPushEvent(recipientUserId, conversationId, messageId, unreadCounts[recipientUserId]),
                 ct);
         }
 
@@ -1664,6 +1667,45 @@ WHERE cp.user_id = @user_id
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Total unread count for each of <paramref name="userIds"/> in one round trip,
+    /// with the same rule as <see cref="GetUnreadMessageCountAsync(SqlConnection, int, CancellationToken)"/>.
+    /// Every requested user is in the result; a user with nothing unread maps to 0.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<int, int>> GetUnreadMessageCountsAsync(
+        SqlConnection conn,
+        IReadOnlyCollection<int> userIds,
+        CancellationToken ct)
+    {
+        var counts = userIds.Distinct().ToDictionary(static userId => userId, static _ => 0);
+        if (counts.Count == 0)
+        {
+            return counts;
+        }
+
+        const string sql = @"
+SELECT requested.user_id,
+       COUNT_BIG(m.message_id) AS unread_count
+FROM OPENJSON(@user_ids_json) WITH (user_id int '$') requested
+INNER JOIN omp.conversation_participants cp ON cp.user_id = requested.user_id
+INNER JOIN omp.messages m ON m.conversation_id = cp.conversation_id
+WHERE cp.left_at IS NULL
+  AND m.deleted_at IS NULL
+  AND m.sender_user_id <> requested.user_id
+  AND m.message_id > ISNULL(cp.last_read_message_id, 0)
+GROUP BY requested.user_id;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_ids_json", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(counts.Keys);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            counts[rdr.GetInt32(0)] = Convert.ToInt32(rdr.GetInt64(1), CultureInfo.InvariantCulture);
+        }
+
+        return counts;
     }
 
     private static async Task<int> GetUnreadMessageCountAsync(

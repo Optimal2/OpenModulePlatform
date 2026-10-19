@@ -3,11 +3,18 @@ using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace OpenModulePlatform.Portal.Services;
 
 public sealed partial class OmpAdminRepository
 {
+    // Parameter sizes follow the omp schema (sql/1-setup-openmoduleplatform.sql);
+    // object names are sysname, and a two-part name fits in twice that.
+    private const int ModuleKeyColumnLength = 100;
+    private const int SysnameLength = 128;
+    private const int ObjectNameParameterLength = 2 * SysnameLength + 1;
+
     private readonly SqlConnectionFactory _db;
 
     public OmpAdminRepository(SqlConnectionFactory db)
@@ -431,7 +438,7 @@ ORDER BY d.AppliedUtc DESC, d.UpdatedUtc DESC, d.ModuleDefinitionDocumentId DESC
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleKey", moduleKey);
+        AddNVarChar(cmd, "@ModuleKey", moduleKey, ModuleKeyColumnLength);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         return await rdr.ReadAsync(ct)
             ? ReadModuleDefinitionDocumentRow(rdr, includeJson: true)
@@ -496,7 +503,7 @@ ORDER BY a.AppKey, ar.PackageType, ar.TargetName, ar.Version;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleKey", moduleKey);
+        AddNVarChar(cmd, "@ModuleKey", moduleKey, ModuleKeyColumnLength);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -589,7 +596,7 @@ WHERE d.ModuleDefinitionDocumentId = @ModuleDefinitionDocumentId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+        cmd.Parameters.Add("@ModuleDefinitionDocumentId", SqlDbType.Int).Value = moduleDefinitionDocumentId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
         {
@@ -619,7 +626,7 @@ ORDER BY AppKey, PackageType, TargetName, ModuleDefinitionArtifactCompatibilityI
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleDefinitionDocumentId", moduleDefinitionDocumentId);
+        cmd.Parameters.Add("@ModuleDefinitionDocumentId", SqlDbType.Int).Value = moduleDefinitionDocumentId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -686,7 +693,7 @@ ORDER BY a.AppKey, ar.Version, r.ReferenceKind, r.ReferenceKey;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleKey", moduleKey);
+        AddNVarChar(cmd, "@ModuleKey", moduleKey, ModuleKeyColumnLength);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -734,7 +741,7 @@ ORDER BY RelativePath, ArtifactConfigurationFileId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
+        cmd.Parameters.Add("@ArtifactId", SqlDbType.Int).Value = artifactId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -847,7 +854,7 @@ WHERE InstanceTemplateId = @InstanceTemplateId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        cmd.Parameters.Add("@InstanceTemplateId", SqlDbType.Int).Value = instanceTemplateId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -886,7 +893,7 @@ ORDER BY ith.SortOrder, ith.HostKey;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        cmd.Parameters.Add("@InstanceTemplateId", SqlDbType.Int).Value = instanceTemplateId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         while (await rdr.ReadAsync(ct))
@@ -926,7 +933,7 @@ ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        cmd.Parameters.Add("@InstanceTemplateId", SqlDbType.Int).Value = instanceTemplateId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         while (await rdr.ReadAsync(ct))
@@ -982,7 +989,7 @@ ORDER BY tmi.SortOrder, tmi.ModuleInstanceKey, tai.SortOrder, tai.AppInstanceKey
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        cmd.Parameters.Add("@InstanceTemplateId", SqlDbType.Int).Value = instanceTemplateId;
         await using (var rdr = await cmd.ExecuteReaderAsync(ct))
         {
             while (await rdr.ReadAsync(ct))
@@ -1076,7 +1083,7 @@ WHERE tmi.InstanceTemplateId = @InstanceTemplateId;";
 
         var bestByTemplateApp = new Dictionary<int, (int ArtifactId, string Version)>();
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@InstanceTemplateId", instanceTemplateId);
+        cmd.Parameters.Add("@InstanceTemplateId", SqlDbType.Int).Value = instanceTemplateId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -2113,11 +2120,22 @@ ORDER BY TRY_CAST(PARSENAME(nv.NormalizedVersion, 4) AS bigint) DESC,
         return await ScalarIntAsync(conn, sql, ct);
     }
 
+    /// <summary>
+    /// Adds an nvarchar parameter sized to its column. A longer value keeps its own
+    /// length instead of being truncated by SqlClient, so an over-long write still
+    /// fails and an over-long lookup still finds nothing, exactly as before.
+    /// </summary>
+    private static void AddNVarChar(SqlCommand cmd, string name, string? value, int columnLength)
+    {
+        var size = value is not null && value.Length > columnLength ? value.Length : columnLength;
+        cmd.Parameters.Add(name, SqlDbType.NVarChar, size).Value = (object?)value ?? DBNull.Value;
+    }
+
     private static async Task<bool> TableExistsAsync(SqlConnection conn, string tableName, CancellationToken ct)
     {
         const string sql = "SELECT CAST(CASE WHEN OBJECT_ID(@TableName, 'U') IS NULL THEN 0 ELSE 1 END AS bit);";
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@TableName", tableName);
+        AddNVarChar(cmd, "@TableName", tableName, ObjectNameParameterLength);
         return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 
@@ -2128,8 +2146,8 @@ ORDER BY TRY_CAST(PARSENAME(nv.NormalizedVersion, 4) AS bigint) DESC,
     {
         const string sql = "SELECT CAST(CASE WHEN COL_LENGTH(@TableName, @ColumnName) IS NULL THEN 0 ELSE 1 END AS bit);";
         await using var cmd = new SqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@TableName", tableName);
-        cmd.Parameters.AddWithValue("@ColumnName", columnName);
+        AddNVarChar(cmd, "@TableName", tableName, ObjectNameParameterLength);
+        AddNVarChar(cmd, "@ColumnName", columnName, SysnameLength);
         return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
     }
 

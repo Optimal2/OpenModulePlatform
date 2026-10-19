@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/OmpDatabaseWorkerInstanceCatalog.cs
+using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,11 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 
 public sealed class OmpDatabaseWorkerInstanceCatalog : IWorkerInstanceCatalog
 {
+    // Parameter sizes follow omp.Hosts.HostKey and omp.AppWorkerDefinitions.RuntimeKind
+    // (sql/1-setup-openmoduleplatform.sql).
+    private const int HostKeyColumnLength = 128;
+    private const int RuntimeKindColumnLength = 100;
+
     private readonly SqlConnectionFactory _db;
     private readonly IOptionsMonitor<WorkerManagerSettings> _settings;
     private readonly ILogger<OmpDatabaseWorkerInstanceCatalog> _logger;
@@ -204,10 +210,10 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
         await conn.OpenAsync(cancellationToken);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostKey", hostKey);
-        cmd.Parameters.AddWithValue("@runningDesiredState", runningDesiredState);
-        cmd.Parameters.AddWithValue("@runtimeKind", runtimeKind);
-        cmd.Parameters.AddWithValue("@useHostArtifactCache", useHostArtifactCache);
+        AddNVarChar(cmd, "@hostKey", hostKey, HostKeyColumnLength);
+        cmd.Parameters.Add("@runningDesiredState", SqlDbType.TinyInt).Value = runningDesiredState;
+        AddNVarChar(cmd, "@runtimeKind", runtimeKind, RuntimeKindColumnLength);
+        cmd.Parameters.Add("@useHostArtifactCache", SqlDbType.Bit).Value = useHostArtifactCache;
 
         await using var rdr = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await rdr.ReadAsync(cancellationToken))
@@ -263,6 +269,17 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
             useHostArtifactCache);
 
         return desired;
+    }
+
+    /// <summary>
+    /// Adds an nvarchar parameter sized to its column. A longer value keeps its own
+    /// length instead of being truncated by SqlClient, so an over-long lookup still
+    /// finds nothing, exactly as before.
+    /// </summary>
+    private static void AddNVarChar(SqlCommand cmd, string name, string? value, int columnLength)
+    {
+        var size = value is not null && value.Length > columnLength ? value.Length : columnLength;
+        cmd.Parameters.Add(name, SqlDbType.NVarChar, size).Value = (object?)value ?? DBNull.Value;
     }
 
     private static WorkerCatalogRow ReadRow(SqlDataReader rdr)

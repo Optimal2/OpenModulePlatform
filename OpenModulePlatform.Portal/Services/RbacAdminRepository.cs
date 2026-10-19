@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Services/RbacAdminRepository.cs
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Globalization;
 
 namespace OpenModulePlatform.Portal.Services;
@@ -22,6 +23,15 @@ namespace OpenModulePlatform.Portal.Services;
 /// </remarks>
 public sealed class RbacAdminRepository
 {
+    // Parameter sizes follow the omp schema (sql/1-setup-openmoduleplatform.sql).
+    private const int NameColumnLength = 200;
+    private const int DescriptionColumnLength = 500;
+    private const int PrincipalTypeColumnLength = 50;
+    private const int PrincipalColumnLength = 256;
+    private const int ProviderUserKeyColumnLength = 1000;
+    // Search terms are matched against display_name (200) or Principal (256).
+    private const int SearchTermParameterLength = 256;
+
     private readonly SqlConnectionFactory _db;
 
     public RbacAdminRepository(SqlConnectionFactory db)
@@ -126,7 +136,7 @@ WHERE r.RoleId = @roleId;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@roleId", roleId);
+        cmd.Parameters.Add("@roleId", SqlDbType.Int).Value = roleId;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -160,7 +170,7 @@ WHERE p.PermissionId = @permissionId;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@permissionId", permissionId);
+        cmd.Parameters.Add("@permissionId", SqlDbType.Int).Value = permissionId;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -197,7 +207,7 @@ ORDER BY p.Name;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@roleId", roleId);
+        cmd.Parameters.Add("@roleId", SqlDbType.Int).Value = roleId;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -241,7 +251,7 @@ ORDER BY rp.PrincipalType,
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@roleId", roleId);
+        cmd.Parameters.Add("@roleId", SqlDbType.Int).Value = roleId;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -288,9 +298,9 @@ ORDER BY display_name,
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@maxResults", maxResults);
-        cmd.Parameters.AddWithValue("@term", term);
-        cmd.Parameters.AddWithValue("@termPattern", OmpSqlPattern.ContainsPattern(term));
+        cmd.Parameters.Add("@maxResults", SqlDbType.Int).Value = maxResults;
+        AddNVarChar(cmd, "@term", term, SearchTermParameterLength);
+        AddNVarChar(cmd, "@termPattern", OmpSqlPattern.ContainsPattern(term), SearchTermParameterLength);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -360,7 +370,7 @@ ORDER BY u.display_name,
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@roleId", roleId);
+        cmd.Parameters.Add("@roleId", SqlDbType.Int).Value = roleId;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
@@ -401,9 +411,9 @@ ORDER BY Principal;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@maxResults", maxResults);
-        cmd.Parameters.AddWithValue("@term", term);
-        cmd.Parameters.AddWithValue("@termPattern", OmpSqlPattern.ContainsPattern(term));
+        cmd.Parameters.Add("@maxResults", SqlDbType.Int).Value = maxResults;
+        AddNVarChar(cmd, "@term", term, SearchTermParameterLength);
+        AddNVarChar(cmd, "@termPattern", OmpSqlPattern.ContainsPattern(term), SearchTermParameterLength);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -443,9 +453,9 @@ ORDER BY Principal;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@maxResults", maxResults);
-        cmd.Parameters.AddWithValue("@term", term);
-        cmd.Parameters.AddWithValue("@termPattern", OmpSqlPattern.ContainsPattern(term));
+        cmd.Parameters.Add("@maxResults", SqlDbType.Int).Value = maxResults;
+        AddNVarChar(cmd, "@term", term, SearchTermParameterLength);
+        AddNVarChar(cmd, "@termPattern", OmpSqlPattern.ContainsPattern(term), SearchTermParameterLength);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -469,7 +479,7 @@ WHERE user_id = @userId
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@userId", userId);
+        cmd.Parameters.Add("@userId", SqlDbType.Int).Value = userId;
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
@@ -505,7 +515,7 @@ WHERE ap.display_name = N'AD'
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@principal", principal);
+        AddNVarChar(cmd, "@principal", principal, ProviderUserKeyColumnLength);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -546,7 +556,7 @@ ORDER BY p.Name;";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@roleId", roleId);
+        cmd.Parameters.Add("@roleId", SqlDbType.Int).Value = roleId;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -577,8 +587,8 @@ VALUES (@Name, @Description);
 SELECT CAST(SCOPE_IDENTITY() AS int);";
 
             await using var cmd = new SqlCommand(sql, conn);
-            Add(cmd, "@Name", input.Name);
-            Add(cmd, "@Description", input.Description);
+            AddNVarChar(cmd, "@Name", input.Name, NameColumnLength);
+            AddNVarChar(cmd, "@Description", input.Description, DescriptionColumnLength);
 
             return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
         }
@@ -592,9 +602,9 @@ WHERE RoleId = @RoleId;";
 
         await using (var update = new SqlCommand(updateSql, conn))
         {
-            Add(update, "@RoleId", input.RoleId);
-            Add(update, "@Name", input.Name);
-            Add(update, "@Description", input.Description);
+            update.Parameters.Add("@RoleId", SqlDbType.Int).Value = input.RoleId;
+            AddNVarChar(update, "@Name", input.Name, NameColumnLength);
+            AddNVarChar(update, "@Description", input.Description, DescriptionColumnLength);
             await update.ExecuteNonQueryAsync(ct);
         }
 
@@ -615,8 +625,8 @@ VALUES (@Name, @Description);
 SELECT CAST(SCOPE_IDENTITY() AS int);";
 
             await using var cmd = new SqlCommand(sql, conn);
-            Add(cmd, "@Name", input.Name);
-            Add(cmd, "@Description", input.Description);
+            AddNVarChar(cmd, "@Name", input.Name, NameColumnLength);
+            AddNVarChar(cmd, "@Description", input.Description, DescriptionColumnLength);
 
             return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
         }
@@ -630,9 +640,9 @@ WHERE PermissionId = @PermissionId;";
 
         await using (var update = new SqlCommand(updateSql, conn))
         {
-            Add(update, "@PermissionId", input.PermissionId);
-            Add(update, "@Name", input.Name);
-            Add(update, "@Description", input.Description);
+            update.Parameters.Add("@PermissionId", SqlDbType.Int).Value = input.PermissionId;
+            AddNVarChar(update, "@Name", input.Name, NameColumnLength);
+            AddNVarChar(update, "@Description", input.Description, DescriptionColumnLength);
             await update.ExecuteNonQueryAsync(ct);
         }
 
@@ -809,8 +819,8 @@ END";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@RoleId", roleId);
-        Add(cmd, "@PermissionId", permissionId);
+        cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+        cmd.Parameters.Add("@PermissionId", SqlDbType.Int).Value = permissionId;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -832,8 +842,8 @@ END";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@RoleId", roleId);
-        Add(cmd, "@PermissionId", permissionId);
+        cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+        cmd.Parameters.Add("@PermissionId", SqlDbType.Int).Value = permissionId;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -871,9 +881,9 @@ END";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@RoleId", roleId);
-        Add(cmd, "@PrincipalType", principalType);
-        Add(cmd, "@Principal", principal);
+        cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+        AddNVarChar(cmd, "@PrincipalType", principalType, PrincipalTypeColumnLength);
+        AddNVarChar(cmd, "@Principal", principal, PrincipalColumnLength);
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is bool added && added;
@@ -902,9 +912,9 @@ END";
         await conn.OpenAsync(ct);
 
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@RoleId", roleId);
-        Add(cmd, "@PrincipalType", principalType);
-        Add(cmd, "@Principal", principal);
+        cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+        AddNVarChar(cmd, "@PrincipalType", principalType, PrincipalTypeColumnLength);
+        AddNVarChar(cmd, "@Principal", principal, PrincipalColumnLength);
 
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -917,7 +927,7 @@ END";
         CancellationToken ct)
     {
         await using var cmd = new SqlCommand(sql, conn, tx);
-        Add(cmd, "@RoleId", roleId);
+        cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -929,13 +939,19 @@ END";
         CancellationToken ct)
     {
         await using var cmd = new SqlCommand(sql, conn, tx);
-        Add(cmd, "@PermissionId", permissionId);
+        cmd.Parameters.Add("@PermissionId", SqlDbType.Int).Value = permissionId;
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static void Add(SqlCommand cmd, string name, object? value)
+    /// <summary>
+    /// Adds an nvarchar parameter sized to its column. A longer value keeps its own
+    /// length instead of being truncated by SqlClient, so an over-long write still
+    /// fails and an over-long lookup still finds nothing, exactly as before.
+    /// </summary>
+    private static void AddNVarChar(SqlCommand cmd, string name, string? value, int columnLength)
     {
-        cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        var size = value is not null && value.Length > columnLength ? value.Length : columnLength;
+        cmd.Parameters.Add(name, SqlDbType.NVarChar, size).Value = (object?)value ?? DBNull.Value;
     }
 }
 

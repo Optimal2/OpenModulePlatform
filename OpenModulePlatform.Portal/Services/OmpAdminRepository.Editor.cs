@@ -7312,8 +7312,21 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string PackageType,
         string AppType);
 
+    /// <summary>
+    /// Untyped parameter for the many editor commands that still bind through this
+    /// helper. Prefer an explicit <c>cmd.Parameters.Add(name, SqlDbType, size)</c>
+    /// for new code. A <see cref="DateTime"/> is always sent as datetime2: inferred
+    /// typing would pick datetime, whose 1/300-second grid silently rounds values
+    /// compared against the schema's datetime2 columns (R7-F24).
+    /// </summary>
     private static void Add(SqlCommand cmd, string name, object? value)
     {
+        if (value is DateTime dateTime)
+        {
+            cmd.Parameters.Add(name, SqlDbType.DateTime2).Value = dateTime;
+            return;
+        }
+
         cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
     }
 

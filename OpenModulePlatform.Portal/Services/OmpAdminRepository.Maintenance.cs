@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
+using System.Data;
 using System.Text.Json;
 
 namespace OpenModulePlatform.Portal.Services;
@@ -387,8 +388,8 @@ VALUES
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@MaxVersionsToKeep", Math.Clamp(maxVersionsToKeep, 1, 100));
-        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+        cmd.Parameters.Add("@MaxVersionsToKeep", SqlDbType.Int).Value = Math.Clamp(maxVersionsToKeep, 1, 100);
+        AddRequestedBy(cmd, requestedBy);
 
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
@@ -478,7 +479,7 @@ FROM @CreatedJobs;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+        AddRequestedBy(cmd, requestedBy);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -555,7 +556,7 @@ ORDER BY CASE finding.Status WHEN 4 THEN 0 WHEN 0 THEN 1 ELSE 2 END,
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@Limit", Math.Clamp(limit, 1, 500));
+        cmd.Parameters.Add("@Limit", SqlDbType.Int).Value = Math.Clamp(limit, 1, 500);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -625,8 +626,8 @@ SELECT @@ROWCOUNT;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@FindingIdsJson", JsonSerializer.Serialize(findingIds.Distinct().Order()));
-        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+        AddFindingIdsJson(cmd, findingIds);
+        AddRequestedBy(cmd, requestedBy);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
@@ -642,28 +643,48 @@ SELECT @@ROWCOUNT;";
         }
 
         var selectedIds = findingIds.Distinct().Order().ToArray();
-        var candidates = await GetMaintenanceCleanupCandidatesAsync(selectedIds, ct);
         var queuedJobCount = 0;
         var queuedFindingCount = 0;
 
-        foreach (var group in candidates.GroupBy(static row => row.JobHostId))
+        // One transaction for the whole request. Each job insert is followed by a
+        // separate UPDATE that marks its findings as queued; on separate
+        // connections a failure in between left a pending cleanup job whose
+        // findings were still selectable, so the next attempt queued a second job
+        // for the same findings. The candidate read takes update locks, so a
+        // concurrent request for the same findings waits and then sees them as
+        // already queued instead of creating a duplicate job.
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
         {
-            var ids = group.Select(static row => row.MaintenanceFindingId).Order().ToArray();
-            if (ids.Length == 0)
+            var candidates = await GetMaintenanceCleanupCandidatesAsync(conn, tx, selectedIds, ct);
+            foreach (var group in candidates.GroupBy(static row => row.JobHostId))
             {
-                continue;
+                var ids = group.Select(static row => row.MaintenanceFindingId).Order().ToArray();
+                if (ids.Length == 0)
+                {
+                    continue;
+                }
+
+                var payload = JsonSerializer.Serialize(new
+                {
+                    schemaVersion = 1,
+                    findingIds = ids
+                });
+
+                var jobId = await QueueMaintenanceCleanupJobAsync(conn, tx, group.Key, payload, requestedBy, ct);
+                var updated = await MarkMaintenanceFindingsCleanupQueuedAsync(conn, tx, ids, jobId, requestedBy, ct);
+                queuedFindingCount += updated;
+                queuedJobCount++;
             }
 
-            var payload = JsonSerializer.Serialize(new
-            {
-                schemaVersion = 1,
-                findingIds = ids
-            });
-
-            var jobId = await QueueMaintenanceCleanupJobAsync(group.Key, payload, requestedBy, ct);
-            var updated = await MarkMaintenanceFindingsCleanupQueuedAsync(ids, jobId, requestedBy, ct);
-            queuedFindingCount += updated;
-            queuedJobCount++;
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
         }
 
         return new MaintenanceCleanupQueueResult
@@ -729,7 +750,7 @@ ORDER BY job.RequestedUtc DESC,
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@Limit", Math.Clamp(limit, 1, 200));
+        cmd.Parameters.Add("@Limit", SqlDbType.Int).Value = Math.Clamp(limit, 1, 200);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -759,7 +780,9 @@ ORDER BY job.RequestedUtc DESC,
         return rows;
     }
 
-    private async Task<IReadOnlyList<MaintenanceCleanupCandidate>> GetMaintenanceCleanupCandidatesAsync(
+    private static async Task<IReadOnlyList<MaintenanceCleanupCandidate>> GetMaintenanceCleanupCandidatesAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
         IReadOnlyCollection<long> findingIds,
         CancellationToken ct)
     {
@@ -781,7 +804,7 @@ WHERE TRY_CONVERT(bigint, value) IS NOT NULL;
 
 SELECT finding.MaintenanceFindingId,
        CASE WHEN finding.Scope = N'Host' THEN finding.HostId ELSE CAST(NULL AS uniqueidentifier) END AS JobHostId
-FROM omp.MaintenanceFindings finding
+FROM omp.MaintenanceFindings finding WITH (UPDLOCK, ROWLOCK)
 INNER JOIN @Ids ids ON ids.MaintenanceFindingId = finding.MaintenanceFindingId
 WHERE finding.Status IN (0, 4)
   AND finding.ActionJson IS NOT NULL
@@ -794,10 +817,8 @@ ORDER BY JobHostId,
          finding.MaintenanceFindingId;";
 
         var rows = new List<MaintenanceCleanupCandidate>();
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@FindingIdsJson", JsonSerializer.Serialize(findingIds.Distinct().Order()));
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        AddFindingIdsJson(cmd, findingIds);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -810,7 +831,9 @@ ORDER BY JobHostId,
         return rows;
     }
 
-    private async Task<long> QueueMaintenanceCleanupJobAsync(
+    private static async Task<long> QueueMaintenanceCleanupJobAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
         Guid? hostId,
         string payloadJson,
         string? requestedBy,
@@ -837,17 +860,17 @@ VALUES
     3
 );";
 
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@HostId", hostId.HasValue ? hostId.Value : DBNull.Value);
-        Add(cmd, "@PayloadJson", payloadJson);
-        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@HostId", SqlDbType.UniqueIdentifier).Value = hostId.HasValue ? hostId.Value : DBNull.Value;
+        cmd.Parameters.Add("@PayloadJson", SqlDbType.NVarChar, -1).Value = payloadJson;
+        AddRequestedBy(cmd, requestedBy);
 
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private async Task<int> MarkMaintenanceFindingsCleanupQueuedAsync(
+    private static async Task<int> MarkMaintenanceFindingsCleanupQueuedAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
         IReadOnlyCollection<long> findingIds,
         long hostAgentJobId,
         string? requestedBy,
@@ -873,12 +896,10 @@ WHERE finding.Status IN (0, 4);
 
 SELECT @@ROWCOUNT;";
 
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@FindingIdsJson", JsonSerializer.Serialize(findingIds.Distinct().Order()));
-        Add(cmd, "@HostAgentJobId", hostAgentJobId);
-        Add(cmd, "@RequestedBy", string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy.Trim(), 256));
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        AddFindingIdsJson(cmd, findingIds);
+        cmd.Parameters.Add("@HostAgentJobId", SqlDbType.BigInt).Value = hostAgentJobId;
+        AddRequestedBy(cmd, requestedBy);
 
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
@@ -892,7 +913,7 @@ SELECT @@ROWCOUNT;";
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.CommandTimeout = ArtifactRetentionCommandTimeoutSeconds;
-        Add(cmd, "@MaxVersionsToKeep", maxVersionsToKeep);
+        cmd.Parameters.Add("@MaxVersionsToKeep", SqlDbType.Int).Value = maxVersionsToKeep;
         return await ReadArtifactRetentionCandidatesAsync(cmd, ct);
     }
 
@@ -927,6 +948,24 @@ SELECT @@ROWCOUNT;";
             ProtectedReferenceSources = rdr.IsDBNull(11) ? null : rdr.GetString(11),
             OperatorDeltaProtected = rdr.GetInt32(12) == 1
         };
+
+    // RequestedBy and IgnoredBy are nvarchar(256) on omp.HostAgentJobs and
+    // omp.MaintenanceFindings; the value is trimmed and truncated to fit.
+    private const int MaintenanceRequestedByLength = 256;
+
+    private static void AddRequestedBy(SqlCommand cmd, string? requestedBy)
+    {
+        cmd.Parameters.Add("@RequestedBy", SqlDbType.NVarChar, MaintenanceRequestedByLength).Value =
+            string.IsNullOrWhiteSpace(requestedBy)
+                ? DBNull.Value
+                : Truncate(requestedBy.Trim(), MaintenanceRequestedByLength);
+    }
+
+    private static void AddFindingIdsJson(SqlCommand cmd, IEnumerable<long> findingIds)
+    {
+        cmd.Parameters.Add("@FindingIdsJson", SqlDbType.NVarChar, -1).Value =
+            JsonSerializer.Serialize(findingIds.Distinct().Order());
+    }
 
     private sealed record MaintenanceCleanupCandidate(
         long MaintenanceFindingId,
