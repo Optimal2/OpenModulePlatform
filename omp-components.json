@@ -1,51 +1,51 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.1050",
+  "repositoryVersion": "0.3.1051",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.280",
+      "definitionVersion": "0.3.281",
       "path": "omp_core.module-definition.json"
     },
     {
       "moduleKey": "omp_auth",
-      "definitionVersion": "0.3.225",
+      "definitionVersion": "0.3.226",
       "path": "OpenModulePlatform.Auth/omp_auth.module-definition.json"
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.487",
+      "definitionVersion": "0.3.488",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
       "moduleKey": "iframe_webapp",
-      "definitionVersion": "0.3.221",
+      "definitionVersion": "0.3.222",
       "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
       "moduleKey": "content_webapp",
-      "definitionVersion": "0.3.225",
+      "definitionVersion": "0.3.226",
       "path": "OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.228",
+      "definitionVersion": "0.3.229",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp_blazor",
-      "definitionVersion": "0.3.218",
+      "definitionVersion": "0.3.219",
       "path": "examples/WebAppBlazorModule/example_webapp_blazor.module-definition.json"
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.233",
+      "definitionVersion": "0.3.234",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.232",
+      "definitionVersion": "0.3.233",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
@@ -104,8 +104,8 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.926",
-      "minModuleDefinitionVersion": "0.3.487",
+      "version": "0.3.927",
+      "minModuleDefinitionVersion": "0.3.488",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip",
@@ -124,8 +124,8 @@
       "appKey": "omp_auth",
       "packageType": "web-app",
       "targetName": "omp-auth",
-      "version": "0.3.384",
-      "minModuleDefinitionVersion": "0.3.225",
+      "version": "0.3.385",
+      "minModuleDefinitionVersion": "0.3.226",
       "projectPath": "OpenModulePlatform.Auth",
       "relativePathTemplate": "omp-auth/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Auth.zip",
@@ -143,8 +143,8 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.330",
-      "minModuleDefinitionVersion": "0.3.280",
+      "version": "0.3.331",
+      "minModuleDefinitionVersion": "0.3.281",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
@@ -155,7 +155,7 @@
       "registrationMode": "bootstrap",
       "packageType": "service-app",
       "targetName": "omp-hostagent-sentinel",
-      "version": "1.0.10",
+      "version": "1.0.11",
       "projectPath": "OpenModulePlatform.HostAgent.Sentinel",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.Sentinel.zip"
     },
@@ -166,11 +166,11 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.71",
+      "version": "0.3.72",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
-      "minModuleDefinitionVersion": "0.3.280"
+      "minModuleDefinitionVersion": "0.3.281"
     },
     {
       "componentKey": "omp-workerprocesshost",
@@ -179,11 +179,11 @@
       "appKey": "omp_workerprocesshost",
       "packageType": "worker-host",
       "targetName": "omp-workerprocesshost",
-      "version": "0.3.78",
+      "version": "0.3.79",
       "projectPath": "OpenModulePlatform.WorkerProcessHost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip",
-      "minModuleDefinitionVersion": "0.3.280"
+      "minModuleDefinitionVersion": "0.3.281"
     },
     {
       "componentKey": "content-webapp",
@@ -192,7 +192,7 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
-      "version": "0.3.380",
+      "version": "0.3.381",
       "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
       "relativePathTemplate": "content-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip",
@@ -202,7 +202,7 @@
           "sourcePath": "OpenModulePlatform.Web.ContentWebAppModule/Packaging/appsettings.json"
         }
       ],
-      "minModuleDefinitionVersion": "0.3.225"
+      "minModuleDefinitionVersion": "0.3.226"
     },
     {
       "componentKey": "iframe-webapp",
@@ -211,11 +211,11 @@
       "appKey": "iframe_webapp_webapp",
       "packageType": "web-app",
       "targetName": "iframe-webapp",
-      "version": "0.3.375",
+      "version": "0.3.376",
       "projectPath": "OpenModulePlatform.Web.iFrameWebAppModule",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.221"
+      "minModuleDefinitionVersion": "0.3.222"
     },
     {
       "componentKey": "example-webapp",
@@ -224,11 +224,11 @@
       "appKey": "example_webapp_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp",
-      "version": "0.3.378",
+      "version": "0.3.379",
       "projectPath": "examples/WebAppModule/WebApp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.228"
+      "minModuleDefinitionVersion": "0.3.229"
     },
     {
       "componentKey": "example-webapp-blazor",
@@ -237,11 +237,11 @@
       "appKey": "example_webapp_blazor_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp-blazor",
-      "version": "0.3.372",
+      "version": "0.3.373",
       "projectPath": "examples/WebAppBlazorModule/WebApp",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip",
-      "minModuleDefinitionVersion": "0.3.218"
+      "minModuleDefinitionVersion": "0.3.219"
     },
     {
       "componentKey": "example-serviceapp-web",
@@ -250,11 +250,11 @@
       "appKey": "example_serviceapp_webapp",
       "packageType": "web-app",
       "targetName": "example-serviceapp-web",
-      "version": "0.3.353",
+      "version": "0.3.354",
       "projectPath": "examples/ServiceAppModule/WebApp",
       "relativePathTemplate": "example-serviceapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleServiceAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.233"
+      "minModuleDefinitionVersion": "0.3.234"
     },
     {
       "componentKey": "example-serviceapp-service",
@@ -263,11 +263,11 @@
       "appKey": "example_serviceapp_service",
       "packageType": "service-app",
       "targetName": "example-serviceapp-service",
-      "version": "0.3.353",
+      "version": "0.3.354",
       "projectPath": "examples/ServiceAppModule/ServiceApp",
       "relativePathTemplate": "example-serviceapp/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Service.ExampleServiceAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.233"
+      "minModuleDefinitionVersion": "0.3.234"
     },
     {
       "componentKey": "example-workerapp-web",
@@ -276,11 +276,11 @@
       "appKey": "example_workerapp_webapp",
       "packageType": "web-app",
       "targetName": "example-workerapp-web",
-      "version": "0.3.353",
+      "version": "0.3.354",
       "projectPath": "examples/WorkerAppModule/WebApp",
       "relativePathTemplate": "example-workerapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWorkerAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.232"
+      "minModuleDefinitionVersion": "0.3.233"
     },
     {
       "componentKey": "example-workerapp-worker",
@@ -289,12 +289,12 @@
       "appKey": "example_workerapp_worker",
       "packageType": "worker",
       "targetName": "example-workerapp",
-      "version": "0.3.229",
+      "version": "0.3.230",
       "projectPath": "examples/WorkerAppModule/WorkerApp",
       "relativePathTemplate": "example-workerapp/worker/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Worker.ExampleWorkerAppModule.zip",
       "minWorkerHostVersion": "0.3.46",
-      "minModuleDefinitionVersion": "0.3.232"
+      "minModuleDefinitionVersion": "0.3.233"
     }
   ],
   "widgetFiles": [
