@@ -361,4 +361,17 @@ public sealed class WorkerManagerRuntimeRobustnessTests
         Assert.Contains("\"@observedState\", SqlDbType.TinyInt", repository);
         Assert.Contains("\"@hostKey\", SqlDbType.NVarChar, 128", repository);
     }
+
+    [Fact]
+    public void AddParameter_rejects_a_string_longer_than_the_column_instead_of_truncating()
+    {
+        using var cmd = new Microsoft.Data.SqlClient.SqlCommand();
+        var error = Assert.Throws<ArgumentException>(() => OmpWorkerRuntimeRepository.AddParameter(
+            cmd, "@runtimeKind", System.Data.SqlDbType.NVarChar, 5, "abcdefghij"));
+        Assert.Contains("@runtimeKind", error.Message);
+        Assert.Empty(cmd.Parameters);
+
+        OmpWorkerRuntimeRepository.AddParameter(cmd, "@runtimeKind", System.Data.SqlDbType.NVarChar, 5, "abcde");
+        Assert.Equal("abcde", cmd.Parameters["@runtimeKind"].Value);
+    }
 }

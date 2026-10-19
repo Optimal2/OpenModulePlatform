@@ -842,8 +842,17 @@ COMMIT TRANSACTION;";
     /// every distinct string length. Size 0 leaves the provider default for fixed-size
     /// types. A null value is sent as DBNull.
     /// </remarks>
-    private static void AddParameter(SqlCommand cmd, string name, SqlDbType type, int size, object? value)
+    internal static void AddParameter(SqlCommand cmd, string name, SqlDbType type, int size, object? value)
     {
+        // SqlClient silently truncates a string longer than an explicit Size; the old
+        // AddWithValue path failed instead. Keep failing loudly so an over-long key is
+        // never stored cut short (review of the typed-parameter change, 2026-10-19).
+        if (size > 0 && value is string text && text.Length > size)
+        {
+            throw new ArgumentException(
+                $"Value for {name} is {text.Length} characters; the column holds at most {size}.", nameof(value));
+        }
+
         var parameter = cmd.Parameters.Add(name, type);
         if (size > 0)
         {
