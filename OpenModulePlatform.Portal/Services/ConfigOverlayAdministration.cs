@@ -519,12 +519,30 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             overlayDetails.Add((overlay, detail.Files));
         }
 
+        // Relevance ranking before the bound: contexts the overlay applies to
+        // first, then unavailable ones (they carry diagnostics), not-applicable
+        // last, so a relevant context is never omitted while a not-applicable
+        // one is shown. OrderBy is stable, so the host/app/artifact order
+        // above stays the secondary order within each rank.
+        var ranked = ordered
+            .Select(r => (Resolved: r, Rank: ImpactRank(snapshot, selected, r, artifactsById)))
+            .OrderBy(r => r.Rank)
+            .ToList();
         var contexts = new List<OverlayInstallationContextDto>();
-        foreach (var resolved in ordered.Take(MaxInstallationContexts))
-            contexts.Add(BuildImpactContext(snapshot, selected, selectedDetail?.Files, resolved, artifactsById, artifactFiles, overlayDetails));
+        foreach (var entry in ranked.Take(MaxInstallationContexts))
+            contexts.Add(BuildImpactContext(snapshot, selected, selectedDetail?.Files, entry.Resolved, artifactsById, artifactFiles, overlayDetails));
         var omittedContexts = Math.Max(0, ordered.Count - contexts.Count);
         if (omittedContexts > 0)
-            diagnostics.Add($"Showing {contexts.Count} of {ordered.Count} configured app contexts; {omittedContexts} further context(s) omitted by bound. Refine selectors before changing.");
+        {
+            var omitted = ranked.Skip(MaxInstallationContexts).ToList();
+            var omittedApplicable = omitted.Count(r => r.Rank == ImpactRankApplicable);
+            var omittedUnavailable = omitted.Count(r => r.Rank == ImpactRankUnavailable);
+            var omittedNotApplicable = omitted.Count(r => r.Rank == ImpactRankNotApplicable);
+            diagnostics.Add($"Showing {contexts.Count} of {ordered.Count} configured app contexts (applicable first, then unavailable, then not applicable); {omittedContexts} further context(s) omitted by bound: {omittedApplicable} applicable, {omittedUnavailable} unavailable, {omittedNotApplicable} not applicable."
+                + (omittedApplicable + omittedUnavailable == 0
+                    ? " Every omitted context is not applicable to this overlay."
+                    : " Refine selectors before changing."));
+        }
 
         var hostsWithoutContext = snapshot.Hosts
             .Where(h => !ordered.Any(r => string.Equals(r.HostKey, h.HostKey, StringComparison.OrdinalIgnoreCase)))
@@ -684,6 +702,24 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
                 UnavailableReason: $"Host '{deployment.HostKey}' is not registered in this installation; nothing can be resolved for this deployment context.");
         return new(deployment.HostKey, host, deployment.AppKey, deployment.AppInstanceKey, deployment.ArtifactId,
             deployment.SourceKind, deployment.SourceKey);
+    }
+
+    private const int ImpactRankApplicable = 0;
+    private const int ImpactRankUnavailable = 1;
+    private const int ImpactRankNotApplicable = 2;
+
+    // Cheap relevance rank that predicts BuildImpactContext's ContextState
+    // without resolving content, so the bound can be applied by relevance.
+    private static int ImpactRank(OverlayAdminSnapshot snapshot, ConfigOverlayDocumentRow selected,
+        ResolvedContext resolved, IReadOnlyDictionary<int, ArtifactRow> artifactsById)
+    {
+        if (resolved.NotDeployedReason is not null) return ImpactRankNotApplicable;
+        if (resolved.UnavailableReason is not null || resolved.Host is null) return ImpactRankUnavailable;
+        if (!resolved.ArtifactId.HasValue || !artifactsById.TryGetValue(resolved.ArtifactId.Value, out var artifact))
+            return ImpactRankUnavailable;
+        return Blocker(selected, snapshot, resolved.Host.HostKey, artifact) is null
+            ? ImpactRankApplicable
+            : ImpactRankNotApplicable;
     }
 
     private static OverlayInstallationContextDto BuildImpactContext(OverlayAdminSnapshot snapshot,

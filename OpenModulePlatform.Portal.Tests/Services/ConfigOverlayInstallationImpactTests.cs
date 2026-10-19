@@ -246,6 +246,63 @@ public sealed class ConfigOverlayInstallationImpactTests
     }
 
     [Fact]
+    public async Task BoundKeepsRelevantContextsBeforeNotApplicableOnes()
+    {
+        // Live acceptance 2026-10-19: 41 contexts where the not-applicable
+        // worker contexts sorted first by host and pushed the overlay's own
+        // applicable context past the bound. Relevance ranks before the bound.
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0", module: "module");
+        var workerHosts = Enumerable.Range(0, 30).Select(i => Host($"aaa-worker-{i:00}")).ToArray();
+        var snapshot = Snapshot([overlay],
+            [.. workerHosts, Host("zz-host")],
+            [Artifact(42), Artifact(99, module: "other-module")],
+            [App("zz-host", "web-c", 42), App("zz-host", "web-a", 42), App("zz-host", "web-b", 42),
+                App("ghost-host", "web-ghost", 42)],
+            deploymentContexts: workerHosts
+                .Select(h => Deployment(h.HostKey, 99, "hostrequirement", sourceKey: $"req-{h.HostKey}", appKey: "worker"))
+                .ToArray());
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Equal(34, impact.TotalConfiguredContexts);
+        Assert.Equal(ConfigOverlayAdministration.MaxInstallationContexts, impact.Contexts.Count);
+        Assert.Equal(34 - ConfigOverlayAdministration.MaxInstallationContexts, impact.OmittedContexts);
+        // Applicable first in stable host/app order, then unavailable, then not applicable.
+        Assert.Equal(["web-a", "web-b", "web-c"], impact.Contexts.Take(3).Select(c => c.AppInstanceKey));
+        Assert.All(impact.Contexts.Take(3), c => Assert.Equal("Applicable", c.ContextState));
+        Assert.Equal("Unavailable", impact.Contexts[3].ContextState);
+        Assert.Equal("ghost-host", impact.Contexts[3].HostKey);
+        Assert.All(impact.Contexts.Skip(4), c => Assert.Equal("NotApplicable", c.ContextState));
+        Assert.Equal("aaa-worker-00", impact.Contexts[4].HostKey);
+        var note = Assert.Single(impact.Diagnostics, d => d.Contains("omitted by bound", StringComparison.Ordinal)
+            && d.StartsWith("Showing", StringComparison.Ordinal));
+        Assert.Contains("9 further context(s) omitted by bound: 0 applicable, 0 unavailable, 9 not applicable.", note, StringComparison.Ordinal);
+        Assert.Contains("Every omitted context is not applicable", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BoundCountsOmittedApplicableContextsWhenRelevantExceedBound()
+    {
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0", module: "module");
+        var apps = Enumerable.Range(0, 28).Select(i => App("zz-host", $"web-{i:00}", 42))
+            .Append(App("aaa-host", "web-foreign", 99))
+            .ToArray();
+        var snapshot = Snapshot([overlay], [Host("aaa-host"), Host("zz-host")],
+            [Artifact(42), Artifact(99, module: "other-module")], apps);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Equal(29, impact.TotalConfiguredContexts);
+        Assert.All(impact.Contexts, c => Assert.Equal("Applicable", c.ContextState));
+        Assert.DoesNotContain(impact.Contexts, c => c.AppInstanceKey == "web-foreign");
+        var note = Assert.Single(impact.Diagnostics, d => d.StartsWith("Showing", StringComparison.Ordinal));
+        Assert.Contains("4 further context(s) omitted by bound: 3 applicable, 0 unavailable, 1 not applicable.", note, StringComparison.Ordinal);
+        Assert.Contains("Refine selectors before changing.", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UnknownDocumentThrowsBeforeAnySavedContextReads()
     {
         var (store, snapshot) = TwoHostFixture();
