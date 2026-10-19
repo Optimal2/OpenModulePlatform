@@ -162,6 +162,9 @@
   <data name="Deep" xml:space="preserve"><value>Djup</value></data>
   <data name="Also search collapsed rows and other pages" xml:space="preserve"><value>Sök även i hopfällda rader och på andra sidor</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Sök på sidan, även i hopfällda rader och på andra sidor (Ctrl+Skift+F)</value></data>
+  <data name="Search on this page needs a newer browser" xml:space="preserve"><value>Sök på sidan kräver en nyare webbläsare</value></data>
+  <data name="Search on this page is off here" xml:space="preserve"><value>Sök på sidan är avstängd här</value></data>
+  <data name="Search on this page is off here: the content is shown in an embedded frame" xml:space="preserve"><value>Sök på sidan är avstängd här: innehållet visas i en inbäddad ram</value></data>
   <data name="Theme" xml:space="preserve"><value>Tema</value></data>
   <data name="Theme: System" xml:space="preserve"><value>System</value></data>
   <data name="Theme: Light" xml:space="preserve"><value>Ljust</value></data>

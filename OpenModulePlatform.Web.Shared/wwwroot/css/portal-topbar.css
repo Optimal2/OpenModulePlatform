@@ -1758,8 +1758,20 @@ html:not([data-theme-mode]) .omp-theme-switch {
     outline-offset: 2px;
 }
 
-.portal-topbar__icon--search {
-    --portal-topbar-icon: url("../icons/search.svg");
+/* Off on this page: the icon stays where it always is, greyed, and the
+   tooltip carries the reason. */
+.omp-search__opener[aria-disabled="true"],
+.omp-search__opener[aria-disabled="true"]:hover {
+    color: var(--portal-topbar-text-muted);
+    background: transparent;
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Material Symbols "find_in_page": a page with a magnifier, so the icon says
+   "on this page" rather than "search the portal". */
+.portal-topbar__icon--find-in-page {
+    --portal-topbar-icon: url("../icons/find-in-page.svg");
     background: currentColor;
     -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
     mask: var(--portal-topbar-icon) center / contain no-repeat;

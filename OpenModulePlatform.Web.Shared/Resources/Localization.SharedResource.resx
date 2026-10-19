@@ -114,6 +114,9 @@
   <data name="Deep" xml:space="preserve"><value>Deep</value></data>
   <data name="Also search collapsed rows and other pages" xml:space="preserve"><value>Also search collapsed rows and other pages</value></data>
   <data name="Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)" xml:space="preserve"><value>Search on this page, including collapsed rows and other pages (Ctrl+Shift+F)</value></data>
+  <data name="Search on this page needs a newer browser" xml:space="preserve"><value>Search on this page needs a newer browser</value></data>
+  <data name="Search on this page is off here" xml:space="preserve"><value>Search on this page is off here</value></data>
+  <data name="Search on this page is off here: the content is shown in an embedded frame" xml:space="preserve"><value>Search on this page is off here: the content is shown in an embedded frame</value></data>
   <data name="Theme" xml:space="preserve"><value>Theme</value></data>
   <data name="Theme: System" xml:space="preserve"><value>System</value></data>
   <data name="Theme: Light" xml:space="preserve"><value>Light</value></data>

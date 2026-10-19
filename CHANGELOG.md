@@ -26,7 +26,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   The shared list script answers `omp:reveal` for its own rows: a row it
   has paged out is shown by jumping its pager to that row's page, a row cut
   off behind "show more" by widening the window; the search no longer
-  presses the pager itself, and knows nothing about lists. A row the list's own search or filter hides is
+  presses the pager itself, and knows nothing about lists. The icon is
+  Material Symbols' `find_in_page`, a page with a magnifier, so it reads as
+  "on this page" rather than "search the portal". A page the search cannot
+  reach says so with `data-omp-search-disabled="<reason>"` on `<body>` (the
+  iframe web app does): the icon stays in the bar, greyed, with the reason
+  as its tooltip; a browser without the Highlight API gets the same
+  treatment instead of a missing icon. A row the list's own search or filter hides is
   reported as such instead of walking the pager to its last page; Enter
   typed before the search has caught up runs it rather than stepping the
   old term's matches; closing returns the focus to where it was. Depth is

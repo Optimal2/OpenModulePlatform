@@ -43,14 +43,6 @@
         let bar = mount.closest('.portal-topbar') || mount.parentElement;
         let nav = bar.querySelector('.portal-topbar__nav');
 
-        const supportsHighlight = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
-        if (!supportsHighlight) {
-            // Without painted matches the panel would be a worse find bar than the
-            // browser's; leave the page to Ctrl+F.
-            mount.hidden = true;
-            return;
-        }
-
         const labels = {
             title: mount.dataset.labelTitle || 'Search on this page',
             placeholder: mount.dataset.labelPlaceholder || 'Search',
@@ -62,8 +54,46 @@
             close: mount.dataset.labelClose || 'Close',
             hidden: mount.dataset.labelHidden || "Hidden by the list's filter",
             deep: mount.dataset.labelDeep || 'Deep',
-            deepTitle: mount.dataset.labelDeepTitle || 'Also search collapsed rows and other pages'
+            deepTitle: mount.dataset.labelDeepTitle || 'Also search collapsed rows and other pages',
+            unsupported: mount.dataset.labelUnsupported || 'Search on this page needs a newer browser',
+            disabled: mount.dataset.labelDisabled || 'Search on this page is off here'
         };
+
+        // Off on this page: the page says so on <body> (data-omp-search-disabled,
+        // with the reason as its value), or the browser lacks the Highlight API
+        // that paints the matches. The icon stays in the bar, greyed, and its
+        // tooltip says why; nothing else is built. A host that replaces the bar
+        // gets its new mount marked the same way.
+        const supportsHighlight = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
+        const declaredOff = document.body.dataset.ompSearchDisabled;
+        const offReason = declaredOff !== undefined
+            ? (declaredOff || labels.disabled)
+            : (supportsHighlight ? null : labels.unsupported);
+        if (offReason !== null) {
+            const markOff = (target) => {
+                const button = target.querySelector('[data-omp-search-open]');
+                if (button) {
+                    button.setAttribute('aria-disabled', 'true');
+                    button.title = offReason;
+                    button.addEventListener('click', (event) => event.preventDefault());
+                }
+
+                target.dataset.ompSearchReady = 'true';
+                target.dataset.ompSearchOff = 'true';
+            };
+            markOff(mount);
+            if (typeof MutationObserver === 'function') {
+                new MutationObserver(() => {
+                    const next = document.querySelector('[data-omp-search]:not([data-omp-search-off])');
+                    if (next) {
+                        markOff(next);
+                    }
+                }).observe(document.body, { childList: true, subtree: true });
+            }
+
+            return;
+        }
+
         const deepStorageKey = 'omp.search.deep';
         const matchCap = Number.parseInt(mount.dataset.matchCap || '500', 10) || 500;
         const debounceMs = 150;
