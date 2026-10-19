@@ -6,15 +6,18 @@ namespace OpenModulePlatform.Auth.Services;
 /// <summary>
 /// Reports the versions of security-critical assemblies that are actually loaded
 /// in the running process, so operators can verify that a deployed host really
-/// runs the patched Negotiate authentication stack (CVE-2026-47303).
+/// runs the patched Negotiate authentication stack (CVE-2026-47303, CVE-2026-70179).
 /// </summary>
 internal static class OmpRuntimeAssemblyVersionCheck
 {
     public const string NegotiateAssemblyName = "Microsoft.AspNetCore.Authentication.Negotiate";
     public const string AuthAssemblyName = "OpenModulePlatform.Auth";
 
-    // Patched band for CVE-2026-47303: any 10.0.11.x revision is acceptable.
-    public static readonly Version ExpectedNegotiateBand = new(10, 0, 11);
+    // Patched band: any 10.0.13.x revision is acceptable (10.0.11 fixed
+    // CVE-2026-47303, 10.0.13 fixes CVE-2026-70179). It must follow the
+    // Negotiate PackageVersion in Directory.Packages.props; a Portal test
+    // fails when the two drift apart.
+    public static readonly Version ExpectedNegotiateBand = new(10, 0, 13);
 
     public static bool IsOnBand(Version? version, Version band)
     {

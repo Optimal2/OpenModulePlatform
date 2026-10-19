@@ -40,11 +40,38 @@ public sealed class OmpRuntimeAssemblyVersionCheckTests
     public void IsOnBand_UsesTheThreePartBandDefinedByTheConstant()
     {
         Assert.True(OmpRuntimeAssemblyVersionCheck.IsOnBand(
-            new Version(10, 0, 11, 42),
+            new Version(10, 0, 13, 42),
             OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
         Assert.False(OmpRuntimeAssemblyVersionCheck.IsOnBand(
-            new Version(10, 0, 10, 42),
+            new Version(10, 0, 12, 42),
             OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
+        Assert.False(OmpRuntimeAssemblyVersionCheck.IsOnBand(
+            new Version(10, 0, 11, 42),
+            OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
+    }
+
+    [Fact]
+    public void ExpectedNegotiateBand_FollowsTheCentralPackageVersion()
+    {
+        // A security bump of the Negotiate package must move the runtime
+        // check with it; otherwise /runtime-versions warns on patched hosts
+        // and accepts the vulnerable band.
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Directory.Packages.props")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        var props = System.Xml.Linq.XDocument.Load(Path.Combine(directory!.FullName, "Directory.Packages.props"));
+        var packageVersion = props.Descendants("PackageVersion")
+            .Single(element => (string?)element.Attribute("Include") == OmpRuntimeAssemblyVersionCheck.NegotiateAssemblyName)
+            .Attribute("Version")!.Value;
+        var parsed = Version.Parse(packageVersion);
+
+        Assert.Equal(
+            new Version(parsed.Major, parsed.Minor, parsed.Build),
+            OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand);
     }
 
     [Fact]

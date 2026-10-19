@@ -54,9 +54,11 @@
       on the 9.0 line). Microsoft.Data.SqlClient 7.1.0 only requires >= 9.0.18.
       CentralPackageTransitivePinningEnabled is deliberately NOT enabled, so
       this PackageVersion only takes effect where a project references the
-      package directly: every project with a direct Microsoft.Data.SqlClient
-      PackageReference carries a matching Pkcs PackageReference, and the
-      analyzer test project does so for its Roslyn testing chain. Remove these
+      package directly: every project whose Microsoft.Data.SqlClient restore
+      pulls Pkcs carries a matching Pkcs PackageReference, and the analyzer
+      test project does so for its Roslyn testing chain. The Bootstrapper
+      (net10.0-windows) is exempt: that SqlClient target group takes Pkcs
+      in-box from Microsoft.WindowsDesktop.App and restores no Pkcs package. Remove these
       references once Microsoft.Data.SqlClient itself requires a fixed version.
     -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="9.0.21" />
