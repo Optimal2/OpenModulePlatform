@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "iframe_webapp",
-  "definitionVersion": "0.3.218",
+  "definitionVersion": "0.3.220",
   "module": {
     "displayName": "iFrame Web App",
     "moduleType": "WebAppModule",
@@ -27,7 +27,7 @@
       "targetName": "iframe-webapp",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.372"
+      "maxVersion": "0.3.374"
     }
   ],
   "sqlScripts": [

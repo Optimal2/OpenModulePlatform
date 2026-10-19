@@ -75,6 +75,14 @@
                 if (button) {
                     button.setAttribute('aria-disabled', 'true');
                     button.title = offReason;
+                    // The tooltip never shows on keyboard focus; the reason is
+                    // also the button's description for the reader.
+                    const note = document.createElement('span');
+                    note.className = 'visually-hidden';
+                    note.id = 'omp-search-off-reason';
+                    note.textContent = offReason;
+                    button.appendChild(note);
+                    button.setAttribute('aria-describedby', note.id);
                     button.addEventListener('click', (event) => event.preventDefault());
                 }
 

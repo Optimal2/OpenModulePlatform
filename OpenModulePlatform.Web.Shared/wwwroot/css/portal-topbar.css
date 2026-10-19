@@ -1764,8 +1764,12 @@ html:not([data-theme-mode]) .omp-theme-switch {
 .omp-search__opener[aria-disabled="true"]:hover {
     color: var(--portal-topbar-text-muted);
     background: transparent;
-    opacity: 0.45;
     cursor: not-allowed;
+}
+
+/* The glyph fades, not the button, so a focus ring keeps its contrast. */
+.omp-search__opener[aria-disabled="true"] .portal-topbar__icon {
+    opacity: 0.45;
 }
 
 /* Material Symbols "find_in_page": a page with a magnifier, so the icon says

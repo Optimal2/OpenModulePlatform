@@ -1,6 +1,6 @@
 @inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> WebAppOptions
-@inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> L
+@inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> SharedL
 @{
     var hideModuleTopbar = ViewData["HideModuleTopbar"] is true;
     // Without the shared top bar the module header carries the theme menu itself.
@@ -26,7 +26,7 @@
     }
 </head>
 @* The page search cannot reach into the embedded frame: the top bar shows its icon greyed, with this reason. *@
-<body class="@(hideModuleTopbar ? "iframe-layout iframe-layout--standalone" : "iframe-layout")" data-omp-toasts="true" data-omp-search-disabled="@L["Search on this page is off here: the content is shown in an embedded frame"]">
+<body class="@(hideModuleTopbar ? "iframe-layout iframe-layout--standalone" : "iframe-layout")" data-omp-toasts="true" data-omp-search-disabled="@SharedL["Search on this page is off here: the content is shown in an embedded frame"]">
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
         @if (!hideModuleTopbar)
