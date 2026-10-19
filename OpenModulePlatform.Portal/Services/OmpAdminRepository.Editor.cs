@@ -3236,14 +3236,58 @@ WHERE ar.AppId = @AppId
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
         CancellationToken ct)
     {
+        var (replacedCount, _) = await ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+            artifactId,
+            configurationFiles,
+            ct);
+        return replacedCount;
+    }
+
+    /// <summary>
+    /// Replaces the package configuration rows of an artifact identity that is
+    /// already registered. A new registration commits its omp.Artifacts row
+    /// before the replace + carry-forward transaction, so a process death in
+    /// between leaves the identity with no configuration rows at all, and the
+    /// retry lands on this existing-identity path. When the artifact has no
+    /// configuration rows yet, the interrupted carry-forward is resumed in the
+    /// same transaction; otherwise this is a plain replace, so a deliberate
+    /// operator revert on the existing rows is never overwritten again.
+    /// </summary>
+    public async Task<(int ReplacedCount, ArtifactConfigurationCarryForwardResult CarryForward)> ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+        int artifactId,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        CancellationToken ct)
+    {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
+        // UPDLOCK + HOLDLOCK keeps the probe and the replace serialized against a
+        // concurrent import of the same artifact, so only one of them resumes.
+        bool resumeCarryForward;
+        await using (var probe = new SqlCommand(
+            @"
+SELECT CASE WHEN EXISTS
+(
+    SELECT 1
+    FROM omp.ArtifactConfigurationFiles WITH (UPDLOCK, HOLDLOCK)
+    WHERE ArtifactId = @ArtifactId
+) THEN 0 ELSE 1 END;",
+            conn,
+            tx))
+        {
+            Add(probe, "@ArtifactId", artifactId);
+            resumeCarryForward = Convert.ToInt32(await probe.ExecuteScalarAsync(ct)) == 1;
+        }
+
         await ReplaceArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, configurationFiles, ct);
 
+        var carryForwardResult = resumeCarryForward && configurationFiles.Count > 0
+            ? await CarryForwardArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, ct)
+            : ArtifactConfigurationCarryForwardResult.Empty;
+
         await tx.CommitAsync(ct);
-        return configurationFiles.Count;
+        return (configurationFiles.Count, carryForwardResult);
     }
 
     /// <summary>
@@ -3263,30 +3307,37 @@ WHERE ar.AppId = @AppId
 
         await ReplaceArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, configurationFiles, ct);
 
-        string? sourceVersion = null;
-        var items = new List<ArtifactConfigurationCarryForwardItem>();
-        await using (var carryForward = new SqlCommand(
-            ArtifactConfigurationFileImportSql.CarryForwardOperatorEdits,
-            conn,
-            tx))
-        {
-            Add(carryForward, "@ArtifactId", artifactId);
-            await using var reader = await carryForward.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                sourceVersion ??= reader.IsDBNull(0) ? null : reader.GetString(0);
-                items.Add(new ArtifactConfigurationCarryForwardItem(
-                    reader.GetString(1),
-                    Enum.Parse<ArtifactConfigurationCarryForwardOutcome>(reader.GetString(2))));
-            }
-        }
+        var carryForwardResult = await CarryForwardArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, ct);
 
         await tx.CommitAsync(ct);
+        return (configurationFiles.Count, carryForwardResult);
+    }
 
-        var carryForwardResult = items.Count == 0
+    private async Task<ArtifactConfigurationCarryForwardResult> CarryForwardArtifactConfigurationFilesCoreAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int artifactId,
+        CancellationToken ct)
+    {
+        string? sourceVersion = null;
+        var items = new List<ArtifactConfigurationCarryForwardItem>();
+        await using var carryForward = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CarryForwardOperatorEdits,
+            conn,
+            tx);
+        Add(carryForward, "@ArtifactId", artifactId);
+        await using var reader = await carryForward.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            sourceVersion ??= reader.IsDBNull(0) ? null : reader.GetString(0);
+            items.Add(new ArtifactConfigurationCarryForwardItem(
+                reader.GetString(1),
+                Enum.Parse<ArtifactConfigurationCarryForwardOutcome>(reader.GetString(2))));
+        }
+
+        return items.Count == 0
             ? ArtifactConfigurationCarryForwardResult.Empty
             : new ArtifactConfigurationCarryForwardResult(sourceVersion, items);
-        return (configurationFiles.Count, carryForwardResult);
     }
 
     private async Task ReplaceArtifactConfigurationFilesCoreAsync(

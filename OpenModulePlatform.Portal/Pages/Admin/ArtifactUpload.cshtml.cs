@@ -155,9 +155,13 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                     if (package.ConfigurationFiles.Count > 0)
                     {
                         int configurationFileCount;
+                        ArtifactConfigurationCarryForwardResult resumedCarryForward;
                         try
                         {
-                            configurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                            // Resumes the carry-forward when a previous upload died
+                            // after registering this identity but before its
+                            // configuration rows were written.
+                            (configurationFileCount, resumedCarryForward) = await _repo.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
                                 existingIdentity.ArtifactId,
                                 package.ConfigurationFiles,
                                 ct);
@@ -184,7 +188,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                                 StatusMessage = BuildExistingArtifactConfigurationStatusMessage(
                                     configurationFileCount,
                                     null,
-                                    applyWasRequested: false)
+                                    applyWasRequested: false,
+                                    resumedCarryForward)
                                     + " "
                                     + T("The artifact could not be selected as the desired version automatically. Choose it from the installation template page.");
                                 return RedirectToPage("/Admin/ArtifactEdit", new { id = existingIdentity.ArtifactId });
@@ -194,7 +199,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                         StatusMessage = BuildExistingArtifactConfigurationStatusMessage(
                             configurationFileCount,
                             existingApplicationResult,
-                            Input.UseArtifactImmediately);
+                            Input.UseArtifactImmediately,
+                            resumedCarryForward);
                         return RedirectToPage("/Admin/ArtifactEdit", new { id = existingIdentity.ArtifactId });
                     }
 
@@ -304,8 +310,9 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                     else
                     {
                         // Existing-identity re-import: plain replace, no
-                        // carry-forward (never re-apply over a deliberate revert).
-                        packagedConfigurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                        // carry-forward (never re-apply over a deliberate revert),
+                        // unless an interrupted upload left the identity without rows.
+                        (packagedConfigurationFileCount, carryForwardResult) = await _repo.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
                             artifactId,
                             package.ConfigurationFiles,
                             ct);
@@ -825,12 +832,14 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     private string BuildExistingArtifactConfigurationStatusMessage(
         int packagedConfigurationFileCount,
         ArtifactApplicationResult? applicationResult,
-        bool applyWasRequested)
+        bool applyWasRequested,
+        ArtifactConfigurationCarryForwardResult? carryForwardResult = null)
     {
         var message = T("The artifact content already existed, so the immutable payload was left unchanged.");
         message += " " + string.Format(
             T("Updated {0} configuration file row(s) from the artifact package."),
             packagedConfigurationFileCount);
+        message = AppendCarryForwardStatus(message, carryForwardResult);
 
         if (applyWasRequested)
         {

@@ -1774,10 +1774,19 @@ public sealed class PortableModulePackageService
                     {
                         try
                         {
-                            configurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                            // Resumes the carry-forward when a previous import died
+                            // after registering this identity but before its
+                            // configuration rows were written.
+                            var (replacedCount, resumedCarryForward) = await _repo.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
                                 existingIdentity.ArtifactId,
                                 package.ConfigurationFiles,
                                 ct);
+                            configurationFileCount = replacedCount;
+                            var resumedCarryForwardMessage = resumedCarryForward.BuildImportMessage();
+                            if (!string.IsNullOrWhiteSpace(resumedCarryForwardMessage))
+                            {
+                                existingWarning = AppendWarning(existingWarning, resumedCarryForwardMessage);
+                            }
                         }
                         catch (SqlException ex)
                         {
@@ -1957,8 +1966,17 @@ public sealed class PortableModulePackageService
                     }
                     else
                     {
-                        // Existing-identity re-import: plain replace, no carry-forward.
-                        await _repo.ReplaceArtifactConfigurationFilesAsync(artifactId, package.ConfigurationFiles, ct);
+                        // Existing-identity re-import: plain replace, no carry-forward,
+                        // unless an interrupted import left the identity without rows.
+                        var (_, resumedCarryForward) = await _repo.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+                            artifactId,
+                            package.ConfigurationFiles,
+                            ct);
+                        var resumedCarryForwardMessage = resumedCarryForward.BuildImportMessage();
+                        if (!string.IsNullOrWhiteSpace(resumedCarryForwardMessage))
+                        {
+                            warning = AppendWarning(warning, resumedCarryForwardMessage);
+                        }
                     }
                 }
                 catch (SqlException ex)
