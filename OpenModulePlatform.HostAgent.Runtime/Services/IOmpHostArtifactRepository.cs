@@ -1,5 +1,7 @@
+using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
+using OpenModulePlatform.ModuleDefinitions;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -187,3 +189,157 @@ public interface IOmpHostArtifactRepository
         string message,
         CancellationToken ct);
 }
+
+/// <summary>
+/// The repository surface <see cref="ArtifactZipImportService" /> depends on. Extracted so
+/// the import gates (identity, duplicate content, configuration continuity) can be exercised
+/// against a deterministic fake instead of only through a SQL Server fixture. Internal
+/// because several members expose internal SQL repair types.
+/// </summary>
+internal interface IArtifactZipImportRepository
+{
+    Task<ArtifactContentHashGap> GetArtifactContentHashGapAsync(CancellationToken ct);
+
+    Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyLatestModuleArtifactsAsync(
+        string moduleKey,
+        CancellationToken ct);
+
+    Task<(int DocumentId, bool Created, bool Replaced, bool WasIdentical)> SaveImportedHostConfigurationAsync(
+        PortableHostConfigurationDocument input,
+        bool replaceExisting,
+        CancellationToken ct);
+
+    Task<(int DocumentId, bool Created, bool Replaced, bool WasIdentical)> SaveImportedConfigOverlayAsync(
+        PortableConfigOverlayDocument input,
+        bool replaceExisting,
+        CancellationToken ct);
+
+    Task<(int CreatedCount, int UpdatedCount, int SkippedCount, int PermissionRowCount)> SaveImportedDashboardWidgetsAsync(
+        PortableDashboardWidgetPackage input,
+        CancellationToken ct);
+
+    Task RecordDashboardWidgetImportFindingsAsync(
+        IReadOnlyCollection<string> importedWidgetKeys,
+        IReadOnlyCollection<PortableDashboardWidgetSkip> skippedWidgets,
+        string sourceName,
+        CancellationToken ct);
+
+    Task<(int DataDocumentCount, int InsertedBinaryDataCount, int ReusedBinaryDataCount)> SaveImportedWidgetRuntimeDataAsync(
+        PortableWidgetRuntimeDataPackage input,
+        CancellationToken ct);
+
+    Task<ModuleDefinitionSaveResult> SaveImportedModuleDefinitionAsync(
+        ModuleDefinitionImportDocument input,
+        bool replaceExisting,
+        CancellationToken ct);
+
+    Task<string?> GetAppliedModuleDefinitionVersionAsync(string moduleKey, CancellationToken ct);
+
+    Task<int> ExecuteImportedModuleDefinitionSqlRepairsAsync(int moduleDefinitionDocumentId, CancellationToken ct);
+
+    Task<int> ExecuteImportedModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        IReadOnlySet<string>? scriptKeysToRepair,
+        CancellationToken ct,
+        SqlConnection conn);
+
+    Task<bool> ApplyImportedModuleDefinitionAsync(int moduleDefinitionDocumentId, CancellationToken ct);
+
+    Task<ModuleDefinitionSqlRepairScope> BeginModuleDefinitionSqlRepairAsync(CancellationToken ct);
+
+    Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
+        string definitionJson,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<string>> GetPendingDefinitionScriptsAsync(int documentId, SqlConnection conn, CancellationToken ct);
+
+    Task<int> InsertMissingPortalAppEntriesAsync(CancellationToken ct, Action<int>? onAttempt = null);
+
+    Task<ArtifactZipImportAppDescriptor?> ResolveArtifactZipImportAppAsync(
+        string moduleKey,
+        string appKey,
+        CancellationToken ct);
+
+    Task<ArtifactCompatibilitySlot> RequireCompatibleArtifactSlotAsync(
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        CancellationToken ct);
+
+    Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactByIdentityAsync(
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        CancellationToken ct);
+
+    /// <summary>
+    /// An artifact whose content hash equals <paramref name="sha256" />. When several do, a row
+    /// of the same component (<paramref name="appId" /> and <paramref name="packageType" />) is
+    /// preferred, so an unrelated older row with the same bytes cannot hide the same-component
+    /// match the empty-diff gate accepts.
+    /// </summary>
+    Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactBySha256Async(
+        string sha256,
+        int appId,
+        string packageType,
+        CancellationToken ct);
+
+    Task UpdateImportedArtifactMetadataAsync(
+        int artifactId,
+        string relativePath,
+        string sha256,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Registers a new artifact identity and writes its configuration rows in ONE transaction:
+    /// the package files plus the carry-forward of operator edits, or -- when the package ships
+    /// none and <paramref name="copyFromContinuitySource" /> is set -- the continuity copy.
+    /// Null when the identity already exists (a concurrent import won). A failure or a process
+    /// death anywhere inside leaves no artifact row, so the retry registers again and carries
+    /// forward instead of taking the existing-identity path that never does.
+    /// </summary>
+    Task<ImportedArtifactRegistration?> RegisterImportedArtifactWithConfigurationAsync(
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        string relativePath,
+        string sha256,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        bool copyFromContinuitySource,
+        CancellationToken ct);
+
+    Task<int> ReplaceArtifactConfigurationFilesAsync(
+        int artifactId,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        CancellationToken ct);
+
+    Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyImportedArtifactToMatchingApplicationsAsync(
+        int artifactId,
+        CancellationToken ct);
+
+    Task<int> ApplyImportedHostAgentArtifactToCurrentHostAsync(
+        int artifactId,
+        string hostKey,
+        string? serviceNamePrefix,
+        string? installRoot,
+        CancellationToken ct);
+
+    Task<WorkerHostVersionState> GetSelectedAndProvisionedWorkerHostVersionsAsync(
+        string hostKey,
+        string componentKey,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Outcome of <see cref="IArtifactZipImportRepository.RegisterImportedArtifactWithConfigurationAsync" />.
+/// <paramref name="ContinuityCopy" /> is set only when the package shipped no configuration files
+/// and the continuity copy ran.
+/// </summary>
+public sealed record ImportedArtifactRegistration(
+    int ArtifactId,
+    int ConfigurationFileCount,
+    ArtifactConfigurationCarryForwardResult CarryForward,
+    ArtifactConfigurationContinuityCopyResult? ContinuityCopy);

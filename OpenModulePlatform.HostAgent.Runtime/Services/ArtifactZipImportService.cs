@@ -41,7 +41,7 @@ public sealed class ArtifactZipImportService
     private static readonly TimeSpan ArtifactContentHashAuditInterval = TimeSpan.FromHours(6);
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
-    private readonly OmpHostArtifactRepository _repository;
+    private readonly IArtifactZipImportRepository _repository;
     private readonly ILogger<ArtifactZipImportService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, ImportObservation> _importObservations = new(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +50,17 @@ public sealed class ArtifactZipImportService
     public ArtifactZipImportService(
         IOptionsMonitor<HostAgentSettings> settings,
         OmpHostArtifactRepository repository,
+        ILogger<ArtifactZipImportService> logger,
+        TimeProvider? timeProvider = null)
+        : this(settings, (IArtifactZipImportRepository)repository, logger, timeProvider)
+    {
+    }
+
+    // The container only sees public constructors, so production keeps resolving the concrete
+    // repository above; tests reach the import gates through this one with a fake.
+    internal ArtifactZipImportService(
+        IOptionsMonitor<HostAgentSettings> settings,
+        IArtifactZipImportRepository repository,
         ILogger<ArtifactZipImportService> logger,
         TimeProvider? timeProvider = null)
     {
@@ -609,8 +620,8 @@ public sealed class ArtifactZipImportService
         }
         finally
         {
-            TryDelete(tempImportPath);
-            TryDelete(stagingPath);
+            TryDeleteImportScratch(tempImportPath);
+            TryDeleteImportScratch(stagingPath);
             if (!File.Exists(importPath))
             {
                 _importObservations.Remove(importPath);
@@ -1527,7 +1538,7 @@ public sealed class ArtifactZipImportService
         return string.Equals(definition.ModuleKey, "omp_core", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<ArtifactZipImportResult> ImportArtifactPackageAsync(
+    internal async Task<ArtifactZipImportResult> ImportArtifactPackageAsync(
         HostAgentSettings settings,
         HostAgentArtifactZipImportSettings importSettings,
         FilenameMetadata metadata,
@@ -1719,7 +1730,11 @@ public sealed class ArtifactZipImportService
             string? emptyDiffDuplicateNote = null;
             if (!adoptedExistingContent)
             {
-                var duplicate = await _repository.FindImportedArtifactBySha256Async(contentHash, cancellationToken);
+                var duplicate = await _repository.FindImportedArtifactBySha256Async(
+                    contentHash,
+                    app.AppId,
+                    metadata.PackageType,
+                    cancellationToken);
                 if (duplicate is not null)
                 {
                     // Deterministic builds plus lockstep consumer bumps legitimately produce a NEW
@@ -1784,16 +1799,23 @@ public sealed class ArtifactZipImportService
                 }
             }
 
-            int? registeredArtifactId;
+            // Registration and its configuration rows (package files plus carry-forward, or
+            // the continuity copy) commit in ONE transaction. A crash between them used to
+            // leave the identity registered without the carried rows, and the retry took the
+            // existing-identity path above, which never carries forward (R4-D4 closed the gap
+            // between replace and carry-forward, not the one before them).
+            ImportedArtifactRegistration? registration;
             try
             {
-                registeredArtifactId = await _repository.RegisterImportedArtifactAsync(
+                registration = await _repository.RegisterImportedArtifactWithConfigurationAsync(
                     app.AppId,
                     metadata.Version,
                     metadata.PackageType,
                     metadata.TargetName,
                     relativePath,
                     contentHash,
+                    package.ConfigurationFiles,
+                    importSettings.CopyConfigurationFilesFromPreviousVersion,
                     cancellationToken);
             }
             catch (SqlException ex) when (ex.Number is 2601 or 2627)
@@ -1801,10 +1823,10 @@ public sealed class ArtifactZipImportService
                 // Defense in depth: the unique index
                 // UX_omp_Artifacts_App_Version_Package_Target rejected a
                 // concurrent duplicate identity.
-                registeredArtifactId = null;
+                registration = null;
             }
 
-            if (registeredArtifactId is null)
+            if (registration is null)
             {
                 // A concurrent import won the race between the identity check
                 // above and the atomic register. Re-read the winner's row and
@@ -1846,33 +1868,20 @@ public sealed class ArtifactZipImportService
                     contentHash);
             }
 
-            var artifactId = registeredArtifactId.Value;
+            var artifactId = registration.ArtifactId;
 
-            var copiedConfigurationFiles = 0;
+            var copiedConfigurationFiles = registration.ConfigurationFileCount;
             string? configurationCarryForwardMessage = null;
             if (package.ConfigurationFiles.Count > 0)
             {
-                // Replace + carry-forward in one transaction so a crash between
-                // them can no longer register the new version with pristine rows
-                // and permanently drop the previous version's operator edits on a
-                // later existing-identity re-import (R4-D4).
-                var (replacedCount, carryForward) = await _repository.ReplaceAndCarryForwardArtifactConfigurationFilesAsync(
-                    artifactId,
-                    package.ConfigurationFiles,
-                    cancellationToken);
-                copiedConfigurationFiles = replacedCount;
-                configurationCarryForwardMessage = carryForward.BuildImportMessage();
+                configurationCarryForwardMessage = registration.CarryForward.BuildImportMessage();
             }
-            else if (importSettings.CopyConfigurationFilesFromPreviousVersion)
+            else if (registration.ContinuityCopy is { } continuityCopy)
             {
                 // The source is the artifact the slot's pointers referenced
                 // before this import -- not whichever sibling was created most
                 // recently -- with a per-path operator-delta fallback when no
                 // pointer names a source.
-                var continuityCopy = await _repository.CopyConfigurationFilesFromContinuitySourceAsync(
-                    artifactId,
-                    cancellationToken);
-                copiedConfigurationFiles = continuityCopy.CopiedCount;
                 if (continuityCopy.CopiedCount > 0)
                 {
                     _logger.LogInformation(
@@ -1958,7 +1967,7 @@ public sealed class ArtifactZipImportService
     private static Task<string> ComputeDirectorySha256Async(string path, CancellationToken cancellationToken)
         => ArtifactHash.ComputeSha256Async(path, cancellationToken);
 
-    private static async Task<bool> RestoreMissingImportedArtifactContentAsync(
+    internal static async Task<bool> RestoreMissingImportedArtifactContentAsync(
         string packageArtifactContentPath,
         string existingFinalPath,
         string existingRelativePath,
@@ -2002,7 +2011,12 @@ public sealed class ArtifactZipImportService
 
         try
         {
-            // Same reparse gap as the primary write path above (R8-P2-1).
+            // Same reparse gap as the primary write path above (R8-P2-1), and the same two
+            // checks: MoveDirectory creates the parent, and a junction there lands the
+            // restored tree outside the artifact store just as one on the target does.
+            var existingFinalParent = Path.GetDirectoryName(existingFinalPath)!;
+            EnsureNotReparsePoint(existingFinalParent, "artifact store target parent");
+            Directory.CreateDirectory(existingFinalParent);
             EnsureNotReparsePoint(existingFinalPath, "artifact store target");
             MoveDirectory(packageArtifactContentPath, existingFinalPath);
             return true;
@@ -2673,7 +2687,36 @@ public sealed class ArtifactZipImportService
             comparison);
     }
 
-    private static void TryDelete(string path)
+    private static void TryDelete(string path) => TryDeleteCore(path);
+
+    /// <summary>
+    /// Removes this import's own scratch copy and staging tree (the per-file
+    /// .hostagent-import-staging entries, including every .artifact-staging extraction below
+    /// them). The paths are generated by this service, so nothing deployed is ever a candidate.
+    /// </summary>
+    /// <remarks>
+    /// Failures used to be swallowed without a trace, so a staging tree held by a scanner or
+    /// an ACL problem grew the artifact store silently. One warning per path, at most two per
+    /// imported file and therefore bounded by MaxFilesPerCycle; the aged-entry sweep retries.
+    /// </remarks>
+    internal bool TryDeleteImportScratch(string path)
+    {
+        var failure = TryDeleteCore(path);
+        if (failure is null)
+        {
+            return true;
+        }
+
+        _logger.LogWarning(
+            failure,
+            "HostAgent import could not remove its staging path; the aged-entry sweep will retry it. Path={Path}, ErrorType={ErrorType}, HResult={HResult}",
+            path,
+            failure.GetType().Name,
+            failure.HResult);
+        return false;
+    }
+
+    private static Exception? TryDeleteCore(string path)
     {
         try
         {
@@ -2685,14 +2728,16 @@ public sealed class ArtifactZipImportService
             {
                 Directory.Delete(path, recursive: true);
             }
+
+            return null;
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // Best effort cleanup after a failed import.
+            return ex;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
-            // Best effort cleanup after a failed import.
+            return ex;
         }
     }
 
@@ -2835,7 +2880,7 @@ public sealed class ArtifactZipImportService
         string? SkipMessage,
         string? FailureMessage);
 
-    private sealed record FilenameMetadata(
+    internal sealed record FilenameMetadata(
         string ModuleKey,
         string AppKey,
         string PackageType,

@@ -665,7 +665,7 @@ public sealed class ServiceAppDeploymentService
 
             EnsureWindowsService(deployment, serviceName, targetExecutablePath);
 
-            var postDeployIdentityCheck = await EnsureServiceIdentityAsync(
+            var postDeployIdentityCheck = EnsureServiceIdentity(
                 settings,
                 deployment,
                 serviceName,
@@ -815,7 +815,7 @@ public sealed class ServiceAppDeploymentService
             }
         }
 
-        var identityCheck = await EnsureServiceIdentityAsync(
+        var identityCheck = EnsureServiceIdentity(
             settings,
             deployment,
             serviceName,
@@ -1438,7 +1438,7 @@ public sealed class ServiceAppDeploymentService
     }
 
     /// <summary>
-    /// True when <see cref="EnsureServiceIdentityAsync"/> would change the service logon
+    /// True when <see cref="EnsureServiceIdentity"/> would change the service logon
     /// account on this cycle: a configured desired identity, an existing service whose
     /// account differs, and an automation mode that allows the repair.
     /// </summary>
@@ -1465,7 +1465,10 @@ public sealed class ServiceAppDeploymentService
                 && deployment.IdentityRepairRequestedUtc.HasValue);
     }
 
-    private async Task<ServiceIdentityCheckResult> EnsureServiceIdentityAsync(
+    // Synchronous on purpose: every step is a blocking SCM call. It used to be declared async
+    // with nothing to await, and its token was never observed, so a shutdown arriving mid-cycle
+    // could still rewrite a service logon account.
+    private ServiceIdentityCheckResult EnsureServiceIdentity(
         HostAgentSettings settings,
         ServiceAppDeploymentDescriptor deployment,
         string serviceName,
@@ -1546,6 +1549,7 @@ public sealed class ServiceAppDeploymentService
                 throw new InvalidOperationException("Service app identity repair requires Windows service management.");
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             ApplyDesiredServiceIdentity(settings, serviceName, desiredIdentity);
             var updatedIdentity = GetServiceStartName(serviceName);
             if (!AccountsEqual(updatedIdentity, desiredIdentity.UserName))

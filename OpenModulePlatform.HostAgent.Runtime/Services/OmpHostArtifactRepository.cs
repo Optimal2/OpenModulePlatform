@@ -11,7 +11,7 @@ using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
-public sealed partial class OmpHostArtifactRepository : IOmpHostArtifactRepository
+public sealed partial class OmpHostArtifactRepository : IOmpHostArtifactRepository, IArtifactZipImportRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
     private const int MinimumLeaseSeconds = 30;
@@ -1336,8 +1336,13 @@ ORDER BY a.AppId;";
 
     public async Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactBySha256Async(
         string sha256,
+        int appId,
+        string packageType,
         CancellationToken ct)
     {
+        // The same-component row first: TOP (1) by ArtifactId alone returned whichever row
+        // was registered first, so one older row of ANOTHER component with the same bytes
+        // turned a legitimate empty-diff bump of this component into a rejection.
         const string sql = @"
 SELECT TOP (1)
        ar.ArtifactId,
@@ -1351,12 +1356,15 @@ SELECT TOP (1)
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 WHERE ar.Sha256 = @sha256
-ORDER BY ar.ArtifactId;";
+ORDER BY CASE WHEN ar.AppId = @appId AND ar.PackageType = @packageType THEN 0 ELSE 1 END,
+         ar.ArtifactId;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@sha256", sha256);
+        cmd.Parameters.AddWithValue("@appId", appId);
+        cmd.Parameters.AddWithValue("@packageType", packageType);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -1433,7 +1441,54 @@ ORDER BY ar.ArtifactId;";
     /// identity was registered by a concurrent import. The unique index
     /// UX_omp_Artifacts_App_Version_Package_Target is the last-line defense.
     /// </summary>
-    public async Task<int?> RegisterImportedArtifactAsync(
+    public async Task<ImportedArtifactRegistration?> RegisterImportedArtifactWithConfigurationAsync(
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        string relativePath,
+        string sha256,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        bool copyFromContinuitySource,
+        CancellationToken ct)
+    {
+        // Registration and the configuration rows commit together. They used to be separate
+        // round-trips: a crash after the register left the identity with no (or pristine) rows,
+        // and the retry took the existing-identity path, which deliberately never carries
+        // forward -- the previous version's operator edits were lost for good.
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        var artifactId = await RegisterImportedArtifactCoreAsync(conn, tx, appId, version, packageType, targetName, relativePath, sha256, ct);
+        if (artifactId is null)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        var carryForward = ArtifactConfigurationCarryForwardResult.Empty;
+        ArtifactConfigurationContinuityCopyResult? continuityCopy = null;
+        var configurationFileCount = 0;
+        if (configurationFiles.Count > 0)
+        {
+            await ReplaceArtifactConfigurationFilesCoreAsync(conn, tx, artifactId.Value, configurationFiles, ct);
+            carryForward = await CarryForwardArtifactConfigurationFilesCoreAsync(conn, tx, artifactId.Value, ct);
+            configurationFileCount = configurationFiles.Count;
+        }
+        else if (copyFromContinuitySource)
+        {
+            continuityCopy = await CopyConfigurationFilesFromContinuitySourceCoreAsync(conn, tx, artifactId.Value, ct);
+            configurationFileCount = continuityCopy.CopiedCount;
+        }
+
+        await tx.CommitAsync(ct);
+        return new ImportedArtifactRegistration(artifactId.Value, configurationFileCount, carryForward, continuityCopy);
+    }
+
+    private static async Task<int?> RegisterImportedArtifactCoreAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
         int appId,
         string version,
         string packageType,
@@ -1475,9 +1530,7 @@ WHERE NOT EXISTS
 
 SELECT ArtifactId FROM @newArtifactIds;";
 
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@appId", appId);
         cmd.Parameters.AddWithValue("@version", version);
         cmd.Parameters.AddWithValue("@packageType", packageType);
@@ -1528,9 +1581,19 @@ WHERE ArtifactId = @artifactId;";
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+        return await CopyConfigurationFilesFromContinuitySourceCoreAsync(conn, null, artifactId, ct);
+    }
+
+    private static async Task<ArtifactConfigurationContinuityCopyResult> CopyConfigurationFilesFromContinuitySourceCoreAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int artifactId,
+        CancellationToken ct)
+    {
         await using var cmd = new SqlCommand(
             ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource,
-            conn);
+            conn,
+            tx);
         cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -1580,31 +1643,37 @@ WHERE ArtifactId = @artifactId;";
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
         await ReplaceArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, configurationFiles, ct);
-
-        string? sourceVersion = null;
-        var items = new List<ArtifactConfigurationCarryForwardItem>();
-        await using (var carryForward = new SqlCommand(
-            ArtifactConfigurationFileImportSql.CarryForwardOperatorEdits,
-            conn,
-            tx))
-        {
-            carryForward.Parameters.AddWithValue("@ArtifactId", artifactId);
-            await using var reader = await carryForward.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                sourceVersion ??= reader.IsDBNull(0) ? null : reader.GetString(0);
-                items.Add(new ArtifactConfigurationCarryForwardItem(
-                    reader.GetString(1),
-                    Enum.Parse<ArtifactConfigurationCarryForwardOutcome>(reader.GetString(2))));
-            }
-        }
+        var carryForwardResult = await CarryForwardArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, ct);
 
         await tx.CommitAsync(ct);
+        return (configurationFiles.Count, carryForwardResult);
+    }
 
-        var carryForwardResult = items.Count == 0
+    private static async Task<ArtifactConfigurationCarryForwardResult> CarryForwardArtifactConfigurationFilesCoreAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int artifactId,
+        CancellationToken ct)
+    {
+        string? sourceVersion = null;
+        var items = new List<ArtifactConfigurationCarryForwardItem>();
+        await using var carryForward = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CarryForwardOperatorEdits,
+            conn,
+            tx);
+        carryForward.Parameters.AddWithValue("@ArtifactId", artifactId);
+        await using var reader = await carryForward.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            sourceVersion ??= reader.IsDBNull(0) ? null : reader.GetString(0);
+            items.Add(new ArtifactConfigurationCarryForwardItem(
+                reader.GetString(1),
+                Enum.Parse<ArtifactConfigurationCarryForwardOutcome>(reader.GetString(2))));
+        }
+
+        return items.Count == 0
             ? ArtifactConfigurationCarryForwardResult.Empty
             : new ArtifactConfigurationCarryForwardResult(sourceVersion, items);
-        return (configurationFiles.Count, carryForwardResult);
     }
 
     private static async Task ReplaceArtifactConfigurationFilesCoreAsync(
@@ -1614,9 +1683,13 @@ WHERE ArtifactId = @artifactId;";
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
         CancellationToken ct)
     {
+        // Only rows a package delivered (PackageFileContent set) are candidates for removal.
+        // A row without a baseline was created by an operator in the Portal, or predates the
+        // baseline column; the same-identity re-import used to delete it whenever the package
+        // did not ship that path, which silently dropped operator-owned configuration.
         var existingPaths = new List<string>();
         await using (var select = new SqlCommand(
-            ArtifactConfigurationFileImportSql.SelectConfigurationFilePaths,
+            ArtifactConfigurationFileImportSql.SelectPackageDeliveredConfigurationFilePaths,
             conn,
             tx))
         {
@@ -4052,7 +4125,45 @@ WITH Desired AS
 -- DIFFERENT desired local paths are two distinct provisioning targets, so
 -- MIN(DesiredLocalPath) silently dropped the second and it never converged
 -- (R3-D9). Each distinct target now gets its own row.
-SELECT TOP (@maxArtifacts)
+, Grouped AS
+(
+    SELECT
+        HostId,
+        ArtifactId,
+        Version,
+        PackageType,
+        TargetName,
+        RelativePath,
+        Sha256,
+        MIN(RequirementKey) AS RequirementKey,
+        DesiredLocalPath
+    FROM Desired
+    GROUP BY HostId, ArtifactId, Version, PackageType, TargetName, RelativePath, Sha256, DesiredLocalPath
+)
+-- The page is chosen in rotation order: rows after the previous page's last
+-- (ArtifactId, DesiredLocalPath) first, then the wrapped head. A fixed order
+-- with TOP excluded the same tail every cycle, so it never provisioned.
+, Ranked AS
+(
+    SELECT
+        *,
+        ROW_NUMBER() OVER
+        (
+            ORDER BY
+                CASE
+                    WHEN @hasRotationCursor = 1
+                         AND (ArtifactId < @rotationArtifactId
+                              OR (ArtifactId = @rotationArtifactId
+                                  AND ISNULL(DesiredLocalPath, N'') <= @rotationDesiredLocalPath))
+                        THEN 1
+                    ELSE 0
+                END,
+                ArtifactId,
+                ISNULL(DesiredLocalPath, N'')
+        ) AS RotationRank
+    FROM Grouped
+)
+SELECT
     HostId,
     ArtifactId,
     Version,
@@ -4060,10 +4171,15 @@ SELECT TOP (@maxArtifacts)
     TargetName,
     RelativePath,
     Sha256,
-    MIN(RequirementKey) AS RequirementKey,
-    DesiredLocalPath
-FROM Desired
-GROUP BY HostId, ArtifactId, Version, PackageType, TargetName, RelativePath, Sha256, DesiredLocalPath
+    RequirementKey,
+    DesiredLocalPath,
+    RotationRank
+FROM
+(
+    SELECT TOP (@maxArtifacts) *
+    FROM Ranked
+    ORDER BY RotationRank
+) page
 ORDER BY PackageType, TargetName, Version, ArtifactId;";
 
         var result = new List<ArtifactDescriptor>();
@@ -4075,11 +4191,19 @@ ORDER BY PackageType, TargetName, Version, ArtifactId;";
         cmd.Parameters.AddWithValue("@includeAppInstanceArtifacts", includeAppInstanceArtifacts);
         cmd.Parameters.AddWithValue("@includeExplicitRequirements", includeExplicitRequirements);
         cmd.Parameters.AddWithValue("@maxArtifacts", maxArtifacts);
+        var rotationKey = $"{hostKey}|{includeAppInstanceArtifacts}|{includeExplicitRequirements}";
+        _desiredArtifactRotation.TryGetValue(rotationKey, out var rotationCursor);
+        cmd.Parameters.AddWithValue("@hasRotationCursor", rotationCursor is not null);
+        cmd.Parameters.AddWithValue("@rotationArtifactId", rotationCursor?.ArtifactId ?? 0);
+        cmd.Parameters.Add("@rotationDesiredLocalPath", SqlDbType.NVarChar, 500).Value =
+            rotationCursor?.DesiredLocalPath ?? string.Empty;
 
+        DesiredArtifactRotationCursor? lastInPage = null;
+        long lastRank = 0;
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            result.Add(new ArtifactDescriptor
+            var descriptor = new ArtifactDescriptor
             {
                 HostId = rdr.GetGuid(0),
                 ArtifactId = rdr.GetInt32(1),
@@ -4090,11 +4214,41 @@ ORDER BY PackageType, TargetName, Version, ArtifactId;";
                 Sha256 = rdr.IsDBNull(6) ? null : rdr.GetString(6),
                 RequirementKey = rdr.IsDBNull(7) ? string.Empty : rdr.GetString(7),
                 DesiredLocalPath = rdr.IsDBNull(8) ? null : rdr.GetString(8)
-            });
+            };
+            result.Add(descriptor);
+
+            var rank = rdr.GetInt64(9);
+            if (rank > lastRank)
+            {
+                lastRank = rank;
+                lastInPage = new DesiredArtifactRotationCursor(descriptor.ArtifactId, descriptor.DesiredLocalPath ?? string.Empty);
+            }
+        }
+
+        // A full page may have left rows out: the next call starts after its last row. A
+        // short page held everything, so the next call starts from the beginning again.
+        if (maxArtifacts > 0 && result.Count >= maxArtifacts && lastInPage is not null)
+        {
+            _desiredArtifactRotation[rotationKey] = lastInPage;
+        }
+        else
+        {
+            _desiredArtifactRotation.TryRemove(rotationKey, out _);
         }
 
         return result;
     }
+
+    /// <summary>
+    /// Where the previous capped <see cref="GetDesiredArtifactsAsync" /> page ended, per host
+    /// and query shape. In memory on purpose: a restart starts from the beginning, which
+    /// costs one cycle of rotation and nothing else. The repository is a singleton in the
+    /// HostAgent container, so the cursor lives as long as the engine loop that reads it.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DesiredArtifactRotationCursor> _desiredArtifactRotation =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed record DesiredArtifactRotationCursor(int ArtifactId, string DesiredLocalPath);
 
     public async Task<IReadOnlyList<DeploySetConsistencyCheckResult>> GetDeploySetConsistencyResultsAsync(
         string hostKey,
@@ -8206,6 +8360,29 @@ ORDER BY
         string WidgetVersion,
         IReadOnlyList<int> PermissionIds,
         IReadOnlyList<int> RoleIds);
+
+    // The import interface is internal, so these internal members are bridged explicitly.
+    Task<ModuleDefinitionSqlRepairScope> IArtifactZipImportRepository.BeginModuleDefinitionSqlRepairAsync(CancellationToken ct)
+        => BeginModuleDefinitionSqlRepairAsync(ct);
+
+    Task<int> IArtifactZipImportRepository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        IReadOnlySet<string>? scriptKeysToRepair,
+        CancellationToken ct,
+        SqlConnection conn)
+        => ExecuteImportedModuleDefinitionSqlRepairsAsync(moduleDefinitionDocumentId, scriptKeysToRepair, ct, conn);
+
+    Task<IReadOnlyList<string>> IArtifactZipImportRepository.GetPendingDefinitionScriptsAsync(int documentId, SqlConnection conn, CancellationToken ct)
+        => GetPendingDefinitionScriptsAsync(documentId, conn, ct);
+
+    Task<int> IArtifactZipImportRepository.InsertMissingPortalAppEntriesAsync(CancellationToken ct, Action<int>? onAttempt)
+        => InsertMissingPortalAppEntriesAsync(ct, onAttempt);
+
+    Task<WorkerHostVersionState> IArtifactZipImportRepository.GetSelectedAndProvisionedWorkerHostVersionsAsync(
+        string hostKey,
+        string componentKey,
+        CancellationToken cancellationToken)
+        => GetSelectedAndProvisionedWorkerHostVersionsAsync(hostKey, componentKey, cancellationToken);
 }
 
 internal sealed record WorkerHostVersionState(string? SelectedVersion, string? ProvisionedVersion);

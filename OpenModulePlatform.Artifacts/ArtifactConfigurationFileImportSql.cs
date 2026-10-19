@@ -86,6 +86,19 @@ FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactId = @ArtifactId;";
 
     /// <summary>
+    /// Reads the relative paths of the package-delivered rows (those with a
+    /// PackageFileContent baseline) for one artifact. A replacement may remove
+    /// only these: a row without a baseline is operator-created or of unknown
+    /// legacy lineage, and a package that does not ship that path says nothing
+    /// about it. Parameters: @ArtifactId.
+    /// </summary>
+    public const string SelectPackageDeliveredConfigurationFilePaths = @"
+SELECT RelativePath
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @ArtifactId
+  AND PackageFileContent IS NOT NULL;";
+
+    /// <summary>
     /// Resolves the configuration continuity source for the artifact identified
     /// by @ArtifactId. Declares and fills @AppId, @PackageType, @TargetName,
     /// @SourceArtifactId, @SourceVersion and the @FallbackRows table variable;

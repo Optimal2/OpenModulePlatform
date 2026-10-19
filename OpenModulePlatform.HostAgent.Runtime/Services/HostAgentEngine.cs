@@ -208,14 +208,14 @@ public sealed class HostAgentEngine
                 hostKey,
                 artifacts.Count);
 
-            // (R5-D7) The desired-artifact query is capped at MaxArtifactsPerCycle
-            // with a deterministic order, so when more artifacts are desired than the
-            // cap the same tail is excluded every cycle and never provisions. Surface
-            // the truncation so it is not silent.
+            // (R5-D7) The desired-artifact query is capped at MaxArtifactsPerCycle. The
+            // repository rotates the page across cycles, so a tail beyond the cap is reached
+            // on a later cycle instead of never; surface the truncation so the slower
+            // convergence is not silent.
             if (settings.MaxArtifactsPerCycle > 0 && artifacts.Count >= settings.MaxArtifactsPerCycle)
             {
                 _logger.LogWarning(
-                    "Desired artifact count reached the per-cycle cap; additional desired artifacts may be truncated and will not provision this cycle. HostKey={HostKey}, MaxArtifactsPerCycle={MaxArtifactsPerCycle}. Increase HostAgent:MaxArtifactsPerCycle if this persists.",
+                    "Desired artifact count reached the per-cycle cap; additional desired artifacts are provisioned on later cycles as the page rotates. HostKey={HostKey}, MaxArtifactsPerCycle={MaxArtifactsPerCycle}. Increase HostAgent:MaxArtifactsPerCycle if this persists.",
                     hostKey,
                     settings.MaxArtifactsPerCycle);
             }
