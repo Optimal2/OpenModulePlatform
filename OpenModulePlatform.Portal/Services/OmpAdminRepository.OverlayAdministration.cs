@@ -31,7 +31,9 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
             documentsExist ? await GetConfigOverlayDocumentsAsync(ct) : [], hasScope,
             AppInstances: await GetAppInstancesAsync(ct),
             FileSummaries: documentsExist ? await GetOverlayFileSummariesAsync(ct) : [],
-            HostDeploymentAssignments: await GetOverlayHostDeploymentAssignmentsAsync(ct));
+            HostDeploymentAssignments: await GetOverlayHostDeploymentAssignmentsAsync(ct),
+            DeploymentContexts: await GetOverlayDeploymentContextsAsync(ct),
+            DisabledAppInstanceIds: await GetOverlayDisabledAppInstanceIdsAsync(ct));
     }
 
     async Task<OverlayAdminDetail?> IConfigOverlayAdminStore.DetailAsync(int id, CancellationToken ct)
@@ -116,6 +118,90 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
         var rows = new List<HostDeploymentAssignmentRow>();
         while (await rdr.ReadAsync(ct))
             rows.Add(new HostDeploymentAssignmentRow { HostKey = rdr.GetString(0), HostTemplateKey = rdr.GetString(1), IsActive = rdr.GetBoolean(2) });
+        return rows;
+    }
+
+    // Disabled app instances (ai.IsEnabled = 0): the HostAgent never deploys
+    // them, so the impact view must not fan them out to hosts. Read as one id
+    // list so the impact service stays free of per-instance reads. Fails soft
+    // when the instance schema is absent.
+    private async Task<IReadOnlyList<Guid>> GetOverlayDisabledAppInstanceIdsAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await TableExistsAsync(conn, "omp.AppInstances", ct)) return [];
+        const string sql = "SELECT AppInstanceId FROM omp.AppInstances WHERE IsEnabled = 0;";
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var ids = new List<Guid>();
+        while (await rdr.ReadAsync(ct)) ids.Add(rdr.GetGuid(0));
+        return ids;
+    }
+
+    // The two further deployment branches of the HostAgent's desired-state
+    // query (OmpHostArtifactRepository.GetDesiredArtifactsAsync in
+    // OpenModulePlatform.HostAgent.Runtime), read in one shared query so no
+    // per-host reads: the worker-instance branch
+    // (COALESCE(wi.ArtifactId, ai.ArtifactId), worker lines 3999-4028) and the
+    // explicit host-artifact-requirement branch (har.HostId, lines 4042-4049).
+    // Each branch keeps the agent's filters: enabled/allowed instance and
+    // worker, enabled artifact with a non-empty RelativePath, and only enabled
+    // hosts (the agent resolves @hostId from enabled hosts, lines 3921-3924).
+    // Fails soft when any of the optional deployment tables is absent.
+    private async Task<IReadOnlyList<OverlayDeploymentContextRow>> GetOverlayDeploymentContextsAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await TableExistsAsync(conn, "omp.WorkerInstances", ct)
+            || !await TableExistsAsync(conn, "omp.HostArtifactRequirements", ct)
+            || !await TableExistsAsync(conn, "omp.AppInstances", ct)
+            || !await TableExistsAsync(conn, "omp.HostDeploymentAssignments", ct))
+            return [];
+        const string sql = """
+            SELECT h.HostKey, a.AppKey, ai.AppInstanceKey, ar.ArtifactId, ar.Version,
+                   N'workerinstance' AS SourceKind, wi.WorkerInstanceKey AS SourceKey
+            FROM omp.WorkerInstances wi
+            INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
+            INNER JOIN omp.Artifacts ar ON ar.ArtifactId = COALESCE(wi.ArtifactId, ai.ArtifactId)
+            INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+            INNER JOIN omp.Hosts h
+                ON (wi.HostId = h.HostId)
+                OR (wi.HostId IS NULL AND ai.HostId = h.HostId)
+                OR (wi.HostId IS NULL AND ai.HostId IS NULL AND ai.TargetHostTemplateId IS NOT NULL
+                    AND EXISTS (SELECT 1 FROM omp.HostDeploymentAssignments hda
+                                WHERE hda.HostId = h.HostId
+                                  AND hda.HostTemplateId = ai.TargetHostTemplateId
+                                  AND hda.IsActive = 1))
+            WHERE h.IsEnabled = 1
+              AND ai.IsEnabled = 1 AND ai.IsAllowed = 1
+              AND wi.IsEnabled = 1 AND wi.IsAllowed = 1
+              AND ar.IsEnabled = 1
+              AND ar.RelativePath IS NOT NULL AND LTRIM(RTRIM(ar.RelativePath)) <> N''
+
+            UNION ALL
+
+            SELECT h.HostKey, a.AppKey, CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
+                   ar.ArtifactId, ar.Version,
+                   N'hostrequirement' AS SourceKind, har.RequirementKey AS SourceKey
+            FROM omp.HostArtifactRequirements har
+            INNER JOIN omp.Artifacts ar ON ar.ArtifactId = har.ArtifactId
+            INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+            INNER JOIN omp.Hosts h ON h.HostId = har.HostId
+            WHERE h.IsEnabled = 1
+              AND har.IsEnabled = 1
+              AND ar.IsEnabled = 1
+              AND ar.RelativePath IS NOT NULL AND LTRIM(RTRIM(ar.RelativePath)) <> N'';
+            """;
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<OverlayDeploymentContextRow>();
+        while (await rdr.ReadAsync(ct))
+            rows.Add(new(
+                rdr.GetString(0), rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                rdr.GetInt32(3), rdr.GetString(4),
+                rdr.GetString(5),
+                rdr.IsDBNull(6) ? null : rdr.GetString(6)));
         return rows;
     }
 

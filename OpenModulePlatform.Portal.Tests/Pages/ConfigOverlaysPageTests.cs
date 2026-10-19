@@ -414,12 +414,12 @@ public sealed class ConfigOverlaysPageTests
         var allHosts = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
         var snapshot = new OverlayAdminSnapshot(true,
             [new HostRow { HostKey = "host-a", IsEnabled = true }, new HostRow { HostKey = "host-b", IsEnabled = true }],
-            [new ArtifactRow { ArtifactId = 42, ModuleKey = "module", AppKey = "app", Version = "1.10.0", PackageType = "web-app", IsEnabled = true }],
+            [new ArtifactRow { ArtifactId = 42, ModuleKey = "module", AppKey = "app", Version = "1.10.0", PackageType = "web-app", IsEnabled = true, RelativePath = "app" }],
             [host, allHosts], true,
             [new AppInstanceRow { AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
-                AppKey = "app", AppInstanceKey = "web-a", DisplayName = "web-a", AppType = "web", HostKey = "host-a", ArtifactId = 42 },
+                AppKey = "app", AppInstanceKey = "web-a", DisplayName = "web-a", AppType = "web", HostKey = "host-a", ArtifactId = 42, IsAllowed = true },
              new AppInstanceRow { AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
-                AppKey = "app", AppInstanceKey = "web-b", DisplayName = "web-b", AppType = "web", HostKey = "host-b", ArtifactId = 42 }]);
+                AppKey = "app", AppInstanceKey = "web-b", DisplayName = "web-b", AppType = "web", HostKey = "host-b", ArtifactId = 42, IsAllowed = true }]);
         var store = new OverlayAdminFakeStore { Snapshot = snapshot };
         store.Details[1] = new(host, "", [ConfigOverlayAdministrationTests.File(1, 1, """{"host":true}""")]);
         store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);

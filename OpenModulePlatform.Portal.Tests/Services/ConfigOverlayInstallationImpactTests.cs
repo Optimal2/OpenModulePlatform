@@ -18,14 +18,15 @@ public sealed class ConfigOverlayInstallationImpactTests
         string app = "app", string package = "web-app", bool enabled = true) => new()
     {
         ArtifactId = id, ModuleKey = module, AppKey = app, Version = version,
-        PackageType = package, IsEnabled = enabled, CreatedUtc = ConfigOverlayAdministrationTests.Now,
+        PackageType = package, IsEnabled = enabled, RelativePath = "app",
+        CreatedUtc = ConfigOverlayAdministrationTests.Now,
     };
 
     private static AppInstanceRow App(string host, string instanceKey, int? artifactId, string appKey = "app") => new()
     {
         AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
         AppKey = appKey, AppInstanceKey = instanceKey, DisplayName = instanceKey,
-        AppType = "web", HostKey = host, ArtifactId = artifactId,
+        AppType = "web", HostKey = host, ArtifactId = artifactId, IsAllowed = true,
     };
 
     // Host-neutral app instance: no HostId and no target host template, which
@@ -34,7 +35,7 @@ public sealed class ConfigOverlayInstallationImpactTests
     {
         AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
         AppKey = appKey, AppInstanceKey = instanceKey, DisplayName = instanceKey,
-        AppType = "web", HostKey = null, TargetHostTemplateKey = null, ArtifactId = artifactId,
+        AppType = "web", HostKey = null, TargetHostTemplateKey = null, ArtifactId = artifactId, IsAllowed = true,
     };
 
     // Template-targeted app instance: no direct HostId, a target host template
@@ -43,7 +44,7 @@ public sealed class ConfigOverlayInstallationImpactTests
     {
         AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
         AppKey = appKey, AppInstanceKey = instanceKey, DisplayName = instanceKey,
-        AppType = "web", HostKey = null, TargetHostTemplateKey = templateKey, ArtifactId = artifactId,
+        AppType = "web", HostKey = null, TargetHostTemplateKey = templateKey, ArtifactId = artifactId, IsAllowed = true,
     };
 
     private static HostDeploymentAssignmentRow Assignment(string hostKey, string templateKey, bool active = true) => new()
@@ -51,9 +52,16 @@ public sealed class ConfigOverlayInstallationImpactTests
         HostKey = hostKey, HostTemplateKey = templateKey, IsActive = active,
     };
 
+    // A worker-instance ("workerinstance") or explicit host-artifact-requirement
+    // ("hostrequirement") deployment row, as the shared repository query reads it.
+    private static OverlayDeploymentContextRow Deployment(string hostKey, int artifactId,
+        string sourceKind, string? sourceKey = null, string appKey = "app", string? appInstanceKey = null,
+        string version = "1.10.0") => new(hostKey, appKey, appInstanceKey, artifactId, version, sourceKind, sourceKey);
+
     private static OverlayAdminSnapshot Snapshot(ConfigOverlayDocumentRow[] overlays, HostRow[] hosts,
-        ArtifactRow[] artifacts, AppInstanceRow[] apps, HostDeploymentAssignmentRow[]? assignments = null)
-        => new(true, hosts, artifacts, overlays, true, apps, null, assignments);
+        ArtifactRow[] artifacts, AppInstanceRow[] apps, HostDeploymentAssignmentRow[]? assignments = null,
+        OverlayDeploymentContextRow[]? deploymentContexts = null, Guid[]? disabledAppInstanceIds = null)
+        => new(true, hosts, artifacts, overlays, true, apps, null, assignments, deploymentContexts, disabledAppInstanceIds);
 
     private static OverlayAdminFakeStore Store(OverlayAdminSnapshot snapshot)
         => new() { Snapshot = snapshot };
@@ -190,7 +198,7 @@ public sealed class ConfigOverlayInstallationImpactTests
         {
             AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
             AppKey = "app", AppInstanceKey = "orphan", DisplayName = "orphan", AppType = "web",
-            HostKey = null, TargetHostTemplateKey = "unassigned-template", ArtifactId = 42,
+            HostKey = null, TargetHostTemplateKey = "unassigned-template", ArtifactId = 42, IsAllowed = true,
         };
         var snapshot = Snapshot([overlay],
             [Host("host-a"), Host("host-c")],
@@ -425,5 +433,100 @@ public sealed class ConfigOverlayInstallationImpactTests
         Assert.Equal("(no host assigned)", context.HostKey);
         Assert.Contains(context.Notes, n => n.Contains("ghost-template", StringComparison.Ordinal)
             && n.Contains("no enabled host", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DisabledAndDisallowedInstancesAreNotFannedOut()
+    {
+        // F1: the HostAgent's app-instance branch filters ai.IsEnabled = 1 AND
+        // ai.IsAllowed = 1 (GetDesiredArtifactsAsync lines 3977-3978). A
+        // disabled or disallowed host-neutral instance must not fan out to the
+        // two enabled hosts; it stays one "not deployed" context with the
+        // reason.
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var disabled = NeutralApp("web-disabled", 42);
+        var disallowed = NeutralApp("web-disallowed", 42);
+        disallowed.IsAllowed = false;
+        var snapshot = Snapshot([overlay],
+            [Host("host-a"), Host("host-b")],
+            [Artifact(42)],
+            [disabled, disallowed],
+            disabledAppInstanceIds: [disabled.AppInstanceId]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        // Two filtered instances yield exactly two contexts, never two hosts each.
+        Assert.Equal(2, impact.TotalConfiguredContexts);
+        Assert.Equal(0, impact.OmittedContexts);
+        Assert.All(impact.Contexts, c => Assert.Equal("NotApplicable", c.ContextState));
+        Assert.All(impact.Contexts, c => Assert.Empty(c.Files));
+        Assert.Contains(impact.Contexts, c => c.AppInstanceKey == "web-disabled"
+            && c.Notes.Any(n => n.Contains("disabled", StringComparison.Ordinal)));
+        Assert.Contains(impact.Contexts, c => c.AppInstanceKey == "web-disallowed"
+            && c.Notes.Any(n => n.Contains("not allowed", StringComparison.Ordinal)));
+        Assert.DoesNotContain(impact.Contexts, c => c.HostKey == "host-a");
+        Assert.DoesNotContain(impact.Contexts, c => c.HostKey == "host-b");
+    }
+
+    [Fact]
+    public async Task WorkerInstanceAndHostRequirementDeploymentsAreImpactContexts()
+    {
+        // F2: the HostAgent's desired-state query also deploys via a
+        // WorkerInstances row (COALESCE(wi.ArtifactId, ai.ArtifactId), worker
+        // branch) and via an explicit HostArtifactRequirements row (har
+        // branch). Hosts reached only through those branches must appear as
+        // real impact contexts, not merely in the hostsWithoutContext
+        // diagnostic.
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([overlay],
+            [Host("host-a"), Host("worker-host"), Host("requirement-host")],
+            [Artifact(42)],
+            [App("host-a", "web-a", 42)],
+            deploymentContexts:
+            [
+                Deployment("worker-host", 42, "workerinstance", sourceKey: "worker-1"),
+                Deployment("requirement-host", 42, "hostrequirement", sourceKey: "req-1"),
+            ]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Equal(3, impact.TotalConfiguredContexts);
+        Assert.Contains(impact.Contexts, c => c.HostKey == "worker-host" && c.ArtifactId == 42
+            && c.Notes.Any(n => n.Contains("worker instance 'worker-1'", StringComparison.Ordinal)));
+        Assert.Contains(impact.Contexts, c => c.HostKey == "requirement-host" && c.ArtifactId == 42
+            && c.Notes.Any(n => n.Contains("host artifact requirement 'req-1'", StringComparison.Ordinal)));
+        // Both deployment-only hosts are real contexts, so neither falls into
+        // the "registered host without a context" diagnostic.
+        Assert.DoesNotContain(impact.Diagnostics, d => d.Contains("worker-host", StringComparison.Ordinal));
+        Assert.DoesNotContain(impact.Diagnostics, d => d.Contains("requirement-host", StringComparison.Ordinal));
+        // The deployment-only artifact is referenced by those contexts, never
+        // a dangling "possible" match.
+        Assert.DoesNotContain(impact.PossibleArtifacts, p => p.ArtifactId == 42);
+    }
+
+    [Fact]
+    public async Task DirectlyPinnedAppOnDisabledHostIsNotDeployed()
+    {
+        // F3: the HostAgent resolves @hostId only from enabled hosts
+        // (GetDesiredArtifactsAsync lines 3921-3924), so an app directly
+        // pinned to a disabled host is never deployed and must not read
+        // "Applicable".
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([overlay],
+            [Host("host-a", enabled: false)],
+            [Artifact(42)],
+            [App("host-a", "web-a", 42)]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        var context = Assert.Single(impact.Contexts);
+        Assert.Equal("NotApplicable", context.ContextState);
+        Assert.Empty(context.Files);
+        Assert.Equal("host-a", context.HostKey);
+        Assert.Contains(context.Notes, n => n.Contains("disabled host", StringComparison.Ordinal)
+            && n.Contains("host-a", StringComparison.Ordinal));
     }
 }

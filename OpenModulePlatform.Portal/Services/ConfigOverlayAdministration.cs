@@ -29,7 +29,24 @@ public sealed record OverlayAdminSnapshot(bool SchemaReady, IReadOnlyList<HostRo
     IReadOnlyList<ArtifactRow> Artifacts, IReadOnlyList<ConfigOverlayDocumentRow> Overlays, bool HasHostScope = true,
     IReadOnlyList<AppInstanceRow>? AppInstances = null,
     IReadOnlyList<OverlayFileSummaryRow>? FileSummaries = null,
-    IReadOnlyList<HostDeploymentAssignmentRow>? HostDeploymentAssignments = null);
+    IReadOnlyList<HostDeploymentAssignmentRow>? HostDeploymentAssignments = null,
+    IReadOnlyList<OverlayDeploymentContextRow>? DeploymentContexts = null,
+    IReadOnlyList<Guid>? DisabledAppInstanceIds = null);
+
+// One concrete (host, artifact) deployment the HostAgent's desired-state query
+// produces beyond the app-instance branch: a WorkerInstances row (whose
+// artifact resolves via COALESCE(wi.ArtifactId, ai.ArtifactId)) or an explicit
+// HostArtifactRequirements row. Read in one shared query so the impact view
+// never fans out per-host reads. SourceKind is "workerinstance" or
+// "hostrequirement"; SourceKey is the WorkerInstanceKey / RequirementKey.
+public sealed record OverlayDeploymentContextRow(
+    string HostKey,
+    string AppKey,
+    string? AppInstanceKey,
+    int ArtifactId,
+    string ArtifactVersion,
+    string SourceKind,
+    string? SourceKey);
 public sealed record OverlayAdminDetail(ConfigOverlayDocumentRow Summary, string Json, IReadOnlyList<OverlaySourceRow> Files);
 // Content stays inside the service; effective-source responses contain metadata only.
 public sealed record OverlaySourceRow(int RowId, int? DocumentId, string RelativePath, string Content,
@@ -460,21 +477,23 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         var diagnostics = new List<string>
         {
             "Installation impact is read-only and covers saved rows only: never live files, disk contents or final deployment configuration.",
-            "Only configured app contexts in this installation count as deployments. Matching artifacts with no configured app are listed separately as possible matches, never as deployments.",
+            "Only the contexts the HostAgent would deploy count as deployments (app instances, worker instances and explicit host artifact requirements). Matching artifacts with no configured deployment are listed separately as possible matches, never as deployments.",
         };
         if (!snapshot.SchemaReady) diagnostics.Add("Schema not ready: writes are disabled; upgrade the platform schema.");
         if (!snapshot.HasHostScope) diagnostics.Add("HostScope is missing: exact-host fallback only.");
-        var appInstances = snapshot.AppInstances ?? [];
         var artifactsById = snapshot.Artifacts.ToDictionary(a => a.ArtifactId);
-        // Resolve every configured app context to its concrete host(s) exactly
-        // the way the HostAgent decides what to deploy on a host, then expand
-        // to one context per (app, host) pair. An app context with no
-        // resolvable host stays a single "Unavailable" context with the reason.
-        var ordered = appInstances
-            .SelectMany(app => ResolveAppInstanceContexts(app, snapshot))
+        var disabledAppInstanceIds = (snapshot.DisabledAppInstanceIds ?? []).ToHashSet();
+        // Resolve every configured context to its concrete host(s) exactly the
+        // way the HostAgent decides what to deploy on a host, then expand to
+        // one context per (app, host) pair. A context the agent would not
+        // deploy (disabled/disallowed instance, disabled/pathless artifact,
+        // disabled host) stays a single "not deployed" context with the reason
+        // instead of fanning out; a context with no resolvable host stays a
+        // single "Unavailable" context.
+        var ordered = EnumerateImpactContexts(snapshot, artifactsById, disabledAppInstanceIds)
             .OrderBy(r => r.HostKey, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.App.AppInstanceKey, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.App.ArtifactId)
+            .ThenBy(r => r.AppInstanceKey, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.ArtifactId)
             .ToList();
 
         var selectedDetail = await store.DetailAsync(documentId, ct);
@@ -484,11 +503,11 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         // One saved-context read per referenced artifact and per enabled
         // overlay that can apply to at least one resolvable context.
         var artifactFiles = new Dictionary<int, IReadOnlyList<OverlaySourceRow>>();
-        foreach (var artifactId in ordered.Where(r => r.App.ArtifactId.HasValue).Select(r => r.App.ArtifactId!.Value).Distinct())
+        foreach (var artifactId in ordered.Where(r => r.ArtifactId.HasValue).Select(r => r.ArtifactId!.Value).Distinct())
             artifactFiles[artifactId] = await store.SourcesAsync(artifactId, ct);
         var resolvable = ordered
-            .Where(r => r.Host is not null && r.App.ArtifactId.HasValue && artifactsById.ContainsKey(r.App.ArtifactId.Value))
-            .Select(r => (HostKey: r.HostKey, Artifact: artifactsById[r.App.ArtifactId!.Value]))
+            .Where(r => r.Host is not null && r.ArtifactId.HasValue && artifactsById.ContainsKey(r.ArtifactId.Value))
+            .Select(r => (HostKey: r.HostKey, Artifact: artifactsById[r.ArtifactId!.Value]))
             .ToList();
         var overlayDetails = new List<(ConfigOverlayDocumentRow Overlay, IReadOnlyList<OverlaySourceRow> Files)>();
         foreach (var overlay in snapshot.Overlays)
@@ -514,10 +533,10 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             .ToList();
         if (hostsWithoutContext.Count > 0)
             diagnostics.Add(hostsWithoutContext.Count <= 10
-                ? $"Registered host(s) without a configured app context: {string.Join(", ", hostsWithoutContext)}. They have no deployment for this overlay to affect."
-                : $"{hostsWithoutContext.Count} registered hosts have no configured app context. They have no deployment for this overlay to affect.");
+                ? $"Registered host(s) without a configured deployment context: {string.Join(", ", hostsWithoutContext)}. They have no deployment for this overlay to affect."
+                : $"{hostsWithoutContext.Count} registered hosts have no configured deployment context. They have no deployment for this overlay to affect.");
 
-        var referencedIds = new HashSet<int>(ordered.Where(r => r.App.ArtifactId.HasValue).Select(r => r.App.ArtifactId!.Value));
+        var referencedIds = new HashSet<int>(ordered.Where(r => r.ArtifactId.HasValue).Select(r => r.ArtifactId!.Value));
         var possible = snapshot.Artifacts
             .Where(a => !referencedIds.Contains(a.ArtifactId) && MatchesArtifactSelectors(selected, a))
             .OrderBy(a => a.ModuleKey, StringComparer.OrdinalIgnoreCase)
@@ -540,7 +559,29 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             ordered.Count, omittedContexts, omittedArtifacts, diagnostics);
     }
 
-    private sealed record ResolvedContext(AppInstanceRow App, string HostKey, HostRow? Host, string? UnavailableReason = null);
+    // One resolved deployment context: a concrete (app, host, artifact) triple
+    // the HostAgent would deploy, plus an optional reason it would NOT deploy
+    // (NotDeployedReason -> "NotApplicable") or cannot be resolved
+    // (UnavailableReason -> "Unavailable"). SourceKind/SourceKey distinguish
+    // the app-instance branch from the worker-instance and explicit
+    // host-artifact-requirement branches of the agent's desired-state query.
+    private sealed record ResolvedContext(string HostKey, HostRow? Host, string AppKey, string? AppInstanceKey,
+        int? ArtifactId, string? SourceKind = null, string? SourceKey = null,
+        string? UnavailableReason = null, string? NotDeployedReason = null);
+
+    private static List<ResolvedContext> EnumerateImpactContexts(OverlayAdminSnapshot snapshot,
+        IReadOnlyDictionary<int, ArtifactRow> artifactsById, HashSet<Guid> disabledAppInstanceIds)
+    {
+        var contexts = new List<ResolvedContext>();
+        foreach (var app in snapshot.AppInstances ?? [])
+            contexts.AddRange(ResolveAppInstanceContexts(app, snapshot, artifactsById, disabledAppInstanceIds));
+        foreach (var deployment in snapshot.DeploymentContexts ?? [])
+            contexts.Add(ResolveDeploymentContext(deployment, snapshot));
+        return contexts;
+    }
+
+    private static ResolvedContext NotDeployed(AppInstanceRow app, string hostKey, string reason) =>
+        new(hostKey, null, app.AppKey, app.AppInstanceKey, app.ArtifactId, NotDeployedReason: reason);
 
     // Resolves one configured app context to the concrete host(s) it deploys
     // to, mirroring the HostAgent's desired-state query
@@ -555,27 +596,68 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
     //                       AND hda.HostTemplateId = ai.TargetHostTemplateId
     //                       AND hda.IsActive = 1))
     //
-    // i.e. a directly-pinned app deploys to that host only, a host-neutral app
-    // (no HostId and no template) deploys to every enabled host, and a
-    // template-targeted app deploys to every enabled host with an active
-    // assignment to that template. When nothing resolves, the returned context
-    // carries the reason and is rendered "Unavailable".
-    private static IReadOnlyList<ResolvedContext> ResolveAppInstanceContexts(AppInstanceRow app, OverlayAdminSnapshot snapshot)
+    // with the agent's instance/artifact filters applied first
+    // (ai.IsEnabled = 1 AND ai.IsAllowed = 1 AND ar.IsEnabled = 1 AND a
+    // non-empty ar.RelativePath): a filtered instance is never fanned out, it
+    // stays one "not deployed" context with the reason. A directly-pinned app
+    // deploys to that host only, a host-neutral app (no HostId and no
+    // template) deploys to every enabled host, and a template-targeted app
+    // deploys to every enabled host with an active assignment to that
+    // template. When nothing resolves, the returned context carries the reason
+    // and is rendered "Unavailable".
+    private static IReadOnlyList<ResolvedContext> ResolveAppInstanceContexts(AppInstanceRow app,
+        OverlayAdminSnapshot snapshot, IReadOnlyDictionary<int, ArtifactRow> artifactsById,
+        HashSet<Guid> disabledAppInstanceIds)
     {
+        // F1: ai.IsEnabled = 1 AND ai.IsAllowed = 1 (GetDesiredArtifactsAsync,
+        // app-instance branch lines 3977-3978). A disabled or disallowed
+        // instance does not fan out to hosts.
+        if (disabledAppInstanceIds.Contains(app.AppInstanceId))
+            return [NotDeployed(app, app.HostKey ?? "(no host assigned)",
+                $"App context '{app.AppInstanceKey}' is disabled; the HostAgent does not deploy it.")];
+        if (!app.IsAllowed)
+            return [NotDeployed(app, app.HostKey ?? "(no host assigned)",
+                $"App context '{app.AppInstanceKey}' is not allowed; the HostAgent does not deploy it.")];
+        if (!app.ArtifactId.HasValue)
+            return [new(app.HostKey ?? "(no host assigned)", null, app.AppKey, app.AppInstanceKey, null,
+                UnavailableReason: $"App context '{app.AppInstanceKey}' has no registered artifact in this installation; nothing can be resolved for it.")];
+        if (!artifactsById.TryGetValue(app.ArtifactId.Value, out var artifact))
+            return [new(app.HostKey ?? "(no host assigned)", null, app.AppKey, app.AppInstanceKey, app.ArtifactId,
+                UnavailableReason: $"App context '{app.AppInstanceKey}' has no registered artifact in this installation; nothing can be resolved for it.")];
+        // F1: ar.IsEnabled = 1 AND ar.RelativePath non-empty
+        // (GetDesiredArtifactsAsync lines 3979-3981).
+        if (!artifact.IsEnabled)
+            return [NotDeployed(app, app.HostKey ?? "(no host assigned)",
+                $"App context '{app.AppInstanceKey}' references disabled artifact {artifact.ArtifactId}; the HostAgent does not deploy it.")];
+        if (string.IsNullOrWhiteSpace(artifact.RelativePath))
+            return [NotDeployed(app, app.HostKey ?? "(no host assigned)",
+                $"App context '{app.AppInstanceKey}' references artifact {artifact.ArtifactId} without a deployment path; the HostAgent does not deploy it.")];
+
         if (!string.IsNullOrWhiteSpace(app.HostKey))
         {
             var matches = snapshot.Hosts.Where(h => string.Equals(h.HostKey, app.HostKey, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (matches.Count == 1) return [new(app, matches[0].HostKey, matches[0])];
-            return [new(app, app.HostKey!, null, matches.Count == 0
-                ? $"Host '{app.HostKey}' is not registered in this installation; nothing can be resolved for app context '{app.AppInstanceKey}'."
-                : $"Host '{app.HostKey}' has {matches.Count} rows in this installation; overlay identity uses the host key alone. Resolve duplicate host keys before trusting this context.")];
+            if (matches.Count == 1)
+            {
+                // F3: the agent resolves @hostId only from enabled hosts
+                // (GetDesiredArtifactsAsync lines 3921-3924), so an app
+                // directly pinned to a disabled host is never deployed.
+                if (!matches[0].IsEnabled)
+                    return [NotDeployed(app, matches[0].HostKey,
+                        $"App context '{app.AppInstanceKey}' is pinned to disabled host '{matches[0].HostKey}'; the HostAgent does not deploy to disabled hosts.")];
+                return [new(matches[0].HostKey, matches[0], app.AppKey, app.AppInstanceKey, app.ArtifactId, "appinstance")];
+            }
+            return [new(app.HostKey!, null, app.AppKey, app.AppInstanceKey, app.ArtifactId,
+                UnavailableReason: matches.Count == 0
+                    ? $"Host '{app.HostKey}' is not registered in this installation; nothing can be resolved for app context '{app.AppInstanceKey}'."
+                    : $"Host '{app.HostKey}' has {matches.Count} rows in this installation; overlay identity uses the host key alone. Resolve duplicate host keys before trusting this context.")];
         }
         var enabledHosts = snapshot.Hosts.Where(h => h.IsEnabled).ToList();
         if (string.IsNullOrWhiteSpace(app.TargetHostTemplateKey))
         {
             if (enabledHosts.Count == 0)
-                return [new(app, "(no host assigned)", null, $"App context '{app.AppInstanceKey}' is host-neutral but no enabled host exists in this installation; nothing can be resolved for it.")];
-            return enabledHosts.Select(h => new ResolvedContext(app, h.HostKey, h)).ToList();
+                return [new("(no host assigned)", null, app.AppKey, app.AppInstanceKey, app.ArtifactId,
+                    UnavailableReason: $"App context '{app.AppInstanceKey}' is host-neutral but no enabled host exists in this installation; nothing can be resolved for it.")];
+            return enabledHosts.Select(h => new ResolvedContext(h.HostKey, h, app.AppKey, app.AppInstanceKey, app.ArtifactId, "appinstance")).ToList();
         }
         var assignedHostKeys = (snapshot.HostDeploymentAssignments ?? [])
             .Where(a => a.IsActive && string.Equals(a.HostTemplateKey, app.TargetHostTemplateKey, StringComparison.OrdinalIgnoreCase))
@@ -583,8 +665,25 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var targets = enabledHosts.Where(h => assignedHostKeys.Contains(h.HostKey)).ToList();
         if (targets.Count == 0)
-            return [new(app, "(no host assigned)", null, $"App context '{app.AppInstanceKey}' targets host template '{app.TargetHostTemplateKey}' but no enabled host has an active assignment to it; nothing can be resolved for it.")];
-        return targets.Select(h => new ResolvedContext(app, h.HostKey, h)).ToList();
+            return [new("(no host assigned)", null, app.AppKey, app.AppInstanceKey, app.ArtifactId,
+                UnavailableReason: $"App context '{app.AppInstanceKey}' targets host template '{app.TargetHostTemplateKey}' but no enabled host has an active assignment to it; nothing can be resolved for it.")];
+        return targets.Select(h => new ResolvedContext(h.HostKey, h, app.AppKey, app.AppInstanceKey, app.ArtifactId, "appinstance")).ToList();
+    }
+
+    // Resolves one worker-instance or host-artifact-requirement deployment row
+    // to its context. The row already came from the shared deployment-context
+    // query that applied the agent's worker/HAR filters (enabled, allowed,
+    // non-empty RelativePath, enabled host), so it is always a real deployment
+    // context here.
+    private static ResolvedContext ResolveDeploymentContext(OverlayDeploymentContextRow deployment, OverlayAdminSnapshot snapshot)
+    {
+        var host = snapshot.Hosts.FirstOrDefault(h => string.Equals(h.HostKey, deployment.HostKey, StringComparison.OrdinalIgnoreCase));
+        if (host is null)
+            return new(deployment.HostKey, null, deployment.AppKey, deployment.AppInstanceKey, deployment.ArtifactId,
+                deployment.SourceKind, deployment.SourceKey,
+                UnavailableReason: $"Host '{deployment.HostKey}' is not registered in this installation; nothing can be resolved for this deployment context.");
+        return new(deployment.HostKey, host, deployment.AppKey, deployment.AppInstanceKey, deployment.ArtifactId,
+            deployment.SourceKind, deployment.SourceKey);
     }
 
     private static OverlayInstallationContextDto BuildImpactContext(OverlayAdminSnapshot snapshot,
@@ -593,17 +692,25 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         IReadOnlyDictionary<int, IReadOnlyList<OverlaySourceRow>> artifactFiles,
         IReadOnlyList<(ConfigOverlayDocumentRow Overlay, IReadOnlyList<OverlaySourceRow> Files)> overlayDetails)
     {
-        var app = resolved.App;
+        if (resolved.NotDeployedReason is not null)
+            return new(resolved.HostKey, resolved.AppKey, resolved.AppInstanceKey, resolved.ArtifactId, null,
+                "NotApplicable", [], [resolved.NotDeployedReason]);
         if (resolved.UnavailableReason is not null)
-            return new(resolved.HostKey, app.AppKey, app.AppInstanceKey, app.ArtifactId, null,
+            return new(resolved.HostKey, resolved.AppKey, resolved.AppInstanceKey, resolved.ArtifactId, null,
                 "Unavailable", [], [resolved.UnavailableReason]);
         var host = resolved.Host!;
         var notes = new List<string>();
-        if (!app.ArtifactId.HasValue || !artifactsById.TryGetValue(app.ArtifactId.Value, out var artifact))
-            return new(host.HostKey, app.AppKey, app.AppInstanceKey, app.ArtifactId, null,
-                "Unavailable", [], [$"App context '{app.AppInstanceKey}' on host '{host.HostKey}' has no registered artifact in this installation; nothing can be resolved for it."]);
-        if (!host.IsEnabled) notes.Add($"Host '{host.HostKey}' is disabled; this describes saved configuration only.");
-        if (!artifact.IsEnabled) notes.Add($"Artifact {artifact.ArtifactId} ({artifact.Version}) is disabled; this describes saved configuration only.");
+        if (!resolved.ArtifactId.HasValue || !artifactsById.TryGetValue(resolved.ArtifactId.Value, out var artifact))
+            return new(host.HostKey, resolved.AppKey, resolved.AppInstanceKey, resolved.ArtifactId, null,
+                "Unavailable", [], [$"Deployment context on host '{host.HostKey}' has no registered artifact in this installation; nothing can be resolved for it."]);
+        // The host and artifact are enabled by construction: the agent's
+        // filters (enabled host, enabled artifact, non-empty deployment path)
+        // already excluded any disabled or pathless row before it became a
+        // resolved context, so no disabled-host/artifact note is needed here.
+        if (resolved.SourceKind == "workerinstance")
+            notes.Add($"Deployed via worker instance '{resolved.SourceKey}'.");
+        else if (resolved.SourceKind == "hostrequirement")
+            notes.Add($"Deployed via host artifact requirement '{resolved.SourceKey}'.");
         var candidates = BuildImpactCandidates(snapshot, host.HostKey, artifact,
             artifactFiles.GetValueOrDefault(artifact.ArtifactId, []), overlayDetails, notes, snapshot.Overlays);
         // Same Contains-based dedup as the single-host preview: a
@@ -616,7 +723,12 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         foreach (var message in currentDiagnostics.Concat(afterDiagnostics))
             if (!notes.Contains(message)) notes.Add(message);
         var files = new List<OverlayInstallationFileDto>();
-        var location = $"on host '{host.HostKey}', app '{app.AppInstanceKey}', artifact {artifact.ArtifactId} ({artifact.Version})";
+        var contextName = resolved.SourceKind == "workerinstance"
+            ? $"worker instance '{resolved.SourceKey}'"
+            : resolved.SourceKind == "hostrequirement"
+                ? $"host artifact requirement '{resolved.SourceKey}'"
+                : $"app '{resolved.AppInstanceKey}'";
+        var location = $"on host '{host.HostKey}', {contextName}, artifact {artifact.ArtifactId} ({artifact.Version})";
         if (ownedFiles is null)
         {
             notes.Add($"{selected.OverlayKey} {selected.OverlayVersion}: saved detail is unavailable; owned files cannot be listed for this context.");
@@ -640,7 +752,7 @@ public sealed class ConfigOverlayAdministration(IConfigOverlayAdminStore store)
         // exist, so the state follows the same selector/minimum/version gate
         // as the single host/artifact preview.
         var state = Blocker(selected, snapshot, host.HostKey, artifact) is not null ? "NotApplicable" : "Applicable";
-        return new(host.HostKey, app.AppKey, app.AppInstanceKey, artifact.ArtifactId, artifact.Version, state, files, notes);
+        return new(host.HostKey, resolved.AppKey, resolved.AppInstanceKey, artifact.ArtifactId, artifact.Version, state, files, notes);
     }
 
     private static List<Candidate> BuildImpactCandidates(OverlayAdminSnapshot snapshot, string hostKey,
