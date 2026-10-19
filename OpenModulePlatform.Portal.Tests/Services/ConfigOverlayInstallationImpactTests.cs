@@ -28,8 +28,32 @@ public sealed class ConfigOverlayInstallationImpactTests
         AppType = "web", HostKey = host, ArtifactId = artifactId,
     };
 
+    // Host-neutral app instance: no HostId and no target host template, which
+    // the HostAgent provisions on every enabled host.
+    private static AppInstanceRow NeutralApp(string instanceKey, int? artifactId, string appKey = "app") => new()
+    {
+        AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
+        AppKey = appKey, AppInstanceKey = instanceKey, DisplayName = instanceKey,
+        AppType = "web", HostKey = null, TargetHostTemplateKey = null, ArtifactId = artifactId,
+    };
+
+    // Template-targeted app instance: no direct HostId, a target host template
+    // that the HostAgent resolves through active HostDeploymentAssignments.
+    private static AppInstanceRow TemplateApp(string templateKey, string instanceKey, int? artifactId, string appKey = "app") => new()
+    {
+        AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
+        AppKey = appKey, AppInstanceKey = instanceKey, DisplayName = instanceKey,
+        AppType = "web", HostKey = null, TargetHostTemplateKey = templateKey, ArtifactId = artifactId,
+    };
+
+    private static HostDeploymentAssignmentRow Assignment(string hostKey, string templateKey, bool active = true) => new()
+    {
+        HostKey = hostKey, HostTemplateKey = templateKey, IsActive = active,
+    };
+
     private static OverlayAdminSnapshot Snapshot(ConfigOverlayDocumentRow[] overlays, HostRow[] hosts,
-        ArtifactRow[] artifacts, AppInstanceRow[] apps) => new(true, hosts, artifacts, overlays, true, apps);
+        ArtifactRow[] artifacts, AppInstanceRow[] apps, HostDeploymentAssignmentRow[]? assignments = null)
+        => new(true, hosts, artifacts, overlays, true, apps, null, assignments);
 
     private static OverlayAdminFakeStore Store(OverlayAdminSnapshot snapshot)
         => new() { Snapshot = snapshot };
@@ -160,11 +184,13 @@ public sealed class ConfigOverlayInstallationImpactTests
     public async Task AbsentHostsAndArtifactsAreUnavailableInsteadOfOmitted()
     {
         var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        // Template-targeted but no active assignment: a genuinely unresolvable
+        // host, reported "Unavailable" with the reason rather than omitted.
         var orphan = new AppInstanceRow
         {
             AppInstanceId = Guid.NewGuid(), InstanceKey = "local", ModuleInstanceKey = "module-1",
             AppKey = "app", AppInstanceKey = "orphan", DisplayName = "orphan", AppType = "web",
-            HostKey = null, ArtifactId = 42,
+            HostKey = null, TargetHostTemplateKey = "unassigned-template", ArtifactId = 42,
         };
         var snapshot = Snapshot([overlay],
             [Host("host-a"), Host("host-c")],
@@ -183,6 +209,10 @@ public sealed class ConfigOverlayInstallationImpactTests
         Assert.Equal("host-a", configured.HostKey);
         Assert.Equal(42, configured.ArtifactId);
         Assert.Equal("1.10.0", configured.ArtifactVersion);
+        // The template-targeted context explains exactly why no host resolves.
+        var unresolved = impact.Contexts.Single(c => c.AppInstanceKey == "orphan");
+        Assert.Contains(unresolved.Notes, n => n.Contains("unassigned-template", StringComparison.Ordinal)
+            && n.Contains("no enabled host", StringComparison.Ordinal));
         // host-c is registered but has no configured app: an honest diagnostic, not a silent gap.
         Assert.Contains(impact.Diagnostics, d => d.Contains("host-c", StringComparison.Ordinal));
         Assert.Contains(impact.Diagnostics, d => d.Contains("saved rows only", StringComparison.OrdinalIgnoreCase));
@@ -322,5 +352,78 @@ public sealed class ConfigOverlayInstallationImpactTests
         var unaffected = Assert.Single(context.Files);
         Assert.Equal("Unchanged", unaffected.Outcome);
         Assert.Contains(unaffected.Notes, n => n.Contains("another host", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HostNeutralAppsResolveToEveryEnabledHost()
+    {
+        // Mirrors the HostAgent rule "ai.HostId IS NULL AND
+        // ai.TargetHostTemplateId IS NULL" -> provisioned on every enabled
+        // host. Disabled hosts are never deployment targets.
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([overlay],
+            [Host("host-a"), Host("host-b", enabled: false), Host("host-c")],
+            [Artifact(42)],
+            [NeutralApp("web-neutral", 42)]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        Assert.Equal(2, impact.TotalConfiguredContexts);
+        Assert.Equal(0, impact.OmittedContexts);
+        Assert.All(impact.Contexts, c => Assert.Equal("Applicable", c.ContextState));
+        Assert.Contains(impact.Contexts, c => c.HostKey == "host-a" && c.AppInstanceKey == "web-neutral");
+        Assert.Contains(impact.Contexts, c => c.HostKey == "host-c" && c.AppInstanceKey == "web-neutral");
+        Assert.DoesNotContain(impact.Contexts, c => c.HostKey == "host-b");
+    }
+
+    [Fact]
+    public async Task TemplateTargetedAppsResolveOnlyToHostsWithActiveAssignment()
+    {
+        // Mirrors the HostAgent rule "ai.HostId IS NULL AND
+        // ai.TargetHostTemplateId IS NOT NULL AND EXISTS (active
+        // HostDeploymentAssignment to that template)": an inactive assignment
+        // or a different template never makes a host a target.
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([overlay],
+            [Host("host-a"), Host("host-b"), Host("host-c")],
+            [Artifact(42)],
+            [TemplateApp("web-template", "web-role", 42)],
+            [
+                Assignment("host-a", "web-template", active: true),
+                Assignment("host-b", "web-template", active: false),
+                Assignment("host-c", "other-template", active: true),
+            ]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        var context = Assert.Single(impact.Contexts);
+        Assert.Equal("host-a", context.HostKey);
+        Assert.Equal("web-role", context.AppInstanceKey);
+        Assert.Equal("Applicable", context.ContextState);
+    }
+
+    [Fact]
+    public async Task TemplateTargetedAppWithNoActiveAssignmentIsUnavailable()
+    {
+        // A template-targeted app context whose template has no active
+        // assignment on any enabled host has genuinely no resolvable host and
+        // stays "Unavailable" with that reason, never silently dropped.
+        var overlay = ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0");
+        var snapshot = Snapshot([overlay],
+            [Host("host-a")],
+            [Artifact(42)],
+            [TemplateApp("ghost-template", "web-ghost", 42)]);
+        var store = Store(snapshot);
+        store.Details[2] = new(overlay, "", [ConfigOverlayAdministrationTests.File(2, 2)]);
+        var impact = await new ConfigOverlayAdministration(store).PreviewInstallationImpactAsync(snapshot, 2, default);
+
+        var context = Assert.Single(impact.Contexts);
+        Assert.Equal("Unavailable", context.ContextState);
+        Assert.Empty(context.Files);
+        Assert.Equal("(no host assigned)", context.HostKey);
+        Assert.Contains(context.Notes, n => n.Contains("ghost-template", StringComparison.Ordinal)
+            && n.Contains("no enabled host", StringComparison.Ordinal));
     }
 }

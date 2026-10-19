@@ -30,7 +30,8 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
         return new(ready, await GetHostsAsync(ct), await GetArtifactsAsync(ct),
             documentsExist ? await GetConfigOverlayDocumentsAsync(ct) : [], hasScope,
             AppInstances: await GetAppInstancesAsync(ct),
-            FileSummaries: documentsExist ? await GetOverlayFileSummariesAsync(ct) : []);
+            FileSummaries: documentsExist ? await GetOverlayFileSummariesAsync(ct) : [],
+            HostDeploymentAssignments: await GetOverlayHostDeploymentAssignmentsAsync(ct));
     }
 
     async Task<OverlayAdminDetail?> IConfigOverlayAdminStore.DetailAsync(int id, CancellationToken ct)
@@ -92,6 +93,30 @@ public sealed partial class OmpAdminRepository : IConfigOverlayAdminStore
         if (string.IsNullOrWhiteSpace(value)) return;
         var current = root[name] is JsonValue existing && existing.TryGetValue<string>(out var text) ? text : null;
         if (string.IsNullOrWhiteSpace(current)) root[name] = value;
+    }
+
+    // Active host-template assignments, minimal columns, read only for the
+    // installation-impact host resolution. Fails soft when the deployment
+    // schema is absent, exactly like the other optional snapshot reads.
+    private async Task<IReadOnlyList<HostDeploymentAssignmentRow>> GetOverlayHostDeploymentAssignmentsAsync(CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await TableExistsAsync(conn, "omp.HostDeploymentAssignments", ct)
+            || !await TableExistsAsync(conn, "omp.HostTemplates", ct))
+            return [];
+        const string sql = """
+            SELECT h.HostKey, t.TemplateKey, a.IsActive
+            FROM omp.HostDeploymentAssignments a
+            INNER JOIN omp.Hosts h ON h.HostId = a.HostId
+            INNER JOIN omp.HostTemplates t ON t.HostTemplateId = a.HostTemplateId;
+            """;
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var rows = new List<HostDeploymentAssignmentRow>();
+        while (await rdr.ReadAsync(ct))
+            rows.Add(new HostDeploymentAssignmentRow { HostKey = rdr.GetString(0), HostTemplateKey = rdr.GetString(1), IsActive = rdr.GetBoolean(2) });
+        return rows;
     }
 
     Task<IReadOnlyList<OverlaySourceRow>> IConfigOverlayAdminStore.SourcesAsync(int artifactId, CancellationToken ct)
