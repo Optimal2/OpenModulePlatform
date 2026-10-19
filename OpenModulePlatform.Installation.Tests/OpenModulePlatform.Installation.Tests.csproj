@@ -12,6 +12,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
@@ -22,6 +23,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Installation\OpenModulePlatform.Installation.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Artifacts\OpenModulePlatform.Artifacts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\tests\shared\OmpTestDatabaseProvisioner.cs" Link="TestSupport\OmpTestDatabaseProvisioner.cs" />
+    <Compile Include="..\tests\shared\OmpTestDatabaseNames.cs" Link="TestSupport\OmpTestDatabaseNames.cs" />
+    <Compile Include="..\tests\shared\OmpTestCleanupLog.cs" Link="TestSupport\OmpTestCleanupLog.cs" />
+    <Compile Include="..\tests\shared\OmpRepositoryFiles.cs" Link="TestSupport\OmpRepositoryFiles.cs" />
   </ItemGroup>
 
   <ItemGroup>

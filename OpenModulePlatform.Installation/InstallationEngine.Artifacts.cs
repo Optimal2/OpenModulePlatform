@@ -1329,9 +1329,13 @@ ORDER BY ArtifactId;
 
         try
         {
+            // Only rows a package delivered (PackageFileContent set) are candidates for removal.
+            // A row without a baseline was created by an operator, or predates the baseline
+            // column; deleting it on a same-identity re-import silently dropped operator-owned
+            // configuration. Same rule as OmpHostArtifactRepository.
             var existingPaths = new List<string>();
             await using (var select = new SqlCommand(
-                ArtifactConfigurationFileImportSql.SelectConfigurationFilePaths,
+                ArtifactConfigurationFileImportSql.SelectPackageDeliveredConfigurationFilePaths,
                 connection,
                 transaction))
             {

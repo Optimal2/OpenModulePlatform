@@ -1795,6 +1795,32 @@ public sealed class PortableModulePackageService
                                 $"The existing artifact content matched, but configuration files from the package could not be saved: {ex.Message}");
                         }
                     }
+                    else if (options.CopyConfigurationFilesFromPreviousVersion)
+                    {
+                        try
+                        {
+                            // A previous import committed this identity and died before
+                            // the continuity copy ran; the retry resumes it when no
+                            // rows exist yet.
+                            var resumedCopy = await _repo.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+                                existingIdentity.ArtifactId,
+                                ct);
+                            if (resumedCopy is { CopiedCount: > 0 })
+                            {
+                                configurationFileCount = resumedCopy.CopiedCount;
+                                existingWarning = AppendWarning(
+                                    existingWarning,
+                                    $"Resumed an interrupted import: copied {resumedCopy.CopiedCount} configuration file row(s) from the previous version" +
+                                    (resumedCopy.SourceVersion is null ? "." : $" ({resumedCopy.SourceVersion})."));
+                            }
+                        }
+                        catch (SqlException ex)
+                        {
+                            existingWarning = AppendWarning(
+                                existingWarning,
+                                $"The existing artifact content matched, but previous configuration files could not be copied: {ex.Message}");
+                        }
+                    }
 
                     if (options.UseArtifactsImmediately)
                     {

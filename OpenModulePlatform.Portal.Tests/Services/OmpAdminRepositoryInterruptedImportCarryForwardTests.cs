@@ -96,6 +96,79 @@ public sealed class OmpAdminRepositoryInterruptedImportCarryForwardTests
         Assert.Equal(PackagedContent, row.FileContent);
     }
 
+    [Fact]
+    public async Task SameIdentityReplacement_KeepsOperatorCreatedRowWithoutPackageBaseline()
+    {
+        var appId = await _fixture.InsertAppAsync("ownership-" + Guid.NewGuid().ToString("N"));
+        var artifactId = await _fixture.InsertArtifactAsync(appId, "1.0.0");
+        await _repository.ReplaceArtifactConfigurationFilesAsync(
+            artifactId,
+            Package(PackagedContent),
+            CancellationToken.None);
+        // A row created in the Portal editor carries no package baseline.
+        await _fixture.InsertFileAsync(artifactId, "operator.extra.json", "{ \"proxy\": true }", packageFileContent: null);
+
+        await _repository.ReplaceArtifactConfigurationFilesAsync(
+            artifactId,
+            Package(PackagedContent),
+            CancellationToken.None);
+
+        var rows = await _fixture.GetFilesAsync(artifactId);
+        Assert.Contains(rows, row => row.RelativePath == "operator.extra.json" && row.FileContent == "{ \"proxy\": true }");
+        Assert.Contains(rows, row => row.RelativePath == ConfigPath);
+    }
+
+    [Fact]
+    public async Task SameIdentityReplacement_RemovesPackageRowThePackageNoLongerShips()
+    {
+        var appId = await _fixture.InsertAppAsync("stale-" + Guid.NewGuid().ToString("N"));
+        var artifactId = await _fixture.InsertArtifactAsync(appId, "1.0.0");
+        await _repository.ReplaceArtifactConfigurationFilesAsync(
+            artifactId,
+            [new ArtifactPackageConfigurationFile(ConfigPath, PackagedContent), new ArtifactPackageConfigurationFile("legacy.settings.json", "{ \"old\": true }")],
+            CancellationToken.None);
+
+        await _repository.ReplaceArtifactConfigurationFilesAsync(
+            artifactId,
+            Package(PackagedContent),
+            CancellationToken.None);
+
+        var row = Assert.Single(await _fixture.GetFilesAsync(artifactId));
+        Assert.Equal(ConfigPath, row.RelativePath);
+    }
+
+    [Fact]
+    public async Task RetryAfterProcessDeathBeforeContinuityCopy_RestoresRowsFromContinuitySource()
+    {
+        var appId = await _fixture.InsertAppAsync("zeroconfig-" + Guid.NewGuid().ToString("N"));
+        var previousArtifactId = await _fixture.InsertArtifactAsync(appId, "1.0.0");
+        await _repository.ReplaceAndCarryForwardArtifactConfigurationFilesAsync(
+            previousArtifactId,
+            Package(PackagedContent),
+            CancellationToken.None);
+        await _fixture.SetFileContentAsync(previousArtifactId, ConfigPath, OperatorEditedContent);
+
+        // The first import committed the new artifact row and then died before
+        // the continuity copy ran: the package ships no configuration files.
+        var newArtifactId = await _fixture.InsertArtifactAsync(appId, "1.0.1");
+        Assert.Empty(await _fixture.GetFilesAsync(newArtifactId));
+
+        var resumed = await _repository.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+            newArtifactId,
+            CancellationToken.None);
+
+        Assert.NotNull(resumed);
+        Assert.Equal(1, resumed.CopiedCount);
+        var row = Assert.Single(await _fixture.GetFilesAsync(newArtifactId));
+        Assert.Equal(OperatorEditedContent, row.FileContent);
+        Assert.Equal(PackagedContent, row.PackageFileContent);
+
+        // A second retry finds rows and resumes nothing.
+        Assert.Null(await _repository.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+            newArtifactId,
+            CancellationToken.None));
+    }
+
     private static IReadOnlyList<ArtifactPackageConfigurationFile> Package(string content)
         => [new ArtifactPackageConfigurationFile(ConfigPath, content)];
 }
@@ -201,6 +274,22 @@ VALUES (@appId, @version, N'web-app', N'site', CONCAT(N'web/', @appId, N'/', @ve
 SELECT CAST(SCOPE_IDENTITY() AS int);",
             ("@appId", appId),
             ("@version", version));
+
+    public async Task InsertFileAsync(int artifactId, string relativePath, string fileContent, string? packageFileContent)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            @"
+INSERT INTO omp.ArtifactConfigurationFiles (ArtifactId, RelativePath, FileContent, PackageFileContent, IsEnabled)
+VALUES (@artifactId, @relativePath, @fileContent, @packageFileContent, 1);",
+            conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@relativePath", relativePath);
+        cmd.Parameters.AddWithValue("@fileContent", fileContent);
+        cmd.Parameters.AddWithValue("@packageFileContent", (object?)packageFileContent ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
 
     public async Task SetFileContentAsync(int artifactId, string relativePath, string fileContent)
     {

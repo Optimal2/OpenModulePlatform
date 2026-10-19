@@ -204,6 +204,79 @@ INSERT INTO omp.Apps(AppId, ModuleId, AppKey) VALUES(2, 1, N'other-app');");
     }
 
     [Fact]
+    public async Task Zero_config_retry_after_an_interrupted_copy_restores_rows_from_the_continuity_source()
+    {
+        var previousId = InsertArtifact(1, "web-app", "1.0.0", sha256: "aa");
+        await _repository.ReplaceArtifactConfigurationFilesAsync(previousId, [new(ConfigPath, PackagedContent)], CancellationToken.None);
+        _database.SetArtifactConfigurationFileContent(previousId, ConfigPath, OperatorEditedContent);
+        // An older import committed the identity and died before the continuity copy ran:
+        // the package ships no configuration files.
+        var interruptedId = InsertArtifact(1, "web-app", "1.1.0", sha256: "bb");
+
+        var resumed = await _repository.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+            interruptedId,
+            CancellationToken.None);
+
+        Assert.NotNull(resumed);
+        Assert.Equal(1, resumed.CopiedCount);
+        var row = Assert.Single(_database.GetArtifactConfigurationFiles(interruptedId));
+        Assert.Equal(OperatorEditedContent, row.FileContent);
+        Assert.Equal(PackagedContent, row.PackageFileContent);
+
+        // A second retry finds rows and resumes nothing.
+        Assert.Null(await _repository.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+            interruptedId,
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Concurrent_resumes_against_the_same_identity_leave_exactly_one_copy_of_each_row()
+    {
+        var previousId = InsertArtifact(1, "web-app", "1.0.0", sha256: "aa");
+        await _repository.ReplaceArtifactConfigurationFilesAsync(previousId, [new(ConfigPath, PackagedContent)], CancellationToken.None);
+        _database.SetArtifactConfigurationFileContent(previousId, ConfigPath, OperatorEditedContent);
+        // An older import committed the identity and died before writing any rows.
+        var interruptedId = InsertArtifact(1, "web-app", "1.1.0", sha256: "bb");
+        var second = new OmpHostArtifactRepository(_database.CreateFactory());
+
+        // Two connections resume at once; the UPDLOCK/HOLDLOCK probe serializes them
+        // so only one sees the empty artifact and carries forward.
+        var firstTask = _repository.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+            interruptedId,
+            [new(ConfigPath, PackagedContent)],
+            CancellationToken.None);
+        var secondTask = second.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+            interruptedId,
+            [new(ConfigPath, PackagedContent)],
+            CancellationToken.None);
+        var outcomes = await Task.WhenAll(firstTask, secondTask);
+
+        var row = Assert.Single(_database.GetArtifactConfigurationFiles(interruptedId));
+        Assert.Equal(OperatorEditedContent, row.FileContent);
+        Assert.Equal(PackagedContent, row.PackageFileContent);
+        Assert.Equal(1, outcomes.Sum(static outcome => outcome.CarryForward.Items.Count));
+    }
+
+    [Fact]
+    public async Task Concurrent_registrations_of_the_same_identity_leave_one_identity_and_one_row_set()
+    {
+        var firstTask = _repository.RegisterImportedArtifactWithConfigurationAsync(
+            1, "2.0.0", "web-app", "", "web-app/2.0.0", "cc", [new(ConfigPath, PackagedContent)], copyFromContinuitySource: true, CancellationToken.None);
+        var secondTask = _repository.RegisterImportedArtifactWithConfigurationAsync(
+            1, "2.0.0", "web-app", "", "web-app/2.0.0", "cc", [new(ConfigPath, PackagedContent)], copyFromContinuitySource: true, CancellationToken.None);
+        var registrations = await Task.WhenAll(firstTask, secondTask);
+
+        // The UPDLOCK/HOLDLOCK registration (with the 2601/2627 unique-index catch as the
+        // last-line defense) lets exactly one import win: the loser sees the existing
+        // identity and writes nothing, instead of failing the whole import.
+        var winner = Assert.Single(registrations, registration => registration is not null);
+        Assert.Contains(registrations, registration => registration is null);
+        Assert.Equal(winner!.ArtifactId, FindArtifactId(1, "2.0.0", "web-app"));
+        var row = Assert.Single(_database.GetArtifactConfigurationFiles(winner.ArtifactId));
+        Assert.Equal(PackagedContent, row.FileContent);
+    }
+
+    [Fact]
     public async Task Registration_of_an_existing_identity_returns_null_and_writes_no_rows()
     {
         var existingId = InsertArtifact(1, "web-app", "1.1.0", sha256: "bb", targetName: "");
@@ -599,6 +672,11 @@ public sealed class ArtifactImportServiceGateTests : IDisposable
             SameIdentityReplaceCalls++;
             return Task.FromResult((configurationFiles.Count, ArtifactConfigurationCarryForwardResult.Empty));
         }
+
+        public Task<ArtifactConfigurationContinuityCopyResult?> CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+            int artifactId,
+            CancellationToken ct)
+            => Task.FromResult<ArtifactConfigurationContinuityCopyResult?>(null);
 
         public Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyImportedArtifactToMatchingApplicationsAsync(int artifactId, CancellationToken ct)
             => Task.FromResult((0, 0, 0, 0, (string?)null));

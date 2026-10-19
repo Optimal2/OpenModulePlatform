@@ -1634,6 +1634,7 @@ public sealed class ArtifactZipImportService
 
                     var updatedConfigurationFiles = 0;
                     string? resumedCarryForwardMessage = null;
+                    string? resumedContinuityCopyMessage = null;
                     if (package.ConfigurationFiles.Count > 0)
                     {
                         var (replacedCount, resumedCarryForward) = await _repository.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
@@ -1642,6 +1643,23 @@ public sealed class ArtifactZipImportService
                             cancellationToken);
                         updatedConfigurationFiles = replacedCount;
                         resumedCarryForwardMessage = resumedCarryForward.BuildImportMessage();
+                    }
+                    else if (importSettings.CopyConfigurationFilesFromPreviousVersion)
+                    {
+                        // A previous import committed this identity and died before the
+                        // continuity copy ran; the retry resumes it when no rows exist yet.
+                        var resumedCopy = await _repository.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+                            existingIdentity.ArtifactId,
+                            cancellationToken);
+                        if (resumedCopy is { CopiedCount: > 0 })
+                        {
+                            updatedConfigurationFiles = resumedCopy.CopiedCount;
+                            resumedContinuityCopyMessage =
+                                $"Copied {resumedCopy.CopiedCount} configuration file row(s)" +
+                                (resumedCopy.SourceVersion is null
+                                    ? "."
+                                    : $" from version {resumedCopy.SourceVersion}.");
+                        }
                     }
 
                     var existingApplication = applyToMatchingApplications
@@ -1685,6 +1703,11 @@ public sealed class ArtifactZipImportService
                     if (resumedCarryForwardMessage is not null)
                     {
                         message = $"{message} Resumed an interrupted configuration carry-forward: {resumedCarryForwardMessage}";
+                    }
+
+                    if (resumedContinuityCopyMessage is not null)
+                    {
+                        message = $"{message} Resumed an interrupted configuration copy: {resumedContinuityCopyMessage}";
                     }
 
                     return new ArtifactZipImportResult(

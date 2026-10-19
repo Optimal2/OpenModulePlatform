@@ -3231,6 +3231,69 @@ WHERE ar.AppId = @AppId
         };
     }
 
+    /// <summary>
+    /// Resumes an interrupted zero-configuration import: when the artifact has no
+    /// configuration rows yet (its row committed but the continuity copy never ran),
+    /// copies from the continuity source in the same transaction. Returns NULL when
+    /// rows already exist, so a deliberate state is never overwritten, and when no
+    /// source supplied any rows (same rule as
+    /// <see cref="CopyConfigurationFilesFromContinuitySourceAsync"/>). The probe takes
+    /// UPDLOCK + HOLDLOCK so two concurrent resumes serialize and only one of them
+    /// copies.
+    /// </summary>
+    public async Task<ArtifactConfigurationFileCopyResult?> CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        bool isEmpty;
+        await using (var probe = new SqlCommand(
+            @"
+SELECT CASE WHEN EXISTS
+(
+    SELECT 1
+    FROM omp.ArtifactConfigurationFiles WITH (UPDLOCK, HOLDLOCK)
+    WHERE ArtifactId = @ArtifactId
+) THEN 0 ELSE 1 END;",
+            conn,
+            tx))
+        {
+            Add(probe, "@ArtifactId", artifactId);
+            isEmpty = Convert.ToInt32(await probe.ExecuteScalarAsync(ct)) == 1;
+        }
+
+        ArtifactConfigurationFileCopyResult? result = null;
+        if (isEmpty)
+        {
+            await using var copy = new SqlCommand(
+                ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource,
+                conn,
+                tx);
+            Add(copy, "@ArtifactId", artifactId);
+
+            await using var rdr = await copy.ExecuteReaderAsync(ct);
+            if (await rdr.ReadAsync(ct))
+            {
+                var copiedCount = rdr.GetInt32(2);
+                if (copiedCount != 0 || !rdr.IsDBNull(0))
+                {
+                    result = new ArtifactConfigurationFileCopyResult
+                    {
+                        SourceArtifactId = rdr.IsDBNull(0) ? null : rdr.GetInt32(0),
+                        SourceVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1),
+                        CopiedCount = copiedCount
+                    };
+                }
+            }
+        }
+
+        await tx.CommitAsync(ct);
+        return result;
+    }
+
     public async Task<int> ReplaceArtifactConfigurationFilesAsync(
         int artifactId,
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
@@ -3347,9 +3410,13 @@ SELECT CASE WHEN EXISTS
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
         CancellationToken ct)
     {
+        // Only rows a package delivered (PackageFileContent set) are candidates for removal.
+        // A row without a baseline was created by an operator in the Portal, or predates the
+        // baseline column; deleting it on a same-identity re-import silently dropped
+        // operator-owned configuration. Same rule as OmpHostArtifactRepository.
         var existingPaths = new List<string>();
         await using (var select = new SqlCommand(
-            ArtifactConfigurationFileImportSql.SelectConfigurationFilePaths,
+            ArtifactConfigurationFileImportSql.SelectPackageDeliveredConfigurationFilePaths,
             conn,
             tx))
         {

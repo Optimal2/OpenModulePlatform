@@ -204,6 +204,55 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                         return RedirectToPage("/Admin/ArtifactEdit", new { id = existingIdentity.ArtifactId });
                     }
 
+                    if (Input.CopyConfigurationFilesFromPreviousVersion)
+                    {
+                        // A previous upload committed this identity and died before the
+                        // continuity copy ran; the retry resumes it when no rows exist yet.
+                        ArtifactConfigurationFileCopyResult? resumedCopy;
+                        try
+                        {
+                            resumedCopy = await _repo.CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+                                existingIdentity.ArtifactId,
+                                ct);
+                        }
+                        catch (SqlException ex)
+                        {
+                            ModelState.AddModelError(
+                                string.Empty,
+                                PortalLocalizer["Configuration files from the artifact package could not be saved: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
+                            return Page();
+                        }
+
+                        if (resumedCopy is { CopiedCount: > 0 })
+                        {
+                            ArtifactApplicationResult? copiedApplicationResult = null;
+                            if (Input.UseArtifactImmediately)
+                            {
+                                try
+                                {
+                                    copiedApplicationResult = await _repo.ApplyArtifactToMatchingApplicationsAsync(
+                                        existingIdentity.ArtifactId,
+                                        ct);
+                                }
+                                catch (SqlException)
+                                {
+                                    StatusMessage = BuildResumedContinuityCopyStatusMessage(resumedCopy)
+                                        + " "
+                                        + T("The artifact could not be selected as the desired version automatically. Choose it from the installation template page.");
+                                    return RedirectToPage("/Admin/ArtifactEdit", new { id = existingIdentity.ArtifactId });
+                                }
+                            }
+
+                            StatusMessage = BuildResumedContinuityCopyStatusMessage(resumedCopy);
+                            if (Input.UseArtifactImmediately)
+                            {
+                                StatusMessage += " " + BuildArtifactAutoApplyStatusMessage(copiedApplicationResult);
+                            }
+
+                            return RedirectToPage("/Admin/ArtifactEdit", new { id = existingIdentity.ArtifactId });
+                        }
+                    }
+
                     ModelState.AddModelError(
                         string.Empty,
                         T("An artifact with the same app, package type, target, version, and content already exists. No upload is needed."));
@@ -826,6 +875,16 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 string.Join(", ", missing));
         }
 
+        return message;
+    }
+
+    private string BuildResumedContinuityCopyStatusMessage(ArtifactConfigurationFileCopyResult resumedCopy)
+    {
+        var message = T("The artifact content already existed, so the immutable payload was left unchanged.");
+        message += " " + string.Format(
+            T("Resumed an interrupted import: copied {0} configuration file row(s) from the previous version{1}."),
+            resumedCopy.CopiedCount,
+            resumedCopy.SourceVersion is null ? string.Empty : $" ({resumedCopy.SourceVersion})");
         return message;
     }
 

@@ -1584,6 +1584,48 @@ WHERE ArtifactId = @artifactId;";
         return await CopyConfigurationFilesFromContinuitySourceCoreAsync(conn, null, artifactId, ct);
     }
 
+    /// <summary>
+    /// Resumes an interrupted zero-configuration import: when the artifact has no
+    /// configuration rows yet (its identity committed but the continuity copy never
+    /// ran), copies from the continuity source in the same transaction. Returns NULL
+    /// when rows already exist, so a deliberate state is never overwritten. The probe
+    /// takes UPDLOCK + HOLDLOCK so two concurrent resumes serialize and only one of
+    /// them copies.
+    /// </summary>
+    public async Task<ArtifactConfigurationContinuityCopyResult?> CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        bool isEmpty;
+        await using (var probe = new SqlCommand(
+            @"
+SELECT CASE WHEN EXISTS
+(
+    SELECT 1
+    FROM omp.ArtifactConfigurationFiles WITH (UPDLOCK, HOLDLOCK)
+    WHERE ArtifactId = @ArtifactId
+) THEN 0 ELSE 1 END;",
+            conn,
+            tx))
+        {
+            probe.Parameters.AddWithValue("@ArtifactId", artifactId);
+            isEmpty = Convert.ToInt32(await probe.ExecuteScalarAsync(ct)) == 1;
+        }
+
+        ArtifactConfigurationContinuityCopyResult? copy = null;
+        if (isEmpty)
+        {
+            copy = await CopyConfigurationFilesFromContinuitySourceCoreAsync(conn, tx, artifactId, ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return copy;
+    }
+
     private static async Task<ArtifactConfigurationContinuityCopyResult> CopyConfigurationFilesFromContinuitySourceCoreAsync(
         SqlConnection conn,
         SqlTransaction? tx,

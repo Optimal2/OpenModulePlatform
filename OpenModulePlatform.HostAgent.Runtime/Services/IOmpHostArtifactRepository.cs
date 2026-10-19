@@ -320,6 +320,14 @@ internal interface IArtifactZipImportRepository
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
         CancellationToken ct);
 
+    /// <summary>
+    /// Resumes an interrupted zero-configuration import: copies from the continuity source
+    /// when the identity has no configuration rows yet, NULL when rows already exist.
+    /// </summary>
+    Task<ArtifactConfigurationContinuityCopyResult?> CopyConfigurationFilesFromContinuitySourceIfEmptyAsync(
+        int artifactId,
+        CancellationToken ct);
+
     Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyImportedArtifactToMatchingApplicationsAsync(
         int artifactId,
         CancellationToken ct);
