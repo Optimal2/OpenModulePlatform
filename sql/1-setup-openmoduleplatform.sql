@@ -3356,6 +3356,29 @@ BEGIN
         THROW 51031, 'Template materialization host does not have the requested active host template assignment.', 1;
     END;
 
+    -- Every HostAgent runs this procedure every cycle, so runs overlap. An
+    -- unlocked MERGE reads the target, finds no row and inserts; a second run
+    -- that read the target in between inserts the same natural key and fails
+    -- with a unique-key violation (or deadlocks). The exclusive application
+    -- lock serializes whole runs, and HOLDLOCK keeps each MERGE's key range
+    -- locked from its read to its write against any other writer. The lock is
+    -- owned by the transaction, so an error (XACT_ABORT) or the commit releases
+    -- it. The timeout stays below the 30-second default command timeout so a
+    -- caller sees this error rather than a client-side timeout.
+    BEGIN TRANSACTION;
+
+    DECLARE @LockResult int;
+    EXEC @LockResult = sys.sp_getapplock
+        @Resource = N'omp.MaterializeInstanceTemplate',
+        @LockMode = N'Exclusive',
+        @LockOwner = N'Transaction',
+        @LockTimeout = 15000;
+
+    IF @LockResult < 0
+    BEGIN
+        THROW 51032, 'Template materialization could not acquire its serialization lock; another materialization run is still in progress.', 1;
+    END;
+
     ;WITH SourceModules AS
     (
         SELECT
@@ -3387,7 +3410,7 @@ BEGIN
               )
           )
     )
-    MERGE omp.ModuleInstances AS target
+    MERGE omp.ModuleInstances WITH (HOLDLOCK) AS target
     USING SourceModules AS source
     ON target.InstanceId = source.InstanceId
     AND target.ModuleInstanceKey = source.ModuleInstanceKey
@@ -3495,7 +3518,7 @@ BEGIN
               OR hm.HostId IS NOT NULL
           )
     )
-    MERGE omp.AppInstances AS target
+    MERGE omp.AppInstances WITH (HOLDLOCK) AS target
     USING SourceApps AS source
     ON target.ModuleInstanceId = source.ModuleInstanceId
     AND target.AppInstanceKey = source.AppInstanceKey
@@ -3670,6 +3693,8 @@ BEGIN
       );
 
     SET @AppDisableChanges = @@ROWCOUNT;
+
+    COMMIT TRANSACTION;
 
     SELECT
         CAST((SELECT COUNT(1) FROM @ModuleActions) + @ModuleDisableChanges AS int) AS ModuleInstanceChanges,

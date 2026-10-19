@@ -12,13 +12,29 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// propagates to materialized runtime rows while hand-created rows are left
 /// untouched.
 /// </summary>
-public sealed class TemplateMaterializationTestFixture : IAsyncLifetime
+public class TemplateMaterializationTestFixture : IAsyncLifetime
 {
-    // Per-process name (pid + start time) so concurrent test hosts never share a
-    // database; stale copies from crashed runs are swept by the provisioner.
-    public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("TemplateMaterialization");
+    public TemplateMaterializationTestFixture()
+        : this("TemplateMaterialization")
+    {
+    }
 
-    public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
+    /// <summary>
+    /// Lets a derived fixture own a separate database, so two test classes that
+    /// each take this fixture never share (and drop) the same database while
+    /// xUnit runs them in parallel.
+    /// </summary>
+    protected TemplateMaterializationTestFixture(string databaseNameSuffix)
+    {
+        // Per-process name (pid + start time) so concurrent test hosts never share a
+        // database; stale copies from crashed runs are swept by the provisioner.
+        DatabaseName = OmpTestDatabaseNames.ForPortalTests(databaseNameSuffix);
+        ConnectionString = TestSqlConnection.ForDatabase(DatabaseName);
+    }
+
+    public string DatabaseName { get; }
+
+    public string ConnectionString { get; }
 
     public async Task InitializeAsync()
     {
