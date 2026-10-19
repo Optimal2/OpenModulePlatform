@@ -311,7 +311,11 @@ internal interface IArtifactZipImportRepository
         bool copyFromContinuitySource,
         CancellationToken ct);
 
-    Task<int> ReplaceArtifactConfigurationFilesAsync(
+    /// <summary>
+    /// The existing-identity replacement. Resumes the carry-forward when the identity has no
+    /// configuration rows yet (an older interrupted import); otherwise a plain replace.
+    /// </summary>
+    Task<(int ReplacedCount, ArtifactConfigurationCarryForwardResult CarryForward)> ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
         int artifactId,
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
         CancellationToken ct);

@@ -1633,12 +1633,15 @@ public sealed class ArtifactZipImportService
                     }
 
                     var updatedConfigurationFiles = 0;
+                    string? resumedCarryForwardMessage = null;
                     if (package.ConfigurationFiles.Count > 0)
                     {
-                        updatedConfigurationFiles = await _repository.ReplaceArtifactConfigurationFilesAsync(
+                        var (replacedCount, resumedCarryForward) = await _repository.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
                             existingIdentity.ArtifactId,
                             package.ConfigurationFiles,
                             cancellationToken);
+                        updatedConfigurationFiles = replacedCount;
+                        resumedCarryForwardMessage = resumedCarryForward.BuildImportMessage();
                     }
 
                     var existingApplication = applyToMatchingApplications
@@ -1677,6 +1680,11 @@ public sealed class ArtifactZipImportService
                     if (restoredMissingContent)
                     {
                         message = $"{message} Restored missing artifact files below the artifact store path: {existingRelativePath}.";
+                    }
+
+                    if (resumedCarryForwardMessage is not null)
+                    {
+                        message = $"{message} Resumed an interrupted configuration carry-forward: {resumedCarryForwardMessage}";
                     }
 
                     return new ArtifactZipImportResult(

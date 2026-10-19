@@ -167,6 +167,43 @@ INSERT INTO omp.Apps(AppId, ModuleId, AppKey) VALUES(2, 1, N'other-app');");
     }
 
     [Fact]
+    public async Task Same_identity_replacement_resumes_the_carry_forward_for_an_identity_left_without_rows()
+    {
+        var previousId = InsertArtifact(1, "web-app", "1.0.0", sha256: "aa");
+        await _repository.ReplaceArtifactConfigurationFilesAsync(previousId, [new(ConfigPath, PackagedContent)], CancellationToken.None);
+        _database.SetArtifactConfigurationFileContent(previousId, ConfigPath, OperatorEditedContent);
+        // An older import committed the identity and died before writing any rows.
+        var interruptedId = InsertArtifact(1, "web-app", "1.1.0", sha256: "bb");
+
+        var (_, carryForward) = await _repository.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+            interruptedId,
+            [new(ConfigPath, PackagedContent)],
+            CancellationToken.None);
+
+        Assert.Equal(ArtifactConfigurationCarryForwardOutcome.Preserved, Assert.Single(carryForward.Items).Outcome);
+        Assert.Equal(OperatorEditedContent, Assert.Single(_database.GetArtifactConfigurationFiles(interruptedId)).FileContent);
+    }
+
+    [Fact]
+    public async Task Same_identity_replacement_does_not_reapply_carry_forward_over_existing_rows()
+    {
+        var previousId = InsertArtifact(1, "web-app", "1.0.0", sha256: "aa");
+        await _repository.ReplaceArtifactConfigurationFilesAsync(previousId, [new(ConfigPath, PackagedContent)], CancellationToken.None);
+        _database.SetArtifactConfigurationFileContent(previousId, ConfigPath, OperatorEditedContent);
+        // The new version already has its rows; the operator deliberately kept the package default.
+        var currentId = InsertArtifact(1, "web-app", "1.1.0", sha256: "bb");
+        _database.InsertArtifactConfigurationFile(currentId, ConfigPath, PackagedContent, PackagedContent);
+
+        var (_, carryForward) = await _repository.ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+            currentId,
+            [new(ConfigPath, PackagedContent)],
+            CancellationToken.None);
+
+        Assert.Empty(carryForward.Items);
+        Assert.Equal(PackagedContent, Assert.Single(_database.GetArtifactConfigurationFiles(currentId)).FileContent);
+    }
+
+    [Fact]
     public async Task Registration_of_an_existing_identity_returns_null_and_writes_no_rows()
     {
         var existingId = InsertArtifact(1, "web-app", "1.1.0", sha256: "bb", targetName: "");
@@ -554,10 +591,13 @@ public sealed class ArtifactImportServiceGateTests : IDisposable
                 new ImportedArtifactRegistration(artifactId, configurationFiles.Count, carryForward, null));
         }
 
-        public Task<int> ReplaceArtifactConfigurationFilesAsync(int artifactId, IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles, CancellationToken ct)
+        public Task<(int ReplacedCount, ArtifactConfigurationCarryForwardResult CarryForward)> ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+            int artifactId,
+            IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+            CancellationToken ct)
         {
             SameIdentityReplaceCalls++;
-            return Task.FromResult(configurationFiles.Count);
+            return Task.FromResult((configurationFiles.Count, ArtifactConfigurationCarryForwardResult.Empty));
         }
 
         public Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyImportedArtifactToMatchingApplicationsAsync(int artifactId, CancellationToken ct)

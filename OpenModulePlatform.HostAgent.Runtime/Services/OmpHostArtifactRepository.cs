@@ -1624,6 +1624,53 @@ WHERE ArtifactId = @artifactId;";
     }
 
     /// <summary>
+    /// Replaces the package configuration rows of an artifact identity that is already
+    /// registered. HostAgent now registers an identity and its rows in one transaction, but
+    /// an identity left with NO configuration rows by an older interrupted import -- from an
+    /// earlier HostAgent or from the Portal, which share this database -- still reaches this
+    /// existing-identity path on the retry. In that case the interrupted carry-forward is
+    /// resumed in the same transaction; when rows exist this stays a plain replace, so a
+    /// deliberate operator revert is never overwritten. Same rule as the Portal's
+    /// ReplaceArtifactConfigurationFilesResumingCarryForwardAsync.
+    /// </summary>
+    public async Task<(int ReplacedCount, ArtifactConfigurationCarryForwardResult CarryForward)> ReplaceArtifactConfigurationFilesResumingCarryForwardAsync(
+        int artifactId,
+        IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+
+        // UPDLOCK + HOLDLOCK keeps the probe and the replace serialized against a
+        // concurrent import of the same artifact, so only one of them resumes.
+        bool resumeCarryForward;
+        await using (var probe = new SqlCommand(
+            @"
+SELECT CASE WHEN EXISTS
+(
+    SELECT 1
+    FROM omp.ArtifactConfigurationFiles WITH (UPDLOCK, HOLDLOCK)
+    WHERE ArtifactId = @ArtifactId
+) THEN 0 ELSE 1 END;",
+            conn,
+            tx))
+        {
+            probe.Parameters.AddWithValue("@ArtifactId", artifactId);
+            resumeCarryForward = Convert.ToInt32(await probe.ExecuteScalarAsync(ct)) == 1;
+        }
+
+        await ReplaceArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, configurationFiles, ct);
+
+        var carryForward = resumeCarryForward && configurationFiles.Count > 0
+            ? await CarryForwardArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, ct)
+            : ArtifactConfigurationCarryForwardResult.Empty;
+
+        await tx.CommitAsync(ct);
+        return (configurationFiles.Count, carryForward);
+    }
+
+    /// <summary>
     /// Replaces the package-delivered configuration rows AND carries operator
     /// edits forward from the previous version in ONE transaction. The two used
     /// to be separate committed round-trips, so a crash between them left the new
