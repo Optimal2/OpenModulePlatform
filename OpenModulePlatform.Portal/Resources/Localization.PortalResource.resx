@@ -3083,6 +3083,7 @@
   <data name="Include historical artifact versions for selected modules" xml:space="preserve"><value>Include historical artifact versions for selected modules</value></data>
   <data name="Host configs" xml:space="preserve"><value>Host configs</value></data>
   <data name="Config overlays" xml:space="preserve"><value>Config overlays</value></data>
+  <data name="Configuration overlays" xml:space="preserve"><value>Configuration overlays</value></data>
   <data name="Export universal zip" xml:space="preserve"><value>Export universal zip</value></data>
   <data name="Host configuration" xml:space="preserve"><value>Host configuration</value></data>
   <data name="Config overlay" xml:space="preserve"><value>Config overlay</value></data>

@@ -317,15 +317,37 @@ BEGIN
         (N'portal.admin-quicklinks', N'Hosts', N'/admin/hosts', N'topology', 6),
         (N'portal.admin-quicklinks', N'Host resources', N'/admin/hostresources', N'topology', 7),
         (N'portal.admin-quicklinks', N'Host deployments', N'/admin/hostdeployments', N'topology', 8),
-        (N'portal.admin-quicklinks', N'Modules', N'/admin/modules', N'modules', 9),
-        (N'portal.admin-quicklinks', N'Module definitions', N'/admin/moduledefinitions', N'modules', 10),
-        (N'portal.admin-quicklinks', N'Apps', N'/admin/apps', N'modules', 11),
-        (N'portal.admin-quicklinks', N'Workers', N'/admin/workers', N'operations', 12),
-        (N'portal.admin-quicklinks', N'Maintenance', N'/admin/maintenance', N'operations', 13),
-        (N'portal.admin-quicklinks', N'Artifacts', N'/admin/artifacts', N'modules', 14),
-        (N'portal.admin-quicklinks', N'Portal entries', N'/admin/portalentries', N'portal', 15),
-        (N'portal.admin-quicklinks', N'Banners', N'/admin/banners', N'portal', 16),
-        (N'portal.admin-quicklinks', N'Config settings', N'/admin/configsettings', N'portal', 17),
-        (N'portal.admin-quicklinks', N'User log', N'/admin/activitylog', N'operations', 18);
+        (N'portal.admin-quicklinks', N'Configuration overlays', N'/admin/configoverlays', N'topology', 9),
+        (N'portal.admin-quicklinks', N'Modules', N'/admin/modules', N'modules', 10),
+        (N'portal.admin-quicklinks', N'Module definitions', N'/admin/moduledefinitions', N'modules', 11),
+        (N'portal.admin-quicklinks', N'Apps', N'/admin/apps', N'modules', 12),
+        (N'portal.admin-quicklinks', N'Workers', N'/admin/workers', N'operations', 13),
+        (N'portal.admin-quicklinks', N'Maintenance', N'/admin/maintenance', N'operations', 14),
+        (N'portal.admin-quicklinks', N'Artifacts', N'/admin/artifacts', N'modules', 15),
+        (N'portal.admin-quicklinks', N'Portal entries', N'/admin/portalentries', N'portal', 16),
+        (N'portal.admin-quicklinks', N'Banners', N'/admin/banners', N'portal', 17),
+        (N'portal.admin-quicklinks', N'Config settings', N'/admin/configsettings', N'portal', 18),
+        (N'portal.admin-quicklinks', N'User log', N'/admin/activitylog', N'operations', 19);
+END
+GO
+
+-------------------------------------------------------------------------------
+-- Upgrade: add the Configuration overlays quick link to installations that
+-- already have the admin quick links box. Guarded on box_key + href (url) so
+-- the step is idempotent: it adds the one missing link without duplicating or
+-- reordering links an operator has customized in the editor.
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.link_box_items', N'U') IS NOT NULL
+   AND NOT EXISTS
+   (
+       SELECT 1
+       FROM omp.link_box_items
+       WHERE box_key = N'portal.admin-quicklinks'
+         AND url = N'/admin/configoverlays'
+   )
+BEGIN
+    INSERT INTO omp.link_box_items(box_key, label, url, group_key, sort_order)
+    SELECT N'portal.admin-quicklinks', N'Configuration overlays', N'/admin/configoverlays', N'topology',
+           ISNULL((SELECT MAX(sort_order) + 1 FROM omp.link_box_items WHERE box_key = N'portal.admin-quicklinks'), 0);
 END
 GO

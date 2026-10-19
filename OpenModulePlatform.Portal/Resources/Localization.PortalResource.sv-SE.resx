@@ -3497,5 +3497,5 @@
   <data name="Uploaded file content added to the draft at the chosen relative path. Save to persist." xml:space="preserve"><value>Uppladdad fil har lagts till i utkastet på vald relativ sökväg. Spara för att göra ändringen bestående.</value></data>
   <data name="The uploaded file was not read. It must be a single UTF-8 text file of at most 1 MB, or a .zip containing one such file." xml:space="preserve"><value>Den uppladdade filen kunde inte läsas. Den måste vara en enda UTF-8-textfil på högst 1 MB, eller en .zip med en sådan fil.</value></data>
   <data name="Preview the removal impact before disabling or deleting this overlay." xml:space="preserve"><value>Förhandsgranska borttagningspåverkan innan du inaktiverar eller tar bort denna overlay.</value></data>
-  <data name="Configuration overlays" xml:space="preserve"><value>Konfigurationslager</value></data>
+  <data name="Configuration overlays" xml:space="preserve"><value>Konfigurationsöverlägg</value></data>
 </root>
