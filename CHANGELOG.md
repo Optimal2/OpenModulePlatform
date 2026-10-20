@@ -8,6 +8,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **List info boxes placed by CSS anchor positioning.** Where the browser
+  has it, the info box of `.info-badge` and `.list-message` is anchored to
+  its badge (below it, left edges aligned, flipping above or leftward when
+  the viewport leaves no room) and its copy button to the box, so both
+  follow the badge through scrolling and reflow instead of staying where
+  the script left them. The script still checks the placed box and places
+  both itself where CSS left it off screen, and everywhere without support,
+  as before.
+
 - **Search on this page, with depth, in the top bar.** A find bar the size
   of the browser's own, opened with Ctrl+Shift+F or the search icon among
   the top bar's actions (`js/omp-search.js` in Web.Shared, mounted by the

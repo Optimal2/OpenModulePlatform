@@ -304,6 +304,39 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     overflow: visible;
 }
 
+/* Anchored (omp-lists.js, where the browser has CSS anchor positioning): the
+   open badge is the anchor, the box hangs below it with their left edges
+   aligned and flips above or leftward when the viewport leaves no room;
+   the copy button anchors to the box, on its left with the same gap as
+   before, and flips to its right at the screen edge. Both follow the badge
+   through scrolling and reflow. Without support the script places them. */
+@supports (position-area: top) and (anchor-name: --omp-info-badge) {
+    .info-badge.is-open,
+    .list-message.is-open {
+        anchor-name: --omp-info-badge;
+    }
+
+    .info-popover[popover].is-anchored {
+        position: fixed;
+        position-anchor: --omp-info-badge;
+        position-area: bottom span-right;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+        inset: auto;
+        /* The gap toward the badge; a block flip mirrors it. */
+        margin: 6px 0 0;
+        anchor-name: --omp-info-popover;
+    }
+
+    .info-popover__copy[popover].is-anchored {
+        position: fixed;
+        position-anchor: --omp-info-popover;
+        position-area: left span-bottom;
+        position-try-fallbacks: flip-inline;
+        inset: auto;
+        margin: 0 6px 0 0;
+    }
+}
+
 .info-popover__body {
     max-height: min(60vh, 420px);
     overflow-y: auto;

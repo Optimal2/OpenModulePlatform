@@ -808,6 +808,16 @@
     // with the document listeners below. Older browsers get plain fixed
     // elements, as before.
     const supportsPopover = typeof HTMLElement.prototype.showPopover === 'function';
+    // Where the browser has CSS anchor positioning (Chromium 125, with
+    // complete spanning areas from 129), the open box and its copy button
+    // are placed by CSS against the badge (omp-lists.css, .is-anchored) and
+    // follow it through scrolling and reflow; the script only checks the
+    // result and places them itself where CSS left them off screen.
+    const supportsAnchors = supportsPopover
+        && typeof CSS !== 'undefined'
+        && typeof CSS.supports === 'function'
+        && CSS.supports('position-area: top')
+        && CSS.supports('anchor-name: --omp-info-badge');
 
     function markForLayer(element) {
         if (supportsPopover) {
@@ -852,6 +862,40 @@
         activeInfoPopover = null;
         activeInfoCopy = null;
         activeInfoBadge = null;
+        window.removeEventListener('scroll', watchInfoBadge, true);
+    }
+
+    // An anchored box follows its badge through scrolling; it must not
+    // follow it out of the viewport or under a fixed header (the top layer
+    // paints over the header). Checked on any scroll while a box is open:
+    // a badge that is off screen, or whose centre is covered by something
+    // other than itself or the box, closes the box.
+    let infoWatchFrame = 0;
+    function watchInfoBadge() {
+        window.cancelAnimationFrame(infoWatchFrame);
+        infoWatchFrame = window.requestAnimationFrame(() => {
+            const badge = activeInfoBadge;
+            if (!badge) {
+                return;
+            }
+
+            const rect = badge.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            const offScreen = rect.bottom <= 0 || rect.top >= window.innerHeight
+                || rect.right <= 0 || rect.left >= window.innerWidth;
+            // The element under the badge's centre is the badge (or a child)
+            // while it shows; an ancestor means the badge is clipped away by
+            // a nested scroll container, so it counts as covered too.
+            const covered = !offScreen && (() => {
+                const top = document.elementFromPoint(x, y);
+                return !!top && !badge.contains(top)
+                    && !activeInfoPopover?.contains(top) && !activeInfoCopy?.contains(top);
+            })();
+            if (offScreen || covered) {
+                closeInfoPopover();
+            }
+        });
     }
 
     function openInfoPopover(badge, text) {
@@ -894,6 +938,15 @@
         popover.appendChild(body);
         markForLayer(popover);
         markForLayer(copy);
+        // The badge is the anchor while its box is open (one box at a time,
+        // so one anchor name); set before the box is shown so CSS places it.
+        badge.classList.add('is-open');
+        let anchored = supportsAnchors;
+        if (anchored) {
+            popover.classList.add('is-anchored');
+            copy.classList.add('is-anchored');
+        }
+
         // Inside a modal <dialog> the popover must live in the dialog: a
         // body-appended element renders beneath it without the Popover API,
         // and with it is inert (a modal dialog blocks everything outside
@@ -901,12 +954,31 @@
         (badge.closest('dialog') || document.body).appendChild(popover);
         // Shown before it is measured: a popover not yet shown has no size.
         revealInLayer(popover);
+        // The top layer refused: no anchoring either (it rides on the popover).
+        anchored = anchored && popover.hasAttribute('popover');
 
         const rect = badge.getBoundingClientRect();
-        const maxLeft = window.innerWidth - popover.offsetWidth - 8;
-        popover.style.top = `${rect.bottom + 6}px`;
-        const popoverLeft = Math.max(8, Math.min(rect.left, maxLeft));
-        popover.style.left = `${popoverLeft}px`;
+        const placed = popover.getBoundingClientRect();
+        // CSS placed it if it sits against the badge: below it, or flipped
+        // above it. Anything else (a browser whose anchor areas are
+        // incomplete leaves it at the viewport's corner) the script places.
+        // A long box that runs past the viewport bottom is still anchored.
+        const gap = 6;
+        const belowBadge = Math.abs(placed.top - (rect.bottom + gap)) <= 1;
+        const aboveBadge = Math.abs(placed.bottom - (rect.top - gap)) <= 1;
+        if (anchored && !belowBadge && !aboveBadge) {
+            anchored = false;
+        }
+
+        let popoverLeft = placed.left;
+        if (!anchored) {
+            popover.classList.remove('is-anchored');
+            copy.classList.remove('is-anchored');
+            const maxLeft = window.innerWidth - popover.offsetWidth - 8;
+            popover.style.top = `${rect.bottom + 6}px`;
+            popoverLeft = Math.max(8, Math.min(rect.left, maxLeft));
+            popover.style.left = `${popoverLeft}px`;
+        }
 
         popover.parentNode.appendChild(copy);
         revealInLayer(copy);
@@ -920,20 +992,25 @@
             + px(popoverStyle.paddingTop) + px(popoverStyle.paddingBottom)
             + px(popoverStyle.borderTopWidth) + px(popoverStyle.borderBottomWidth);
         copy.style.height = `${Math.round(oneLineOuter)}px`;
-        const gap = 6;
-        const copyWidth = copy.offsetWidth || 34;
-        // Left of the popover with a small gap; flips to the right side when
-        // the popover already hugs the left screen edge.
-        const copyLeft = popoverLeft - gap - copyWidth >= 8
-            ? popoverLeft - gap - copyWidth
-            : popoverLeft + popover.offsetWidth + gap;
-        copy.style.top = popover.style.top;
-        copy.style.left = `${copyLeft}px`;
+        if (!anchored || !copy.hasAttribute('popover')) {
+            copy.classList.remove('is-anchored');
+            const gap = 6;
+            const copyWidth = copy.offsetWidth || 34;
+            // Left of the popover with a small gap; flips to the right side when
+            // the popover already hugs the left screen edge.
+            const copyLeft = popoverLeft - gap - copyWidth >= 8
+                ? popoverLeft - gap - copyWidth
+                : popoverLeft + popover.offsetWidth + gap;
+            copy.style.top = `${Math.round(popover.getBoundingClientRect().top)}px`;
+            copy.style.left = `${copyLeft}px`;
+        }
 
-        badge.classList.add('is-open');
         activeInfoPopover = popover;
         activeInfoCopy = copy;
         activeInfoBadge = badge;
+        if (anchored) {
+            window.addEventListener('scroll', watchInfoBadge, true);
+        }
     }
 
     function initInfoBadges(root) {
