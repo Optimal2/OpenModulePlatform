@@ -6435,14 +6435,14 @@ button.dashboard-role-list__item:focus-visible {
     outline: none;
 }
 
-.dashboard-reset-changes-button {
+.dashboard-reset-changes-button:not(:disabled) {
     border-color: var(--omp-warning-border, #f0b36d);
     background: linear-gradient(color-mix(in srgb, var(--omp-warning-bg, #fef3c7) var(--dashboard-glass-tint), transparent), color-mix(in srgb, var(--omp-warning-bg, #fef3c7) var(--dashboard-glass-tint), transparent)), var(--dashboard-glass);
     color: var(--omp-warning-text, #92400e);
 }
 
-.dashboard-reset-changes-button:hover,
-.dashboard-reset-changes-button:focus-visible {
+.dashboard-reset-changes-button:not(:disabled):hover,
+.dashboard-reset-changes-button:not(:disabled):focus-visible {
     border-color: var(--omp-warning-text, #92400e);
     background: linear-gradient(var(--omp-warning-bg-hover, #fde68a), var(--omp-warning-bg-hover, #fde68a)), var(--surface);
     color: var(--omp-warning-text, #92400e);
@@ -6463,10 +6463,11 @@ button.dashboard-role-list__item:focus-visible {
     outline: none;
 }
 
-/* Save without changes is not yet a choice: fainter than the other tiles,
-   its edge and glyph muted. With changes it takes the green of Add, and
-   solid green on hover. */
-.dashboard-save-button:disabled {
+/* Save and Reset without changes are not yet choices: fainter than the
+   other tiles, edge and glyph muted. With changes Save takes the green of
+   Add and Reset its warning amber, both solid on hover. */
+.dashboard-save-button:disabled,
+.dashboard-reset-changes-button:disabled {
     cursor: not-allowed;
     border-color: color-mix(in srgb, var(--border) 60%, transparent);
     background: color-mix(in srgb, var(--surface) 16%, transparent);

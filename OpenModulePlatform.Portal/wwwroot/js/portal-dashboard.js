@@ -5232,12 +5232,17 @@
         updateDashboardDirtyState(root, canvas, state);
     }
 
+    // Save and Reset follow the same question: does the canvas differ from
+    // what was last saved? Without a difference neither has anything to do,
+    // so both sit disabled until the first change.
     function updateDashboardDirtyState(root, canvas, state, saveButton = root.querySelector('[data-dashboard-save]')) {
         const isDirty = getDashboardSignature(canvas, state) !== (state?.savedSignature || '');
         root.classList.toggle('has-dashboard-changes', isDirty);
-        if (saveButton) {
-            saveButton.disabled = !isDirty;
-            saveButton.setAttribute('aria-disabled', String(!isDirty));
+        for (const button of [saveButton, root.querySelector('[data-dashboard-reset-changes]')]) {
+            if (button) {
+                button.disabled = !isDirty;
+                button.setAttribute('aria-disabled', String(!isDirty));
+            }
         }
 
         return isDirty;

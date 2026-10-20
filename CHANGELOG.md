@@ -54,6 +54,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The dashboard's Reset button lights up only with changes to reset.**
+  It now follows the same question as Save (does the canvas differ from
+  what was last saved?) and sits disabled and muted until the first
+  change, instead of showing its warning amber at all times.
+
 - **Dashboard refresh submenu placed by CSS anchor positioning.** Where the
   browser has it (Chromium 129), the submenu is a popover in the top layer
   anchored to its tile; CSS opens it above the tile and flips it below or
