@@ -214,13 +214,24 @@ function Find-ClearTextPasswordFields {
             # Windows PowerShell 5.1 on a machine whose PSModulePath also lists
             # PowerShell 7 module folders resolves Utility to the 7.x copy and
             # the function commands are unrecognized. The profile folder is
-            # operator input, so the fallback applies the same restricted-
-            # language check Import-PowerShellDataFile does (data only: no
-            # commands, no variables) before evaluating, as pester-bootstrap.ps1
-            # does for module manifests.
-            $block = [scriptblock]::Create((Get-Content -LiteralPath $psd1Path -Raw))
-            $block.CheckRestrictedLanguage([string[]] @(), [string[]] @(), $false)
-            & $block
+            # operator input, so nothing in it is executed: parse the file and
+            # read the hashtable literal with SafeGetValue, which is what
+            # Import-PowerShellDataFile itself does (no using/#requires/command
+            # ever runs).
+            $parseTokens = $null
+            $parseErrors = $null
+            # ParseFile reads a BOM-less file as ANSI under 5.1; read UTF-8 (a BOM
+            # still wins) like Import-PowerShellDataFile does.
+            $psd1Text = [System.IO.File]::ReadAllText($psd1Path, (New-Object System.Text.UTF8Encoding $false))
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($psd1Text, [ref] $parseTokens, [ref] $parseErrors)
+            if ($parseErrors -and $parseErrors.Count -gt 0) {
+                throw "package.psd1 is not valid PowerShell data: $($parseErrors[0].Message)"
+            }
+            $hashtableAst = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.HashtableAst] }, $false)
+            if ($null -eq $hashtableAst) {
+                throw 'package.psd1 does not contain a hashtable literal.'
+            }
+            $hashtableAst.SafeGetValue()
         }
         foreach ($field in (Find-PasswordFields -Node $data -Path 'package.psd1')) {
             $bad.Add($field)
