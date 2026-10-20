@@ -179,8 +179,9 @@ gate.**
   beside the source project, included in the `.slnx`; test subfolders mirror the source structure.
   Test classes `<Subject>Tests`; methods `Method_WhenCondition_ExpectedResult`. Add
   `<Using Include="Xunit" />` (or a `Usings.cs`) instead of per-file usings.
-- **Pins (in `Directory.Packages.props`, CPM):** `Microsoft.NET.Test.Sdk` **18.10.0** (the measured family pin in section 1.1), `xunit`
-  **2.9.3**, `xunit.runner.visualstudio` **4.0.0**, `coverlet.collector` **10.0.1**. TargetFramework
+- **Pins (in `Directory.Packages.props`, CPM):** `Microsoft.NET.Test.Sdk`, `xunit`,
+  `xunit.runner.visualstudio` and `coverlet.collector`; read the current versions from that file, not from this
+  page (numbers here drift with every dependency update). TargetFramework
   `net10.0`, SDK pinned in `global.json`. Add `Microsoft.AspNetCore.Mvc.Testing` (currently 10.0.x)
   for web-host tests, `Xunit.SkippableFact` **1.5.85** for DB-gated tests and `Microsoft.Playwright`
   **1.62.0** for the UI tier.

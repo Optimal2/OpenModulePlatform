@@ -374,11 +374,9 @@ them later through Portal.
 2. Put one or more environment-specific bootstrap JSON files in
    `hosts/<profile>/bootstrap.json` beside the package. Keeping profile names
    such as `developer-laptop`, `customer-test`, `customer-production`, and
-   `staging` lets one package carry multiple installation profiles. The
-   generated package also contains a `configs\bootstrap.local.sample.json`
-   template; sample templates are never operative configs, so copy it to
-   `hosts/<profile>/bootstrap.json` (or to a non-sample file under
-   `configs\`) and edit that copy instead of editing the sample in place.
+   `staging` lets one package carry multiple installation profiles. For older
+   disposable local environments, editing `configs\bootstrap.local.sample.json`
+   in place is also acceptable.
    Profiles can include a `profile` section:
 
    ```json
@@ -425,8 +423,9 @@ install-hostagent-first.cmd
 ```
 
 Both entry points open the graphical installer. The EXE requests administrator
-rights, loads `hosts\<profile>\bootstrap.json` and non-sample `configs\*.json`
-beside the package in the same pass, locks onto the profile matching the local
+rights, loads `hosts\<profile>\bootstrap.json` and `configs\*.json` beside the
+package in the same pass (`bootstrap.local.sample.json` is the legacy fallback
+when neither exists), locks onto the profile matching the local
 computer (exactly one profile must match; the GUI has no profile selector),
 and shows common SQL, path, HostAgent, and IIS settings as read-only
 values. Operational changes are made in the JSON file and then loaded with
