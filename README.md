@@ -106,7 +106,7 @@ Derived from: `OpenModulePlatform.Portal/Program.cs` and `appsettings.json`
 (`ConnectionStrings:OmpDb`, `ArtifactStoreRoot`);
 `OpenModulePlatform.HostAgent.WindowsService/Program.cs` and `appsettings.json`
 (`HostAgent:RefreshSeconds`, `CentralArtifactRoot`, `LocalArtifactCacheRoot`,
-`ArtifactZipImport`); `HostAgent.Runtime/Services/WebAppDeploymentService.cs`
+`ArtifactZipImport`); `OpenModulePlatform.HostAgent.Runtime/Services/WebAppDeploymentService.cs`
 (`EnsureIisSite`, `EnsureAppPool`, `EnsureIisChildApplication`),
 `IisAppCmd.cs`, `WindowsServiceControl.cs`, `ServiceAppDeploymentService.cs`;
 `OpenModulePlatform.HostAgent.Sentinel/SentinelSettings.cs`;
@@ -164,10 +164,10 @@ Derived from: `scripts/omp/build-universal-package.ps1`,
 `OpenModulePlatform.Artifacts/UniversalModulePackageReader.cs`,
 `OpenModulePlatform.Portal/Services/PortableModulePackageService.cs`
 (`ImportUniversalPackageUploadAsync`),
-`HostAgent.Runtime/Services/ArtifactZipImportService.cs`
+`OpenModulePlatform.HostAgent.Runtime/Services/ArtifactZipImportService.cs`
 (`ImportPendingAsync`, `ImportModuleDefinitionAsync`,
 `ExecuteModuleDefinitionSqlAsync`),
-`HostAgent.Runtime/Services/OmpHostArtifactRepository.cs`
+`OpenModulePlatform.HostAgent.Runtime/Services/OmpHostArtifactRepository.cs`
 (`SaveImportedModuleDefinitionAsync`,
 `ApplyImportedArtifactToMatchingApplicationsAsync`),
 `OpenModulePlatform.Bootstrapper/Program.cs` (`RunBootstrapAsync`), and

@@ -96,7 +96,8 @@ follow the same numbered pattern there (verified 2026-08-27):
 `omp_contoso` (Contoso), `omp_globex` (Globex), `omp_fabrikam` (Fabrikam),
 `omp_northwind` (Northwind) and `omp_adventureworks` (AdventureWorks).
 Tailwind is the second exception alongside `OpenModulePlatform.Auth`: it owns
-no schema and its only OMP script, `Sql/01_initialize_tailwind_metadata.sql`,
+no schema and its only OMP script, `Sql/01_initialize_tailwind_metadata.sql`
+in the Tailwind repository,
 seeds permissions into `omp` — note that it also uses a different file-naming
 convention (`01_…`) than the numbered pattern above.
 

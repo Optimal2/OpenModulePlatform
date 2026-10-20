@@ -203,7 +203,7 @@ private companion repository.
 
 | Repo | Library | Configuration | Levels used | Structured? | Destinations | Correlation/context IDs |
 |---|---|---|---|---|---|---|
-| **OpenModulePlatform** | NLog + MEL/ILogger | `appsettings.json` `"NLog"` sections | Debug/Info/Warning/Error/Critical | Yes (templates), some console strings | File + console | Push-event `CorrelationKey` only |
+| **OpenModulePlatform** | NLog + MEL/ILogger | `appsettings.json` `"NLog"` sections | Debug/Info/Warning/Error/Critical | Yes (templates), some console strings | File + console | Request `CorrelationId` scope (`OmpRequestCorrelationMiddleware`); push-event `CorrelationKey` separately |
 | **Contoso** | MEL/ILogger only | `appsettings.json` `Logging:LogLevel` only | Debug/Info/Warning/Error | Yes (templates), one string outlier | Host-provided | None |
 | **Fabrikam** | NLog + MEL/ILogger | Service `appsettings.json` NLog section; web shared defaults | Info/Warning/Error | Yes | File + console | None |
 | **Northwind** | NLog + MEL/ILogger | Service `appsettings.json` NLog; web MEL only | Info/Warning/Error | Yes (templates); front-end console strings | File + console | None |
@@ -219,7 +219,7 @@ private companion repository.
 - **.NET library split:** 6 of 8 .NET repos use NLog as the provider; **Contoso** and **ODVGateway** rely on plain MEL.
 - **Configuration split:** NLog-based .NET repos configure logging in `appsettings.json`; Contoso and ODVGateway only use the MEL `Logging:LogLevel` section.
 - **JS ecosystem split:** OpenDocViewer has a custom logger + `morgan`; AgentDocMap uses raw `console`.
-- **Correlation IDs:** Only **Tailwind (PrintConnect)** (`TraceIdentifier`) and **OpenDocViewer** (`sessionId`/`iframeId` for user logs) have any request/session context in logs.
+- **Correlation IDs:** **OpenModulePlatform** carries a request `CorrelationId` scope via `OmpRequestCorrelationMiddleware` (see section 1); **Tailwind (PrintConnect)** uses `TraceIdentifier` and **OpenDocViewer** uses `sessionId`/`iframeId` for user logs.
 
 ## 3. Recommended standard pattern
 

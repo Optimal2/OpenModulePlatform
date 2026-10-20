@@ -4,7 +4,7 @@
 |---|---|
 | Paket | `webamp` 2.3.1 (npm registry) |
 | Tarball sha256 | `d45a3d46cbd3e4bdd39a9b71656d87341ddac48b4a4c4a61356ec065a6bba7c0` |
-| Fil | `package/built/webamp.bundle.min.js` (939 674 byte), kopierad oförändrad |
+| Fil | `package/built/webamp.bundle.min.js` i npm-tarballen (939 674 byte), kopierad oförändrad till `webamp.bundle.min.js` bredvid denna fil i repot (`OpenModulePlatform.Portal/wwwroot/lib/webamp/webamp.bundle.min.js`) |
 | Licens | MIT (Jordan Eldredge) — se WEBAMP-LICENSE.txt |
 | Uppströmskälla | https://github.com/captbaritone/webamp |
 | Hämtad + granskad | 2026-08-31 |

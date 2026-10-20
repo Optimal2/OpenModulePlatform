@@ -275,16 +275,17 @@ The OIDC provider emits role principals for:
 - `ADUser` with useful AD-style user principal candidates when present, such as SID, UPN, SAM/account name, or `DOMAIN\name`
 - `OIDCUser` with the provider user key
 - `OIDCSubject` with the configured user-id claim
-- `ADGroup` for every configured group claim value sent by the identity provider, including SID values and configured name values
+- `ADGroup` only for group claim values (SID or translated `DOMAIN\Group` name) that already exist in `omp.RolePrincipals`, as described under "OIDC / AD FS Provider" above
 
-OMP does not maintain a separate allow-list of OIDC groups. If AD FS sends broad
-group claims, OMP can use those values directly as `ADGroup` role principals.
-That keeps group ownership in AD FS/AD, but it also means the resulting OMP
-cookie can grow with the number and length of group claims. Prefer compact group
-identifiers or scoped group issuance rules at the identity provider when users
-belong to many groups. AD FS policy may still decide which groups are emitted.
-If all groups are emitted, AD FS administrators must consider identity-token,
-cookie, and HTTP header size limits.
+OMP does not maintain a separate allow-list of OIDC groups beyond the
+`omp.RolePrincipals` mapping: group claims that map to a role principal become
+`ADGroup` principals in the cookie, and the rest are dropped at sign-in. A role
+mapping added after sign-in therefore takes effect at the next sign-in.
+Prefer compact group identifiers or scoped group issuance rules at the
+identity provider when users belong to many groups, because the token itself
+is not shortened by this filter. AD FS policy may still decide which groups
+are emitted; if all groups are emitted, AD FS administrators must consider
+identity-token size limits.
 
 AD FS deployments sometimes require the `allatclaims` scope for desired claims
 to appear in the `id_token` used by OMP Auth. Add it to `OmpAuth:Oidc:Scopes`
@@ -293,10 +294,10 @@ configuration and always keeps tokens out of the shared OMP cookie.
 
 AD FS group issuance is an identity-provider decision. Administrators can emit
 all groups, selected groups, group SIDs, group names, or role-style claims. OMP
-can consume any configured claim type and resolve the resulting values as
-`ADGroup` role principals. OMP itself should not require a maintained
-group allow-list for OIDC sign-in; a scoped AD FS claim issuance policy may
-still be useful for token size, privacy, and auditability.
+can consume any configured claim type, but only values that map to an
+`omp.RolePrincipals` row become `ADGroup` role principals in the cookie; a
+scoped AD FS claim issuance policy may still be useful for token size,
+privacy, and auditability.
 
 #### OIDC RBAC Examples
 

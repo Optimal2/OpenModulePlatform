@@ -118,9 +118,8 @@ require it (each is a removal candidate; see "Migration plan"):
 - **Inline `<style>` and style attributes**: webamp injects its skin CSS as a
   runtime `<style>` element (dynamic, cannot be hashed), and Razor renders
   dynamic style attributes the dashboard needs
-  (`Portal/Pages/Index.cshtml` widget geometry,
-  `Portal/Pages/Messages/_ThreadMessages.cshtml`,
-  `Portal/Pages/Admin/PortalEntries.cshtml`).
+  (`OpenModulePlatform.Portal/Pages/Index.cshtml` widget geometry,
+  `OpenModulePlatform.Portal/Pages/Admin/PortalEntries.cshtml`).
 
 The Portal's 16 inline `<script>` blocks moved to static files under
 `OpenModulePlatform.Portal/wwwroot/js/` on 2026-09-04 (campaign

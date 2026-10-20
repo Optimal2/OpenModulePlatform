@@ -204,17 +204,13 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 ### fabrikam-web / northwind-web
 - Add `.editorconfig`.
 - Decide on `TreatWarningsAsErrors`: recommend `true` in CI, `false` locally. Add `AnalysisLevel` `latest` and `EnforceCodeStyleInBuild` `true`.
-- Update `global.json` from the preview SDK to a stable `10.0.200`/`10.0.300` pin.
-- Keep CPM.
+- Keep CPM. (`global.json` already pins the stable `10.0.302` SDK; the preview-SDK pin from the original audit was corrected 2026-09-04.)
 
 ### adventureworks-web
-- Add `.editorconfig`.
-- Add root `Directory.Build.props` with `TargetFramework`, `Nullable`, `ImplicitUsings`, `AnalysisLevel`, `EnforceCodeStyleInBuild`, and conditional `TreatWarningsAsErrors`.
-- Add `Directory.Packages.props` and migrate inline `PackageReference` versions to CPM.
-- Add `global.json` matching the rest of the ecosystem.
+- Already in place (corrected 2026-09-04): `.editorconfig`, root `Directory.Build.props`, `Directory.Packages.props` with CPM, and a `global.json` SDK pin. No structural additions remain; only alignment items such as line endings and `TreatWarningsAsErrors` policy are open.
 
 ### tailwind-web
-- Adopt CPM by adding `Directory.Packages.props`; move package versions out of `.csproj` files and align test package versions with the ecosystem (e.g. `Microsoft.NET.Test.Sdk` 18.x, `xunit.runner.visualstudio` 3.x).
+- Keep CPM (adopted since the original audit; corrected 2026-09-04). Align test package versions with the ecosystem through the central pins.
 - Add `global.json`.
 - Consider switching `.editorconfig` line endings from CRLF to LF to match OpenModulePlatform, or document a deliberate Windows-only exception.
 - Change `TreatWarningsAsErrors` from unconditional `false` to a CI-only `true` condition.

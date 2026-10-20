@@ -368,7 +368,10 @@ continues without removal for that cycle; it never blocks the deployment. The
 write is atomic (temp file plus move).
 
 Reserved runtime control paths can never be supplied by a configuration
-overlay: `App_Data/omp-applied-overlay-files.json`,
+overlay. The `App_Data/...` paths in this section are relative to each
+deployed web app's target directory (not the repository root); they are
+created at deployment time and do not exist in the repository:
+`App_Data/omp-applied-overlay-files.json`,
 `App_Data/omp-deployment.lock.json` and
 `App_Data/omp-runtime-stopped-for-deployment.json` are denied before apply and
 classification, with a diagnostic warning. Generic user `App_Data` files remain

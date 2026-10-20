@@ -49,6 +49,11 @@ to provision an artifact without pre-registering a host-specific requirement.
 
 ## Current state
 
+The Contoso paths below are relative to the Contoso repository (a private
+consumer repository, not this repository); see
+[CHANNEL_TYPE_RECONCILE.md](../CHANNEL_TYPE_RECONCILE.md) for the pinned
+commit and the current line evidence.
+
 ### Contoso reconcile stored procedure
 
 `Contoso/sql/1-setup-contoso.sql:215-293` defines

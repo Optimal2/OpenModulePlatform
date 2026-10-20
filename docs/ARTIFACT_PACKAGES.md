@@ -276,12 +276,12 @@ landing on two different versions.
 The rule is the same on all three import paths, and they were aligned
 deliberately after the first fix only covered one of them:
 
-- HostAgent import (`HostAgent.Runtime/Services/ArtifactZipImportService.cs`)
+- HostAgent import (`OpenModulePlatform.HostAgent.Runtime/Services/ArtifactZipImportService.cs`)
 - Portal portable module package import
-  (`Portal/Services/PortableModulePackageService.cs`) — this one used to
+  (`OpenModulePlatform.Portal/Services/PortableModulePackageService.cs`) — this one used to
   silently **Skip** an empty-diff bump, which split the deploy-set it was in the
   middle of importing
-- Portal manual artifact upload (`Portal/Pages/Admin/ArtifactUpload.cshtml.cs`)
+- Portal manual artifact upload (`OpenModulePlatform.Portal/Pages/Admin/ArtifactUpload.cshtml.cs`)
   — this one used to reject it outright
 
 Two details matter when reading the code or a result message:
