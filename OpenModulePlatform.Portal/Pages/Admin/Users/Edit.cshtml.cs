@@ -546,23 +546,66 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         {
             PortalUserSettingsAdminRepository.IntValueKind => T("Integer"),
             PortalUserSettingsAdminRepository.StringValueKind => T("String"),
+            PortalUserSettingsAdminRepository.BitValueKind => T("Boolean"),
             _ => T("Unknown")
         };
 
     public string PortalSettingValueText(PortalUserSettingValueRow row)
-        => row.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
-            ? row.IntValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : ValuePreview(row.StringValue);
+        => row.ValueKind switch
+        {
+            PortalUserSettingsAdminRepository.IntValueKind => row.IntValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+            PortalUserSettingsAdminRepository.BitValueKind => BitText(row.BitValue) ?? string.Empty,
+            _ => ValuePreview(row.StringValue)
+        };
 
     public string PortalSettingDefaultText(PortalUserSettingDefinitionRow definition)
-        => definition.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
-            ? definition.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None")
-            : ValuePreview(definition.DefaultStringValue);
+        => definition.ValueKind switch
+        {
+            PortalUserSettingsAdminRepository.IntValueKind => definition.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None"),
+            PortalUserSettingsAdminRepository.BitValueKind => BitText(definition.DefaultBitValue) ?? T("None"),
+            _ => ValuePreview(definition.DefaultStringValue)
+        };
 
     public string PortalSettingDefaultText(PortalUserSettingValueRow row)
-        => row.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
-            ? row.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None")
-            : ValuePreview(row.DefaultStringValue);
+        => row.ValueKind switch
+        {
+            PortalUserSettingsAdminRepository.IntValueKind => row.DefaultIntValue?.ToString(CultureInfo.InvariantCulture) ?? T("None"),
+            PortalUserSettingsAdminRepository.BitValueKind => BitText(row.DefaultBitValue) ?? T("None"),
+            _ => ValuePreview(row.DefaultStringValue)
+        };
+
+    // Bit values travel through the form as the invariant words true and
+    // false, the same spelling the value column shows, so what an admin reads
+    // is what they can type back.
+    private static string? BitText(bool? value)
+        => value switch
+        {
+            true => "true",
+            false => "false",
+            null => null
+        };
+
+    private static bool TryParseBit(string? text, out bool value)
+    {
+        switch (text?.Trim().ToLowerInvariant())
+        {
+            case "true":
+            case "1":
+            case "yes":
+            case "on":
+                value = true;
+                return true;
+            case "false":
+            case "0":
+            case "no":
+            case "off":
+                value = false;
+                return true;
+            default:
+                value = false;
+                return false;
+        }
+    }
 
     public string RoleSourceText(OmpUserRoleRow row)
         => string.Equals(row.PrincipalType, "OmpUser", StringComparison.OrdinalIgnoreCase)
@@ -759,6 +802,21 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
             PortalSettingInput.IntValue = intValue;
             PortalSettingInput.StringValue = null;
+            PortalSettingInput.BitValue = null;
+            return definition;
+        }
+
+        if (definition.ValueKind == PortalUserSettingsAdminRepository.BitValueKind)
+        {
+            if (!TryParseBit(PortalSettingInput.SettingValue, out var bitValue))
+            {
+                ModelState.AddModelError(PortalSettingValueField, T("Enter true or false."));
+                return null;
+            }
+
+            PortalSettingInput.BitValue = bitValue;
+            PortalSettingInput.IntValue = null;
+            PortalSettingInput.StringValue = null;
             return definition;
         }
 
@@ -766,6 +824,7 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         {
             PortalSettingInput.StringValue = PortalSettingInput.SettingValue ?? string.Empty;
             PortalSettingInput.IntValue = null;
+            PortalSettingInput.BitValue = null;
             return definition;
         }
 
@@ -775,9 +834,12 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
     private PortalSettingInputModel ToPortalSettingInput(PortalUserSettingValueRow row)
     {
-        var value = row.ValueKind == PortalUserSettingsAdminRepository.IntValueKind
-            ? row.IntValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty
-            : row.StringValue ?? string.Empty;
+        var value = row.ValueKind switch
+        {
+            PortalUserSettingsAdminRepository.IntValueKind => row.IntValue?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+            PortalUserSettingsAdminRepository.BitValueKind => BitText(row.BitValue) ?? string.Empty,
+            _ => row.StringValue ?? string.Empty
+        };
 
         return new PortalSettingInputModel
         {
@@ -786,7 +848,8 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             ValueKind = row.ValueKind,
             SettingValue = value,
             IntValue = row.IntValue,
-            StringValue = row.StringValue
+            StringValue = row.StringValue,
+            BitValue = row.BitValue
         };
     }
 
@@ -795,7 +858,8 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             definition.UserSettingDefinitionId,
             definition.ValueKind,
             PortalSettingInput.IntValue,
-            PortalSettingInput.StringValue);
+            PortalSettingInput.StringValue,
+            PortalSettingInput.BitValue);
 
     private void ClearLocalPasswordFields()
     {
@@ -930,6 +994,8 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         public int? IntValue { get; set; }
 
         public string? StringValue { get; set; }
+
+        public bool? BitValue { get; set; }
     }
 
     public sealed class MergeAdfsDuplicateInputModel

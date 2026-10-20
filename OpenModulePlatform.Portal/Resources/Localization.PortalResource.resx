@@ -1519,7 +1519,7 @@
   <data name="Select portal setting" xml:space="preserve"><value>Select portal setting</value></data>
   <data name="Default value" xml:space="preserve"><value>Default value</value></data>
   <data name="Setting value" xml:space="preserve"><value>Setting value</value></data>
-  <data name="Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override." xml:space="preserve"><value>Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override.</value></data>
+  <data name="Use an integer for int-backed settings, true or false for boolean settings, and text for string-backed settings. Saving the default value removes the user override." xml:space="preserve"><value>Use an integer for int-backed settings, true or false for boolean settings, and text for string-backed settings. Saving the default value removes the user override.</value></data>
   <data name="Configured portal setting values" xml:space="preserve"><value>Configured portal setting values</value></data>
   <data name="No portal setting values have been configured for this user." xml:space="preserve"><value>No portal setting values have been configured for this user.</value></data>
   <data name="User value" xml:space="preserve"><value>User value</value></data>
@@ -1536,6 +1536,10 @@
   <data name="Enter a valid integer value." xml:space="preserve"><value>Enter a valid integer value.</value></data>
   <data name="Integer" xml:space="preserve"><value>Integer</value></data>
   <data name="String" xml:space="preserve"><value>String</value></data>
+  <data name="Boolean" xml:space="preserve"><value>Boolean</value></data>
+  <data name="Enter true or false." xml:space="preserve"><value>Enter true or false.</value></data>
+  <data name="True" xml:space="preserve"><value>True</value></data>
+  <data name="False" xml:space="preserve"><value>False</value></data>
   <data name="Topbar layout" xml:space="preserve"><value>Topbar layout</value></data>
   <data name="Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child.</value></data>
   <data name="Visible" xml:space="preserve"><value>Visible</value></data>

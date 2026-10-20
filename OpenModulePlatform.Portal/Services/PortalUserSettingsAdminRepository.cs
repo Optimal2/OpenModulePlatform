@@ -7,6 +7,7 @@ public sealed class PortalUserSettingsAdminRepository
 {
     public const byte IntValueKind = 1;
     public const byte StringValueKind = 2;
+    public const byte BitValueKind = 3;
 
     private readonly string _connectionString;
 
@@ -25,6 +26,7 @@ public sealed class PortalUserSettingsAdminRepository
                    value_kind,
                    default_int_value,
                    default_string_value,
+                   default_bit_value,
                    description,
                    sort_order,
                    is_enabled
@@ -59,11 +61,13 @@ public sealed class PortalUserSettingsAdminRepository
                        d.value_kind AS ValueKind,
                        d.default_int_value AS DefaultIntValue,
                        d.default_string_value AS DefaultStringValue,
+                       d.default_bit_value AS DefaultBitValue,
                        d.description AS Description,
                        d.sort_order AS SortOrder,
                        d.is_enabled AS IsEnabled,
                        v.setting_value AS IntValue,
                        CAST(NULL AS nvarchar(max)) AS StringValue,
+                       CAST(NULL AS bit) AS BitValue,
                        v.updated_at AS UpdatedAt
                 FROM omp_portal.user_setting_int_values v
                 INNER JOIN omp_portal.user_setting_definitions d
@@ -80,13 +84,36 @@ public sealed class PortalUserSettingsAdminRepository
                        d.value_kind AS ValueKind,
                        d.default_int_value AS DefaultIntValue,
                        d.default_string_value AS DefaultStringValue,
+                       d.default_bit_value AS DefaultBitValue,
                        d.description AS Description,
                        d.sort_order AS SortOrder,
                        d.is_enabled AS IsEnabled,
                        CAST(NULL AS int) AS IntValue,
                        v.setting_value AS StringValue,
+                       CAST(NULL AS bit) AS BitValue,
                        v.updated_at AS UpdatedAt
                 FROM omp_portal.user_setting_string_values v
+                INNER JOIN omp_portal.user_setting_definitions d
+                    ON d.user_setting_definition_id = v.user_setting_definition_id
+                   AND d.value_kind = v.value_kind
+                WHERE v.user_id = @user_id
+                UNION ALL
+                SELECT v.user_id AS UserId,
+                       d.user_setting_definition_id AS UserSettingDefinitionId,
+                       d.setting_category AS SettingCategory,
+                       d.setting_name AS SettingName,
+                       d.value_kind AS ValueKind,
+                       d.default_int_value AS DefaultIntValue,
+                       d.default_string_value AS DefaultStringValue,
+                       d.default_bit_value AS DefaultBitValue,
+                       d.description AS Description,
+                       d.sort_order AS SortOrder,
+                       d.is_enabled AS IsEnabled,
+                       CAST(NULL AS int) AS IntValue,
+                       CAST(NULL AS nvarchar(max)) AS StringValue,
+                       v.setting_value AS BitValue,
+                       v.updated_at AS UpdatedAt
+                FROM omp_portal.user_setting_bit_values v
                 INNER JOIN omp_portal.user_setting_definitions d
                     ON d.user_setting_definition_id = v.user_setting_definition_id
                    AND d.value_kind = v.value_kind
@@ -125,6 +152,7 @@ public sealed class PortalUserSettingsAdminRepository
                    value_kind,
                    default_int_value,
                    default_string_value,
+                   default_bit_value,
                    description,
                    sort_order,
                    is_enabled
@@ -171,6 +199,7 @@ public sealed class PortalUserSettingsAdminRepository
             else
             {
                 await DeleteStringValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+                await DeleteBitValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
                 await UpsertIntValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, editData.IntValue.Value, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -184,7 +213,27 @@ public sealed class PortalUserSettingsAdminRepository
             else
             {
                 await DeleteIntValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+                await DeleteBitValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
                 await UpsertStringValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, value, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else if (definition.ValueKind == BitValueKind)
+        {
+            if (editData.BitValue is null)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+
+            if (definition.DefaultBitValue == editData.BitValue.Value)
+            {
+                await DeleteValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await DeleteIntValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+                await DeleteStringValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+                await UpsertBitValueAsync(connection, transaction, userId, definition.UserSettingDefinitionId, editData.BitValue.Value, cancellationToken).ConfigureAwait(false);
             }
         }
         else
@@ -198,7 +247,7 @@ public sealed class PortalUserSettingsAdminRepository
     }
 
     /// <remarks>R8-P3-9: reports whether a stored value was actually removed. A setting is held in
-    /// one of two typed tables, so the two deletes are summed deliberately -- exactly one of them
+    /// one of three typed tables, so the deletes are summed deliberately -- exactly one of them
     /// can match, and summing here is safe because each statement is counted on its own rather
     /// than taken from one ExecuteNonQuery across a batch.</remarks>
     public async Task<bool> DeleteValueAsync(int userId, int userSettingDefinitionId, CancellationToken cancellationToken)
@@ -226,6 +275,7 @@ public sealed class PortalUserSettingsAdminRepository
                    value_kind,
                    default_int_value,
                    default_string_value,
+                   default_bit_value,
                    description,
                    sort_order,
                    is_enabled
@@ -302,6 +352,36 @@ public sealed class PortalUserSettingsAdminRepository
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private static async Task UpsertBitValueAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        int userId,
+        int userSettingDefinitionId,
+        bool settingValue,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE omp_portal.user_setting_bit_values
+            SET setting_value = @setting_value,
+                updated_at = SYSUTCDATETIME()
+            WHERE user_id = @user_id
+              AND user_setting_definition_id = @definition_id;
+
+            IF @@ROWCOUNT = 0
+            BEGIN
+                INSERT INTO omp_portal.user_setting_bit_values(user_id, user_setting_definition_id, value_kind, setting_value)
+                VALUES(@user_id, @definition_id, @value_kind, @setting_value);
+            END;
+            """;
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        command.Parameters.Add("@definition_id", SqlDbType.Int).Value = userSettingDefinitionId;
+        command.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
+        command.Parameters.Add("@setting_value", SqlDbType.Bit).Value = settingValue;
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private static async Task<bool> DeleteValueAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -311,7 +391,27 @@ public sealed class PortalUserSettingsAdminRepository
     {
         var intRows = await DeleteIntValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
         var stringRows = await DeleteStringValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
-        return intRows + stringRows > 0;
+        var bitRows = await DeleteBitValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+        return intRows + stringRows + bitRows > 0;
+    }
+
+    private static async Task<int> DeleteBitValueAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        int userId,
+        int userSettingDefinitionId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            DELETE FROM omp_portal.user_setting_bit_values
+            WHERE user_id = @user_id
+              AND user_setting_definition_id = @definition_id;
+            """;
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        command.Parameters.Add("@definition_id", SqlDbType.Int).Value = userSettingDefinitionId;
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<int> DeleteIntValueAsync(
@@ -361,6 +461,7 @@ public sealed class PortalUserSettingsAdminRepository
             reader.GetByte(reader.GetOrdinal("value_kind")),
             reader.IsDBNull(reader.GetOrdinal("default_int_value")) ? null : reader.GetInt32(reader.GetOrdinal("default_int_value")),
             reader.IsDBNull(reader.GetOrdinal("default_string_value")) ? null : reader.GetString(reader.GetOrdinal("default_string_value")),
+            reader.IsDBNull(reader.GetOrdinal("default_bit_value")) ? null : reader.GetBoolean(reader.GetOrdinal("default_bit_value")),
             reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
             reader.GetInt32(reader.GetOrdinal("sort_order")),
             reader.GetBoolean(reader.GetOrdinal("is_enabled")));
@@ -376,11 +477,13 @@ public sealed class PortalUserSettingsAdminRepository
             reader.GetByte(reader.GetOrdinal("ValueKind")),
             reader.IsDBNull(reader.GetOrdinal("DefaultIntValue")) ? null : reader.GetInt32(reader.GetOrdinal("DefaultIntValue")),
             reader.IsDBNull(reader.GetOrdinal("DefaultStringValue")) ? null : reader.GetString(reader.GetOrdinal("DefaultStringValue")),
+            reader.IsDBNull(reader.GetOrdinal("DefaultBitValue")) ? null : reader.GetBoolean(reader.GetOrdinal("DefaultBitValue")),
             reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
             reader.GetInt32(reader.GetOrdinal("SortOrder")),
             reader.GetBoolean(reader.GetOrdinal("IsEnabled")),
             reader.IsDBNull(reader.GetOrdinal("IntValue")) ? null : reader.GetInt32(reader.GetOrdinal("IntValue")),
             reader.IsDBNull(reader.GetOrdinal("StringValue")) ? null : reader.GetString(reader.GetOrdinal("StringValue")),
+            reader.IsDBNull(reader.GetOrdinal("BitValue")) ? null : reader.GetBoolean(reader.GetOrdinal("BitValue")),
             reader.GetDateTime(reader.GetOrdinal("UpdatedAt")));
     }
 }
@@ -392,6 +495,7 @@ public sealed record PortalUserSettingDefinitionRow(
     byte ValueKind,
     int? DefaultIntValue,
     string? DefaultStringValue,
+    bool? DefaultBitValue,
     string? Description,
     int SortOrder,
     bool IsEnabled)
@@ -407,11 +511,13 @@ public sealed record PortalUserSettingValueRow(
     byte ValueKind,
     int? DefaultIntValue,
     string? DefaultStringValue,
+    bool? DefaultBitValue,
     string? Description,
     int SortOrder,
     bool IsEnabled,
     int? IntValue,
     string? StringValue,
+    bool? BitValue,
     DateTime UpdatedAt)
 {
     public string Key => $"{SettingCategory}/{SettingName}";
@@ -421,4 +527,5 @@ public sealed record PortalUserSettingValueEditData(
     int UserSettingDefinitionId,
     byte ValueKind,
     int? IntValue,
-    string? StringValue);
+    string? StringValue,
+    bool? BitValue);

@@ -54,6 +54,22 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **On/off user settings are stored as bits, and theme and culture get a
+  home in the database.** The Portal module's user settings gain a third
+  value kind, bit (`omp_portal.user_setting_bit_values`, value_kind 3,
+  `default_bit_value` on the definition), and the six on/off settings
+  (AdminMetricsCollapsed, TopbarDropdownsOpenOnHover, ShowPortalNavbar,
+  NotificationToastsMuted, NotificationSoundsEnabled,
+  PageSearchOverridesCtrlF) move from int to bit under the schema migration
+  `20261020-user-settings-bool-to-bit`, keeping every stored value and its
+  timestamp. Three definitions are added for the settings that follow:
+  `Search/DeepByDefault` (bit), `Appearance/Theme` (int: 0 follows the
+  system, 1 light, 2 dark) and `Appearance/Culture` (string), so a user's
+  choices can follow them between computers while the browser cookies stay
+  the fast path. The admin user page edits bit settings as true or false.
+  Consumers of the shared top bar read the hover setting from the bit table
+  once they take this Web.Shared; until then they fall back to its default.
+
 - **The dashboard's Reset button lights up only with changes to reset.**
   It now follows the same question as Save (does the canvas differ from
   what was last saved?) and sits disabled and muted until the first

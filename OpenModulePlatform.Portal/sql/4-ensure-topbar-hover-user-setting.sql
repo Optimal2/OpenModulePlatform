@@ -9,14 +9,18 @@ SQL. The full setup script already contains the same definition.
 
 Prerequisite:
 - Run ../../sql/1-setup-openmoduleplatform.sql
-- Run 1-setup-omp-portal.sql at least once
+- Run 1-setup-omp-portal.sql at least once (it runs first in the module's
+  script order, and since 2026-10-20 it moves these on/off settings to the
+  bit-backed kind 3; this patch seeds exactly that shape, never kind 1 again)
 */
 USE [OpenModulePlatform];
 GO
 
 IF OBJECT_ID(N'omp_portal.user_setting_definitions', N'U') IS NULL
+   OR COL_LENGTH(N'omp_portal.user_setting_definitions', N'default_bit_value') IS NULL
+   OR OBJECT_ID(N'omp_portal.user_setting_bit_values', N'U') IS NULL
 BEGIN
-    THROW 52012, 'omp_portal.user_setting_definitions is missing. Run OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql before this patch.', 1;
+    THROW 52012, 'omp_portal.user_setting_definitions is missing or predates the bit-backed settings. Run OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql before this patch.', 1;
 END
 GO
 
@@ -25,27 +29,30 @@ USING
 (
     SELECT N'Portal' AS setting_category,
            N'TopbarDropdownsOpenOnHover' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(1 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(1 AS bit) AS default_bit_value,
            N'Controls whether top bar dropdown menus open on hover for the signed-in user.' AS description,
            20 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'ShowPortalNavbar' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(1 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(1 AS bit) AS default_bit_value,
            N'Controls whether the Portal navbar below the topbar is shown for the signed-in user.' AS description,
            30 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'NotificationToastsMuted' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(0 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(0 AS bit) AS default_bit_value,
            N'Controls whether notification and message toasts are muted for the signed-in user.' AS description,
            40 AS sort_order,
            CAST(1 AS bit) AS is_enabled
@@ -56,11 +63,12 @@ WHEN MATCHED THEN
     UPDATE SET value_kind = source.value_kind,
                default_int_value = source.default_int_value,
                default_string_value = source.default_string_value,
+               default_bit_value = source.default_bit_value,
                description = source.description,
                sort_order = source.sort_order,
                is_enabled = source.is_enabled,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(setting_category, setting_name, value_kind, default_int_value, default_string_value, description, sort_order, is_enabled)
-    VALUES(source.setting_category, source.setting_name, source.value_kind, source.default_int_value, source.default_string_value, source.description, source.sort_order, source.is_enabled);
+    INSERT(setting_category, setting_name, value_kind, default_int_value, default_string_value, default_bit_value, description, sort_order, is_enabled)
+    VALUES(source.setting_category, source.setting_name, source.value_kind, source.default_int_value, source.default_string_value, source.default_bit_value, source.description, source.sort_order, source.is_enabled);
 GO

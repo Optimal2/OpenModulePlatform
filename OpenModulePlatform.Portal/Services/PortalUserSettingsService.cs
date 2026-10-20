@@ -21,7 +21,7 @@ public sealed class PortalUserSettingsService
     private const string NotificationToastsMutedSetting = "NotificationToastsMuted";
     private const string NotificationSoundsEnabledSetting = "NotificationSoundsEnabled";
     private const string PageSearchOverridesCtrlFSetting = "PageSearchOverridesCtrlF";
-    private const byte IntValueKind = 1;
+    private const byte BitValueKind = 3;
 
     private readonly SqlConnectionFactory _db;
 
@@ -36,19 +36,19 @@ public sealed class PortalUserSettingsService
 SELECT u.display_name,
        u.profile_image_file_name,
        u.profile_image_storage_key,
-       CAST(COALESCE(admin_v.setting_value, admin_d.default_int_value, 0) AS bit),
-       CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit),
-       CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit),
-       CAST(COALESCE(toasts_v.setting_value, toasts_d.default_int_value, 0) AS bit),
-       CAST(COALESCE(sounds_v.setting_value, sounds_d.default_int_value, 1) AS bit),
-       CAST(COALESCE(search_v.setting_value, search_d.default_int_value, 0) AS bit)
+       CAST(COALESCE(admin_v.setting_value, admin_d.default_bit_value, 0) AS bit),
+       CAST(COALESCE(hover_v.setting_value, hover_d.default_bit_value, 1) AS bit),
+       CAST(COALESCE(navbar_v.setting_value, navbar_d.default_bit_value, 1) AS bit),
+       CAST(COALESCE(toasts_v.setting_value, toasts_d.default_bit_value, 0) AS bit),
+       CAST(COALESCE(sounds_v.setting_value, sounds_d.default_bit_value, 1) AS bit),
+       CAST(COALESCE(search_v.setting_value, search_d.default_bit_value, 0) AS bit)
 FROM omp.users u
 LEFT JOIN omp_portal.user_setting_definitions admin_d
     ON admin_d.setting_category = @setting_category
    AND admin_d.setting_name = @admin_metrics_setting_name
    AND admin_d.value_kind = @value_kind
    AND admin_d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values admin_v
+LEFT JOIN omp_portal.user_setting_bit_values admin_v
     ON admin_v.user_id = u.user_id
    AND admin_v.user_setting_definition_id = admin_d.user_setting_definition_id
 LEFT JOIN omp_portal.user_setting_definitions hover_d
@@ -56,7 +56,7 @@ LEFT JOIN omp_portal.user_setting_definitions hover_d
    AND hover_d.setting_name = @topbar_dropdowns_setting_name
    AND hover_d.value_kind = @value_kind
    AND hover_d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values hover_v
+LEFT JOIN omp_portal.user_setting_bit_values hover_v
     ON hover_v.user_id = u.user_id
    AND hover_v.user_setting_definition_id = hover_d.user_setting_definition_id
 LEFT JOIN omp_portal.user_setting_definitions navbar_d
@@ -64,7 +64,7 @@ LEFT JOIN omp_portal.user_setting_definitions navbar_d
    AND navbar_d.setting_name = @show_portal_navbar_setting_name
    AND navbar_d.value_kind = @value_kind
    AND navbar_d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values navbar_v
+LEFT JOIN omp_portal.user_setting_bit_values navbar_v
     ON navbar_v.user_id = u.user_id
    AND navbar_v.user_setting_definition_id = navbar_d.user_setting_definition_id
 LEFT JOIN omp_portal.user_setting_definitions toasts_d
@@ -72,7 +72,7 @@ LEFT JOIN omp_portal.user_setting_definitions toasts_d
    AND toasts_d.setting_name = @notification_toasts_muted_setting_name
    AND toasts_d.value_kind = @value_kind
    AND toasts_d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values toasts_v
+LEFT JOIN omp_portal.user_setting_bit_values toasts_v
     ON toasts_v.user_id = u.user_id
    AND toasts_v.user_setting_definition_id = toasts_d.user_setting_definition_id
 LEFT JOIN omp_portal.user_setting_definitions sounds_d
@@ -80,7 +80,7 @@ LEFT JOIN omp_portal.user_setting_definitions sounds_d
    AND sounds_d.setting_name = @notification_sounds_enabled_setting_name
    AND sounds_d.value_kind = @value_kind
    AND sounds_d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values sounds_v
+LEFT JOIN omp_portal.user_setting_bit_values sounds_v
     ON sounds_v.user_id = u.user_id
    AND sounds_v.user_setting_definition_id = sounds_d.user_setting_definition_id
 LEFT JOIN omp_portal.user_setting_definitions search_d
@@ -88,7 +88,7 @@ LEFT JOIN omp_portal.user_setting_definitions search_d
    AND search_d.setting_name = @page_search_overrides_ctrl_f_setting_name
    AND search_d.value_kind = @value_kind
    AND search_d.is_enabled = 1
-LEFT JOIN omp_portal.user_setting_int_values search_v
+LEFT JOIN omp_portal.user_setting_bit_values search_v
     ON search_v.user_id = u.user_id
    AND search_v.user_setting_definition_id = search_d.user_setting_definition_id
 WHERE u.user_id = @user_id
@@ -262,11 +262,11 @@ WHERE user_id = @user_id
     {
         const string sql = @"
 DECLARE @definition_id int;
-DECLARE @default_value int;
-DECLARE @setting_value int = CASE WHEN @admin_metrics_collapsed = 1 THEN 1 ELSE 0 END;
+DECLARE @default_value bit;
+DECLARE @setting_value bit = CASE WHEN @admin_metrics_collapsed = 1 THEN 1 ELSE 0 END;
 
 SELECT @definition_id = user_setting_definition_id,
-       @default_value = ISNULL(default_int_value, 0)
+       @default_value = ISNULL(default_bit_value, 0)
 FROM omp_portal.user_setting_definitions
 WHERE setting_category = @setting_category
   AND setting_name = @setting_name
@@ -280,13 +280,13 @@ END
 
 IF @setting_value = @default_value
 BEGIN
-    DELETE FROM omp_portal.user_setting_int_values
+    DELETE FROM omp_portal.user_setting_bit_values
     WHERE user_id = @user_id
       AND user_setting_definition_id = @definition_id;
 END
 ELSE
 BEGIN
-    UPDATE omp_portal.user_setting_int_values
+    UPDATE omp_portal.user_setting_bit_values
     SET setting_value = @setting_value,
         updated_at = SYSUTCDATETIME()
     WHERE user_id = @user_id
@@ -294,7 +294,7 @@ BEGIN
 
     IF @@ROWCOUNT = 0
     BEGIN
-        INSERT INTO omp_portal.user_setting_int_values(user_id, user_setting_definition_id, setting_value)
+        INSERT INTO omp_portal.user_setting_bit_values(user_id, user_setting_definition_id, setting_value)
         VALUES(@user_id, @definition_id, @setting_value);
     END
 END;";
@@ -313,11 +313,11 @@ END;";
     {
         const string sql = @"
 DECLARE @definition_id int;
-DECLARE @default_value int;
-DECLARE @setting_value int = CASE WHEN @topbar_dropdowns_open_on_hover = 1 THEN 1 ELSE 0 END;
+DECLARE @default_value bit;
+DECLARE @setting_value bit = CASE WHEN @topbar_dropdowns_open_on_hover = 1 THEN 1 ELSE 0 END;
 
 SELECT @definition_id = user_setting_definition_id,
-       @default_value = ISNULL(default_int_value, 1)
+       @default_value = ISNULL(default_bit_value, 1)
 FROM omp_portal.user_setting_definitions
 WHERE setting_category = @setting_category
   AND setting_name = @setting_name
@@ -331,13 +331,13 @@ END
 
 IF @setting_value = @default_value
 BEGIN
-    DELETE FROM omp_portal.user_setting_int_values
+    DELETE FROM omp_portal.user_setting_bit_values
     WHERE user_id = @user_id
       AND user_setting_definition_id = @definition_id;
 END
 ELSE
 BEGIN
-    UPDATE omp_portal.user_setting_int_values
+    UPDATE omp_portal.user_setting_bit_values
     SET setting_value = @setting_value,
         updated_at = SYSUTCDATETIME()
     WHERE user_id = @user_id
@@ -345,7 +345,7 @@ BEGIN
 
     IF @@ROWCOUNT = 0
     BEGIN
-        INSERT INTO omp_portal.user_setting_int_values(user_id, user_setting_definition_id, setting_value)
+        INSERT INTO omp_portal.user_setting_bit_values(user_id, user_setting_definition_id, setting_value)
         VALUES(@user_id, @definition_id, @setting_value);
     END
 END;";
@@ -411,11 +411,11 @@ END;";
     {
         var sql = $@"
 DECLARE @definition_id int;
-DECLARE @default_value int;
-DECLARE @setting_value int = CASE WHEN @setting_value_bit = 1 THEN 1 ELSE 0 END;
+DECLARE @default_value bit;
+DECLARE @setting_value bit = CASE WHEN @setting_value_bit = 1 THEN 1 ELSE 0 END;
 
 SELECT @definition_id = user_setting_definition_id,
-       @default_value = ISNULL(default_int_value, @default_value_fallback)
+       @default_value = ISNULL(default_bit_value, @default_value_fallback)
 FROM omp_portal.user_setting_definitions
 WHERE setting_category = @setting_category
   AND setting_name = @setting_name
@@ -429,13 +429,13 @@ END
 
 IF @setting_value = @default_value
 BEGIN
-    DELETE FROM omp_portal.user_setting_int_values
+    DELETE FROM omp_portal.user_setting_bit_values
     WHERE user_id = @user_id
       AND user_setting_definition_id = @definition_id;
 END
 ELSE
 BEGIN
-    UPDATE omp_portal.user_setting_int_values
+    UPDATE omp_portal.user_setting_bit_values
     SET setting_value = @setting_value,
         updated_at = SYSUTCDATETIME()
     WHERE user_id = @user_id
@@ -443,7 +443,7 @@ BEGIN
 
     IF @@ROWCOUNT = 0
     BEGIN
-        INSERT INTO omp_portal.user_setting_int_values(user_id, user_setting_definition_id, setting_value)
+        INSERT INTO omp_portal.user_setting_bit_values(user_id, user_setting_definition_id, setting_value)
         VALUES(@user_id, @definition_id, @setting_value);
     END
 END;";
@@ -453,10 +453,10 @@ END;";
         await using var cmd = new SqlCommand(sql, conn);
         AddUserId(cmd, userId);
         cmd.Parameters.Add("@setting_value_bit", SqlDbType.Bit).Value = value;
-        cmd.Parameters.Add("@default_value_fallback", SqlDbType.Int).Value = defaultValue ? 1 : 0;
+        cmd.Parameters.Add("@default_value_fallback", SqlDbType.Bit).Value = defaultValue;
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = settingName;
-        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
 
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -469,9 +469,9 @@ END;";
         CancellationToken ct)
     {
         const string sql = @"
-SELECT CAST(COALESCE(v.setting_value, d.default_int_value, @default_value) AS bit)
+SELECT CAST(COALESCE(v.setting_value, d.default_bit_value, @default_value) AS bit)
 FROM omp_portal.user_setting_definitions d
-LEFT JOIN omp_portal.user_setting_int_values v
+LEFT JOIN omp_portal.user_setting_bit_values v
     ON v.user_setting_definition_id = d.user_setting_definition_id
    AND v.user_id = @user_id
 WHERE d.setting_category = @setting_category
@@ -483,8 +483,8 @@ WHERE d.setting_category = @setting_category
         AddUserId(cmd, userId);
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = settingName;
-        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
-        cmd.Parameters.Add("@default_value", SqlDbType.Int).Value = defaultValue ? 1 : 0;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
+        cmd.Parameters.Add("@default_value", SqlDbType.Bit).Value = defaultValue;
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is bool boolValue
@@ -504,21 +504,21 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@notification_toasts_muted_setting_name", SqlDbType.NVarChar, 200).Value = NotificationToastsMutedSetting;
         cmd.Parameters.Add("@notification_sounds_enabled_setting_name", SqlDbType.NVarChar, 200).Value = NotificationSoundsEnabledSetting;
         cmd.Parameters.Add("@page_search_overrides_ctrl_f_setting_name", SqlDbType.NVarChar, 200).Value = PageSearchOverridesCtrlFSetting;
-        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
     }
 
     private static void AddAdminMetricsSettingParameters(SqlCommand cmd)
     {
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = AdminMetricsCollapsedSetting;
-        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
     }
 
     private static void AddTopbarDropdownsOpenOnHoverSettingParameters(SqlCommand cmd)
     {
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
-        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
     }
 
     private static async Task<int?> GetAuthProviderIdAsync(

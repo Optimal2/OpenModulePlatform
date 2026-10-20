@@ -1530,7 +1530,7 @@
   <data name="Select portal setting" xml:space="preserve"><value>Välj portalinställning</value></data>
   <data name="Default value" xml:space="preserve"><value>Standardvärde</value></data>
   <data name="Setting value" xml:space="preserve"><value>Inställningsvärde</value></data>
-  <data name="Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override." xml:space="preserve"><value>Använd heltal för int-baserade inställningar. Använd text för strängbaserade inställningar. Om du sparar standardvärdet tas användarens override bort.</value></data>
+  <data name="Use an integer for int-backed settings, true or false for boolean settings, and text for string-backed settings. Saving the default value removes the user override." xml:space="preserve"><value>Använd heltal för int-inställningar, true eller false för booleska inställningar och text för stränginställningar. Sparas standardvärdet tas användarens egna värde bort.</value></data>
   <data name="Configured portal setting values" xml:space="preserve"><value>Konfigurerade portalinställningsvärden</value></data>
   <data name="No portal setting values have been configured for this user." xml:space="preserve"><value>Inga portalinställningsvärden har konfigurerats för den här användaren.</value></data>
   <data name="User value" xml:space="preserve"><value>Användarvärde</value></data>
@@ -1547,6 +1547,10 @@
   <data name="Enter a valid integer value." xml:space="preserve"><value>Ange ett giltigt heltalsvärde.</value></data>
   <data name="Integer" xml:space="preserve"><value>Heltal</value></data>
   <data name="String" xml:space="preserve"><value>Sträng</value></data>
+  <data name="Boolean" xml:space="preserve"><value>Boolesk</value></data>
+  <data name="Enter true or false." xml:space="preserve"><value>Ange true eller false.</value></data>
+  <data name="True" xml:space="preserve"><value>Sant</value></data>
+  <data name="False" xml:space="preserve"><value>Falskt</value></data>
   <data name="Topbar layout" xml:space="preserve"><value>Toppmenylayout</value></data>
   <data name="Choose which Portal Entries are visible in the topbar and adjust the parent/child layout. Drop a leaf entry on a top-level entry to make it a child." xml:space="preserve"><value>Välj vilka portalposter som är synliga i toppmenyn och justera över- och underordning. Släpp en post på en toppnivåpost för att göra den till en underlänk.</value></data>
   <data name="Visible" xml:space="preserve"><value>Synlig</value></data>

@@ -25,7 +25,7 @@ public sealed class PortalTopBarService
     private const string ContentManagePermission = "ContentWebAppModule.Manage";
     private const string PortalSettingCategory = "Portal";
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
-    private const byte IntValueKind = 1;
+    private const byte BitValueKind = 3;
     private const string AppEntryPrefix = "app:";
     private const string AppEntrySuffix = ":home";
     private const string ViewPermissionSuffix = ".View";
@@ -997,9 +997,9 @@ public sealed class PortalTopBarService
     private async Task<bool> GetTopbarDropdownsOpenOnHoverAsync(int userId, CancellationToken ct)
     {
         const string sql = @"
-SELECT CAST(COALESCE(v.setting_value, d.default_int_value, 1) AS bit)
+SELECT CAST(COALESCE(v.setting_value, d.default_bit_value, 1) AS bit)
 FROM omp_portal.user_setting_definitions d
-LEFT JOIN omp_portal.user_setting_int_values v
+LEFT JOIN omp_portal.user_setting_bit_values v
     ON v.user_setting_definition_id = d.user_setting_definition_id
    AND v.user_id = @user_id
 WHERE d.setting_category = @setting_category
@@ -1013,7 +1013,7 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
-        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
 
         var result = await cmd.ExecuteScalarAsync(ct);
         if (result is bool openOnHover)

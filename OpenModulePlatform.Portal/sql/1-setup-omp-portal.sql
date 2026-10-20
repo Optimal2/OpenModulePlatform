@@ -40,12 +40,14 @@ BEGIN
         user_setting_definition_id int IDENTITY(1,1) NOT NULL,
         setting_category nvarchar(100) NOT NULL,
         setting_name nvarchar(200) NOT NULL,
-        -- 1 = int-backed value, 2 = string-backed value. User value rows are
-        -- split by type so high-volume numeric settings do not pay nvarchar(max)
-        -- storage overhead.
+        -- 1 = int-backed value, 2 = string-backed value, 3 = bit-backed value.
+        -- User value rows are split by type so high-volume numeric settings do
+        -- not pay nvarchar(max) storage overhead, and on/off settings are typed
+        -- as what they are.
         value_kind tinyint NOT NULL,
         default_int_value int NULL,
         default_string_value nvarchar(max) NULL,
+        default_bit_value bit NULL,
         description nvarchar(1000) NULL,
         sort_order int NOT NULL CONSTRAINT DF_omp_portal_user_setting_definitions_sort_order DEFAULT(0),
         is_enabled bit NOT NULL CONSTRAINT DF_omp_portal_user_setting_definitions_is_enabled DEFAULT(1),
@@ -55,13 +57,46 @@ BEGIN
         CONSTRAINT PK_omp_portal_user_setting_definitions PRIMARY KEY(user_setting_definition_id),
         CONSTRAINT UQ_omp_portal_user_setting_definitions_key UNIQUE(setting_category, setting_name),
         CONSTRAINT UQ_omp_portal_user_setting_definitions_id_kind UNIQUE(user_setting_definition_id, value_kind),
-        CONSTRAINT CK_omp_portal_user_setting_definitions_value_kind CHECK(value_kind IN (1, 2)),
+        CONSTRAINT CK_omp_portal_user_setting_definitions_value_kind CHECK(value_kind IN (1, 2, 3)),
         CONSTRAINT CK_omp_portal_user_setting_definitions_default_value CHECK
         (
-            (value_kind = 1 AND default_string_value IS NULL)
-            OR (value_kind = 2 AND default_int_value IS NULL)
+            (value_kind = 1 AND default_string_value IS NULL AND default_bit_value IS NULL)
+            OR (value_kind = 2 AND default_int_value IS NULL AND default_bit_value IS NULL)
+            OR (value_kind = 3 AND default_int_value IS NULL AND default_string_value IS NULL)
         )
     );
+END
+GO
+
+IF COL_LENGTH(N'omp_portal.user_setting_definitions', N'default_bit_value') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.user_setting_definitions
+        ADD default_bit_value bit NULL;
+END
+GO
+
+-- An install from before kind 3 carries the two-kind checks. Both are
+-- rewritten together so a bit-backed definition can exist at all.
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = N'CK_omp_portal_user_setting_definitions_value_kind'
+      AND parent_object_id = OBJECT_ID(N'omp_portal.user_setting_definitions')
+      AND definition NOT LIKE N'%(3)%'
+)
+BEGIN
+    ALTER TABLE omp_portal.user_setting_definitions
+        DROP CONSTRAINT CK_omp_portal_user_setting_definitions_value_kind,
+                        CK_omp_portal_user_setting_definitions_default_value;
+    ALTER TABLE omp_portal.user_setting_definitions
+        ADD CONSTRAINT CK_omp_portal_user_setting_definitions_value_kind CHECK(value_kind IN (1, 2, 3)),
+            CONSTRAINT CK_omp_portal_user_setting_definitions_default_value CHECK
+            (
+                (value_kind = 1 AND default_string_value IS NULL AND default_bit_value IS NULL)
+                OR (value_kind = 2 AND default_int_value IS NULL AND default_bit_value IS NULL)
+                OR (value_kind = 3 AND default_int_value IS NULL AND default_string_value IS NULL)
+            );
 END
 GO
 
@@ -105,61 +140,200 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp_portal.user_setting_bit_values', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.user_setting_bit_values
+    (
+        user_id int NOT NULL,
+        user_setting_definition_id int NOT NULL,
+        value_kind tinyint NOT NULL CONSTRAINT DF_omp_portal_user_setting_bit_values_value_kind DEFAULT(3),
+        setting_value bit NOT NULL,
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_setting_bit_values_updated_at DEFAULT(SYSUTCDATETIME()),
+
+        CONSTRAINT PK_omp_portal_user_setting_bit_values PRIMARY KEY(user_id, user_setting_definition_id),
+        CONSTRAINT CK_omp_portal_user_setting_bit_values_value_kind CHECK(value_kind = 3),
+        CONSTRAINT FK_omp_portal_user_setting_bit_values_user FOREIGN KEY(user_id)
+            REFERENCES omp.users(user_id),
+        CONSTRAINT FK_omp_portal_user_setting_bit_values_definition FOREIGN KEY(user_setting_definition_id, value_kind)
+            REFERENCES omp_portal.user_setting_definitions(user_setting_definition_id, value_kind)
+    );
+END
+GO
+
+-- 2026-10-20: the on/off settings move from the int table to the bit table.
+-- The value tables reference the definition's (id, kind), so no order of plain
+-- copies satisfies both foreign keys: the int rows are stashed, removed, the
+-- definition's kind switched, and the rows written back as bits, in one
+-- transaction. Runs once per database; on a fresh install there is nothing to
+-- move and the MERGE below seeds the same six definitions as kind 3 directly.
+-- The MERGE must stay AFTER this block: its WHEN MATCHED rewrites value_kind,
+-- which the int rows' foreign key would refuse while they still exist.
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp_portal.schema_migrations
+    WHERE migration_key = N'20261020-user-settings-bool-to-bit'
+)
+BEGIN
+    -- Any error inside the move aborts the whole transaction, so a partial
+    -- migration can never record its key as done.
+    SET XACT_ABORT ON;
+    BEGIN TRANSACTION;
+
+    DECLARE @BoolDefinitions TABLE(user_setting_definition_id int NOT NULL PRIMARY KEY);
+    INSERT INTO @BoolDefinitions(user_setting_definition_id)
+    SELECT user_setting_definition_id
+    FROM omp_portal.user_setting_definitions
+    WHERE setting_category = N'Portal'
+      AND setting_name IN
+      (
+          N'AdminMetricsCollapsed',
+          N'TopbarDropdownsOpenOnHover',
+          N'ShowPortalNavbar',
+          N'NotificationToastsMuted',
+          N'NotificationSoundsEnabled',
+          N'PageSearchOverridesCtrlF'
+      )
+      AND value_kind = 1;
+
+    DECLARE @StashedValues TABLE
+    (
+        user_id int NOT NULL,
+        user_setting_definition_id int NOT NULL,
+        setting_value bit NOT NULL,
+        updated_at datetime2(3) NOT NULL,
+        PRIMARY KEY(user_id, user_setting_definition_id)
+    );
+    INSERT INTO @StashedValues(user_id, user_setting_definition_id, setting_value, updated_at)
+    SELECT v.user_id,
+           v.user_setting_definition_id,
+           CASE WHEN v.setting_value <> 0 THEN 1 ELSE 0 END,
+           v.updated_at
+    FROM omp_portal.user_setting_int_values v
+    INNER JOIN @BoolDefinitions b
+        ON b.user_setting_definition_id = v.user_setting_definition_id;
+
+    DELETE FROM omp_portal.user_setting_int_values
+    WHERE user_setting_definition_id IN (SELECT b.user_setting_definition_id FROM @BoolDefinitions b);
+
+    UPDATE d
+    SET value_kind = 3,
+        default_bit_value = CASE WHEN ISNULL(d.default_int_value, 0) <> 0 THEN 1 ELSE 0 END,
+        default_int_value = NULL,
+        updated_at = SYSUTCDATETIME()
+    FROM omp_portal.user_setting_definitions d
+    INNER JOIN @BoolDefinitions b
+        ON b.user_setting_definition_id = d.user_setting_definition_id;
+
+    INSERT INTO omp_portal.user_setting_bit_values(user_id, user_setting_definition_id, value_kind, setting_value, updated_at)
+    SELECT s.user_id, s.user_setting_definition_id, 3, s.setting_value, s.updated_at
+    FROM @StashedValues s
+    WHERE NOT EXISTS
+    (
+        SELECT 1
+        FROM omp_portal.user_setting_bit_values existing
+        WHERE existing.user_id = s.user_id
+          AND existing.user_setting_definition_id = s.user_setting_definition_id
+    );
+
+    INSERT INTO omp_portal.schema_migrations(migration_key)
+    VALUES(N'20261020-user-settings-bool-to-bit');
+
+    COMMIT TRANSACTION;
+END
+GO
+
 MERGE omp_portal.user_setting_definitions AS target
 USING
 (
     SELECT N'Portal' AS setting_category,
            N'AdminMetricsCollapsed' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(0 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(0 AS bit) AS default_bit_value,
            N'Controls whether the Portal admin metrics panel starts collapsed for the signed-in user.' AS description,
            10 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'TopbarDropdownsOpenOnHover' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(1 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(1 AS bit) AS default_bit_value,
            N'Controls whether top bar dropdown menus open on hover for the signed-in user.' AS description,
            20 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'ShowPortalNavbar' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(1 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(1 AS bit) AS default_bit_value,
            N'Controls whether the Portal navbar below the topbar is shown for the signed-in user.' AS description,
            30 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'NotificationToastsMuted' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(0 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(0 AS bit) AS default_bit_value,
            N'Controls whether notification and message toasts are muted for the signed-in user.' AS description,
            40 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'NotificationSoundsEnabled' AS setting_name,
-           CAST(1 AS tinyint) AS value_kind,
-           CAST(1 AS int) AS default_int_value,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(1 AS bit) AS default_bit_value,
            N'Controls whether notification and message toast sounds are played for the signed-in user.' AS description,
            50 AS sort_order,
            CAST(1 AS bit) AS is_enabled
     UNION ALL
     SELECT N'Portal' AS setting_category,
            N'PageSearchOverridesCtrlF' AS setting_name,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(0 AS bit) AS default_bit_value,
+           N'Controls whether Ctrl+F opens the page search instead of the browser''s find, on pages that have it, for the signed-in user.' AS description,
+           60 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Search' AS setting_category,
+           N'DeepByDefault' AS setting_name,
+           CAST(3 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(0 AS bit) AS default_bit_value,
+           N'Controls whether the page search starts in deep mode (collapsed and paged content included) for the signed-in user.' AS description,
+           10 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Appearance' AS setting_category,
+           N'Theme' AS setting_name,
            CAST(1 AS tinyint) AS value_kind,
            CAST(0 AS int) AS default_int_value,
            CAST(NULL AS nvarchar(max)) AS default_string_value,
-           N'Controls whether Ctrl+F opens the page search instead of the browser''s find, on pages that have it, for the signed-in user.' AS description,
-           60 AS sort_order,
+           CAST(NULL AS bit) AS default_bit_value,
+           N'The theme the signed-in user chose, shared between devices: 0 follows the system, 1 is light, 2 is dark. The browser cookie stays the fast path.' AS description,
+           10 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Appearance' AS setting_category,
+           N'Culture' AS setting_name,
+           CAST(2 AS tinyint) AS value_kind,
+           CAST(NULL AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           CAST(NULL AS bit) AS default_bit_value,
+           N'The culture (language) the signed-in user chose, shared between devices, as a culture name such as sv-SE. Empty follows the application default. The browser cookie stays the fast path.' AS description,
+           20 AS sort_order,
            CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
@@ -168,13 +342,14 @@ WHEN MATCHED THEN
     UPDATE SET value_kind = source.value_kind,
                default_int_value = source.default_int_value,
                default_string_value = source.default_string_value,
+               default_bit_value = source.default_bit_value,
                description = source.description,
                sort_order = source.sort_order,
                is_enabled = source.is_enabled,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(setting_category, setting_name, value_kind, default_int_value, default_string_value, description, sort_order, is_enabled)
-    VALUES(source.setting_category, source.setting_name, source.value_kind, source.default_int_value, source.default_string_value, source.description, source.sort_order, source.is_enabled);
+    INSERT(setting_category, setting_name, value_kind, default_int_value, default_string_value, default_bit_value, description, sort_order, is_enabled)
+    VALUES(source.setting_category, source.setting_name, source.value_kind, source.default_int_value, source.default_string_value, source.default_bit_value, source.description, source.sort_order, source.is_enabled);
 GO
 
 IF OBJECT_ID(N'omp_portal.user_settings', N'U') IS NOT NULL
@@ -186,15 +361,15 @@ BEGIN
     FROM omp_portal.user_setting_definitions
     WHERE setting_category = N'Portal'
       AND setting_name = N'AdminMetricsCollapsed'
-      AND value_kind = 1;
+      AND value_kind = 3;
 
-    MERGE omp_portal.user_setting_int_values AS target
+    MERGE omp_portal.user_setting_bit_values AS target
     USING
     (
         SELECT user_id,
                @AdminMetricsSettingId AS user_setting_definition_id,
-               CAST(1 AS tinyint) AS value_kind,
-               1 AS setting_value,
+               CAST(3 AS tinyint) AS value_kind,
+               CAST(1 AS bit) AS setting_value,
                CONVERT(datetime2(3), updated_at) AS updated_at
         FROM omp_portal.user_settings
         WHERE admin_metrics_collapsed = 1

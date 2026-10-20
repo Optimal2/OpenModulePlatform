@@ -9,6 +9,7 @@ DECLARE @Missing int = 0;
         (N'omp_portal', N'user_setting_definitions'),
         (N'omp_portal', N'user_setting_int_values'),
         (N'omp_portal', N'user_setting_string_values'),
+        (N'omp_portal', N'user_setting_bit_values'),
         (N'omp_portal', N'schema_migrations'),
         (N'omp_portal', N'user_navigation_favorites'),
         (N'omp_portal', N'portal_entries'),
@@ -34,6 +35,7 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_setting_definitions', N'setting_category'),
         (N'omp_portal', N'user_setting_definitions', N'setting_name'),
         (N'omp_portal', N'user_setting_definitions', N'value_kind'),
+        (N'omp_portal', N'user_setting_definitions', N'default_bit_value'),
         (N'omp_portal', N'schema_migrations', N'migration_key'),
         (N'omp_portal', N'portal_entries', N'entry_key'),
         (N'omp_portal', N'portal_entries', N'parent_entry_id'),
@@ -109,12 +111,18 @@ WHERE NOT EXISTS
 
 IF OBJECT_ID(N'omp_portal.user_setting_definitions', N'U') IS NOT NULL
 BEGIN
+    -- The on/off settings are bit-backed (value_kind 3) since 2026-10-20; an
+    -- install still carrying them as int has not run the migration and must.
     SELECT @Missing = @Missing + CASE
-        WHEN EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'TopbarDropdownsOpenOnHover')
-         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'ShowPortalNavbar')
-         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'NotificationToastsMuted')
-         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'NotificationSoundsEnabled')
-         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'PageSearchOverridesCtrlF')
+        WHEN EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'AdminMetricsCollapsed' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'TopbarDropdownsOpenOnHover' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'ShowPortalNavbar' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'NotificationToastsMuted' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'NotificationSoundsEnabled' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Portal' AND setting_name = N'PageSearchOverridesCtrlF' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Search' AND setting_name = N'DeepByDefault' AND value_kind = 3)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Appearance' AND setting_name = N'Theme' AND value_kind = 1)
+         AND EXISTS (SELECT 1 FROM omp_portal.user_setting_definitions WHERE setting_category = N'Appearance' AND setting_name = N'Culture' AND value_kind = 2)
         THEN 0 ELSE 1 END;
 END;
 

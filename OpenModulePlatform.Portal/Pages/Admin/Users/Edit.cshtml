@@ -1,5 +1,6 @@
 @page "{userId:int}"
 @using OpenModulePlatform.Web.Shared.Navigation
+@using OpenModulePlatform.Portal.Services
 @model OpenModulePlatform.Portal.Pages.Admin.Users.EditModel
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
@@ -190,9 +191,19 @@
 
             <div class="form-field">
                 <label asp-for="PortalSettingInput.SettingValue"></label>
-                <textarea asp-for="PortalSettingInput.SettingValue" rows="3"></textarea>
+                @if (selectedPortalSetting?.ValueKind == PortalUserSettingsAdminRepository.BitValueKind)
+                {
+                    <select asp-for="PortalSettingInput.SettingValue">
+                        <option value="true">@L["True"]</option>
+                        <option value="false">@L["False"]</option>
+                    </select>
+                }
+                else
+                {
+                    <textarea asp-for="PortalSettingInput.SettingValue" rows="3"></textarea>
+                }
                 <span asp-validation-for="PortalSettingInput.SettingValue" class="field-validation-error"></span>
-                <small>@L["Use an integer for int-backed settings. Use text for string-backed settings. Saving the default value removes the user override."]</small>
+                <small>@L["Use an integer for int-backed settings, true or false for boolean settings, and text for string-backed settings. Saving the default value removes the user override."]</small>
             </div>
 
             <div class="toolbar">
