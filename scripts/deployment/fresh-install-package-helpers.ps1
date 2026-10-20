@@ -231,7 +231,15 @@ function Find-ClearTextPasswordFields {
             if ($null -eq $hashtableAst) {
                 throw 'package.psd1 does not contain a hashtable literal.'
             }
-            $hashtableAst.SafeGetValue()
+            # SafeGetValue throws a .NET method exception; rethrow it as a
+            # terminating error so a caller with ErrorActionPreference=Continue
+            # can never fall through to an empty password scan.
+            try {
+                $hashtableAst.SafeGetValue()
+            }
+            catch {
+                throw "package.psd1 contains dynamic content, not data: $($_.Exception.Message)"
+            }
         }
         foreach ($field in (Find-PasswordFields -Node $data -Path 'package.psd1')) {
             $bad.Add($field)
