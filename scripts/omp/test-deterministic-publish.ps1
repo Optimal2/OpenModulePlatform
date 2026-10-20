@@ -24,7 +24,9 @@ function Get-OmpDeterministicFileHash {
     # Microsoft.PowerShell.Utility resolves to the 7.x copy and Get-FileHash
     # is unrecognized. Uppercase hex, like Get-FileHash -Algorithm SHA256.
     param([Parameter(Mandatory = $true)][string]$Path)
-    [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '')
+    # Resolve against PowerShell's location, as Get-FileHash -LiteralPath did.
+    $fullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($fullPath))).Replace('-', '')
 }
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path ([IO.Path]::GetTempPath()) ('omp-determinism-' + [Guid]::NewGuid().ToString('N'))

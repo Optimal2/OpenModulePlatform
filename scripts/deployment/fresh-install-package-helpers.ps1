@@ -213,10 +213,14 @@ function Find-ClearTextPasswordFields {
         else {
             # Windows PowerShell 5.1 on a machine whose PSModulePath also lists
             # PowerShell 7 module folders resolves Utility to the 7.x copy and
-            # the function commands are unrecognized. package.psd1 is a
-            # repository-owned data file, so evaluating it is an acceptable
-            # compatibility fallback (same pattern as package-hostagent-first).
-            & ([scriptblock]::Create((Get-Content -LiteralPath $psd1Path -Raw)))
+            # the function commands are unrecognized. The profile folder is
+            # operator input, so the fallback applies the same restricted-
+            # language check Import-PowerShellDataFile does (data only: no
+            # commands, no variables) before evaluating, as pester-bootstrap.ps1
+            # does for module manifests.
+            $block = [scriptblock]::Create((Get-Content -LiteralPath $psd1Path -Raw))
+            $block.CheckRestrictedLanguage([string[]] @(), [string[]] @(), $false)
+            & $block
         }
         foreach ($field in (Find-PasswordFields -Node $data -Path 'package.psd1')) {
             $bad.Add($field)
@@ -548,7 +552,10 @@ function Get-OmpFileSha512 {
     # Microsoft.PowerShell.Utility resolves to the 7.x copy and Get-FileHash
     # is unrecognized. Uppercase hex, like Get-FileHash -Algorithm SHA512.
     param([Parameter(Mandatory = $true)][string]$Path)
-    [BitConverter]::ToString([System.Security.Cryptography.SHA512]::Create().ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '')
+    # Resolve against PowerShell's location, as Get-FileHash -LiteralPath did,
+    # not against the process working directory.
+    $fullPath = Resolve-FullPath -Path $Path
+    [BitConverter]::ToString([System.Security.Cryptography.SHA512]::Create().ComputeHash([System.IO.File]::ReadAllBytes($fullPath))).Replace('-', '')
 }
 
 function Test-FileSha512 {
