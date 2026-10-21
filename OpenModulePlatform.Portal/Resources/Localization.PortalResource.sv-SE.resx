@@ -2863,6 +2863,12 @@
   <data name="Visible to everyone" xml:space="preserve">
     <value>Synlig för alla</value>
   </data>
+  <data name="Visible to" xml:space="preserve">
+    <value>Synlig för</value>
+  </data>
+  <data name="Everyone" xml:space="preserve">
+    <value>Alla</value>
+  </data>
   <data name="Save box" xml:space="preserve">
     <value>Spara box</value>
   </data>

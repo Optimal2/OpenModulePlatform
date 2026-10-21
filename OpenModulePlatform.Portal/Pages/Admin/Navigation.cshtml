@@ -75,9 +75,9 @@
                         <span asp-validation-for="BoxInput.Title" class="field-validation-error"></span>
                     </div>
                     <div class="form-field">
-                        <label asp-for="BoxInput.RequiredPermission">@L["Required permission"]</label>
+                        <label asp-for="BoxInput.RequiredPermission">@L["Visible to"]</label>
                         <select asp-for="BoxInput.RequiredPermission">
-                            <option value="">@L["Visible to everyone"]</option>
+                            <option value="">@L["Everyone"]</option>
                             @foreach (var permission in Model.PermissionNames)
                             {
                                 <option value="@permission">@permission</option>
@@ -102,7 +102,7 @@
             }
             else
             {
-                <table class="grid">
+                <table class="grid grid--middle">
                     <thead>
                         <tr>
                             <th>@L["Group"]</th>
@@ -124,7 +124,7 @@
                                 <form method="post"
                                       asp-page-handler="RenameGroup"
                                       asp-route-box="@Model.SelectedBoxKey"
-                                      class="toolbar">
+                                      class="inline-edit">
                                     <input type="hidden" name="oldGroup" value="@group.Group" />
                                     <input type="text" name="newGroup" value="@group.Group" list="linkbox-groups" aria-label="@L["Rename"]" />
                                     <button type="submit" class="action-link">@L["Save"]</button>
@@ -167,7 +167,7 @@
                             <th>@L["Label"]</th>
                             <th>@L["URL"]</th>
                             <th>@L["Group"]</th>
-                            <th>@L["Required permission"]</th>
+                            <th>@L["Visible to"]</th>
                             <th>@L["Actions"]</th>
                         </tr>
                     </thead>
@@ -192,8 +192,8 @@
                                 <td><input form="link-edit-form" asp-for="Input.Url" list="linkbox-url-targets" aria-label="@L["URL"]" /></td>
                                 <td><input form="link-edit-form" asp-for="Input.Group" list="linkbox-groups" aria-label="@L["Group"]" /></td>
                                 <td>
-                                    <select form="link-edit-form" asp-for="Input.RequiredPermission" aria-label="@L["Required permission"]">
-                                        <option value="">@L["Visible to everyone"]</option>
+                                    <select form="link-edit-form" asp-for="Input.RequiredPermission" aria-label="@L["Visible to"]">
+                                        <option value="">@L["Everyone"]</option>
                                         @foreach (var permission in Model.PermissionNames)
                                         {
                                             <option value="@permission">@permission</option>
@@ -212,7 +212,7 @@
                                 <td>@L[link.Label]</td>
                                 <td><code>@link.Url</code></td>
                                 <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
-                                <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Visible to everyone"] : link.RequiredPermission)</td>
+                                <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Everyone"] : link.RequiredPermission)</td>
                                 <td>
                                     <div class="toolbar">
                                         <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)&editId=@link.LinkBoxItemId">@L["Edit"]</a>
@@ -261,9 +261,9 @@
                             <span asp-validation-for="Input.Group" class="field-validation-error"></span>
                         </div>
                         <div class="form-field">
-                            <label asp-for="Input.RequiredPermission">@L["Required permission"]</label>
+                            <label asp-for="Input.RequiredPermission">@L["Visible to"]</label>
                             <select asp-for="Input.RequiredPermission">
-                                <option value="">@L["Visible to everyone"]</option>
+                                <option value="">@L["Everyone"]</option>
                                 @foreach (var permission in Model.PermissionNames)
                                 {
                                     <option value="@permission">@permission</option>

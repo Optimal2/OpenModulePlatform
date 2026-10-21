@@ -67,6 +67,20 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Form fields keep their height beside taller neighbours.** A form field
+  is a grid, and in a row of fields it was stretched to the tallest one with
+  the extra height shared out among its label and control, so an input
+  beside a select with a help line grew taller and sat lower (the Title
+  field on the navigation admin page). Fields now align their content to
+  the top, on every page that uses the shared field grid.
+
+- **The navigation admin page reads and fits better.** "Required
+  permission" is "Visible to" with the option "Everyone", on the box, the
+  link rows and the add form alike; a group's rename field and its Save
+  button sit on one line in a row of normal height, centred with the group
+  chip and the count, instead of a full-width field with the button
+  wrapped beneath it.
+
 - **On/off user settings are stored as bits, and theme and culture get a
   home in the database.** The Portal module's user settings gain a third
   value kind, bit (`omp_portal.user_setting_bit_values`, value_kind 3,

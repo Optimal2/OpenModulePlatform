@@ -3111,6 +3111,8 @@
   <data name="Box key" xml:space="preserve"><value>Box key</value></data>
   <data name="Required permission" xml:space="preserve"><value>Required permission</value></data>
   <data name="Visible to everyone" xml:space="preserve"><value>Visible to everyone</value></data>
+  <data name="Visible to" xml:space="preserve"><value>Visible to</value></data>
+  <data name="Everyone" xml:space="preserve"><value>Everyone</value></data>
   <data name="Only users holding the permission see the box at all." xml:space="preserve"><value>Only users holding the permission see the box at all.</value></data>
   <data name="Save box" xml:space="preserve"><value>Save box</value></data>
   <data name="Groups tint the links in the box. Colors are assigned in the order groups first appear among the links, so reordering links can shift which group gets which color." xml:space="preserve"><value>Groups tint the links in the box. Colors are assigned in the order groups first appear among the links, so reordering links can shift which group gets which color.</value></data>
