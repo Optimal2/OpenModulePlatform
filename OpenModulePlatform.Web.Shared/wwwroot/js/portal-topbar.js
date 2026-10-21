@@ -1258,6 +1258,91 @@ window.OmpTime = {
         }
     }
 
+    // The tray's mute toggle flips the Portal setting NotificationToastsMuted
+    // through the shared endpoint. The bell, the tray icon and the button swap
+    // to the crossed-out glyph at once and swap back if the server refuses; the
+    // toast script listens for the event and stops showing (and sounding)
+    // toasts on this page without a reload.
+    function applyNotificationsMuted(root, muted) {
+        if (!root) {
+            return;
+        }
+        root.dataset.notificationsMuted = muted ? 'true' : 'false';
+        root.querySelectorAll('[data-portal-topbar-notifications-icon]').forEach(function (icon) {
+            icon.classList.toggle('is-muted', muted);
+        });
+        root.querySelectorAll('[data-portal-topbar-notification-mute-form]').forEach(function (form) {
+            var value = form.querySelector('[data-portal-topbar-notification-mute-value]');
+            if (value) {
+                value.value = muted ? 'false' : 'true';
+            }
+            var button = form.querySelector('button');
+            if (button) {
+                var label = muted ? (form.dataset.unmuteText || 'Unmute notifications') : (form.dataset.muteText || 'Mute notifications');
+                button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+                button.title = label;
+                button.setAttribute('aria-label', label);
+            }
+        });
+        try {
+            window.dispatchEvent(new CustomEvent('omp:notifications-muted', { detail: { muted: muted } }));
+        } catch (error) {
+            // An old browser without CustomEvent keeps the setting; only the live page misses it.
+        }
+    }
+
+    function initNotificationMuteForm(form) {
+        if (!form || form.dataset.portalTopbarNotificationMuteFormInitialized === 'true') {
+            return;
+        }
+        form.dataset.portalTopbarNotificationMuteFormInitialized = 'true';
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (form.dataset.portalTopbarNotificationMuteSubmitting === 'true') {
+                return;
+            }
+            var root = form.closest('[data-portal-topbar-root]');
+            var value = form.querySelector('[data-portal-topbar-notification-mute-value]');
+            var next = !!value && value.value === 'true';
+            var previous = !!root && root.dataset.notificationsMuted === 'true';
+            form.dataset.portalTopbarNotificationMuteSubmitting = 'true';
+            var body = new FormData(form);
+            body.set('muted', next ? 'true' : 'false');
+            applyNotificationsMuted(root, next);
+            fetch(form.action, {
+                method: 'POST',
+                body: body,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (response) {
+                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                        reportNotificationSessionWarning('auth');
+                        throw new Error('Notification mute requires sign-in.');
+                    }
+                    if (!response.ok) {
+                        throw new Error('Notification mute failed with status ' + response.status + '.');
+                    }
+                    return response.json();
+                })
+                .then(function (payload) {
+                    if (payload && typeof payload.muted === 'boolean' && payload.muted !== next) {
+                        applyNotificationsMuted(root, payload.muted);
+                    }
+                })
+                .catch(function (error) {
+                    applyNotificationsMuted(root, previous);
+                    console.warn(error);
+                })
+                .finally(function () {
+                    form.dataset.portalTopbarNotificationMuteSubmitting = 'false';
+                });
+        });
+    }
+
     function initMessageMarkAllForm(form) {
         if (!form || form.dataset.portalTopbarMessageMarkAllFormInitialized === 'true') {
             return;
@@ -2674,6 +2759,7 @@ window.OmpTime = {
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
+        topbar.querySelectorAll('[data-portal-topbar-notification-mute-form]').forEach(initNotificationMuteForm);
         topbar.querySelectorAll('[data-portal-topbar-message-mark-all-form]').forEach(initMessageMarkAllForm);
         topbar.querySelectorAll('[data-portal-topbar-notifications-list]').forEach(initNotificationLazyList);
         updateNotificationEmptyState(topbar);

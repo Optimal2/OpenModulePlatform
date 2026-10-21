@@ -104,6 +104,7 @@ public sealed class TopbarAntiforgeryValidationTests
 
     [Theory]
     [InlineData("/notifications/mark-all-read")]
+    [InlineData("/notifications/mute")]
     [InlineData("/messages/mark-all-read")]
     [InlineData("/notifications/mark-read")]
     [InlineData("/navigation/favorites/toggle")]

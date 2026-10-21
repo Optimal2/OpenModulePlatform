@@ -44,6 +44,8 @@
   <data name="No new notifications" xml:space="preserve"><value>Inga nya notifikationer</value></data>
   <data name="No notifications" xml:space="preserve"><value>Inga notifikationer</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Markera alla som lästa</value></data>
+  <data name="Mute notifications" xml:space="preserve"><value>Tysta notiser</value></data>
+  <data name="Unmute notifications" xml:space="preserve"><value>Slå på notiser</value></data>
   <data name="View all notifications" xml:space="preserve"><value>Visa alla</value></data>
   <data name="Loading" xml:space="preserve"><value>Laddar</value></data>
   <data name="No more notifications" xml:space="preserve"><value>Inga fler notifikationer</value></data>

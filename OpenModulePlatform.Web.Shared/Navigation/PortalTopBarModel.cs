@@ -191,6 +191,12 @@ public sealed class PortalTopBarModel
 
     public bool DropdownsOpenOnHover { get; init; } = true;
 
+    /// <summary>True when the user has muted notification toasts and sounds; the top bar then
+    /// shows the crossed-out bell and the tray's toggle offers to unmute.</summary>
+    public bool NotificationsMuted { get; init; }
+
+    public string NotificationMuteUrl { get; init; } = "/notifications/mute";
+
     public bool SessionStatusCheckEnabled { get; init; } = true;
 
     public string SessionStatusUrl { get; init; } = DefaultSessionStatusPath;

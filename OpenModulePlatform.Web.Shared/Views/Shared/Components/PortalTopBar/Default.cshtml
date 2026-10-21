@@ -140,6 +140,7 @@
          data-shortcut-all-modules="@Model.AllModulesShortcut"
          data-shortcut-favorites="@Model.FavoritesShortcut"
          data-open-on-hover="@Model.DropdownsOpenOnHover.ToString().ToLowerInvariant()"
+         data-notifications-muted="@Model.NotificationsMuted.ToString().ToLowerInvariant()"
          data-session-status-enabled="@Model.SessionStatusCheckEnabled.ToString().ToLowerInvariant()"
          data-session-status-url="@Model.SessionStatusUrl"
          data-session-login-url="@Model.SessionLoginUrl"
@@ -435,7 +436,7 @@
                 <details class="portal-topbar__notifications" data-portal-topbar-overlay data-portal-topbar-hover-menu data-portal-topbar-notifications>
                     <summary title="@L[Model.NotificationsToggleTextKey]" aria-label="@L[Model.NotificationsToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
-                            <span class="portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
+                            <span class="portal-topbar__icon portal-topbar__icon--notifications@(Model.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
                             <span class="portal-topbar__notification-badge" data-portal-topbar-notification-badge hidden="@(Model.UnreadNotificationCount == 0)">
                                 @NotificationBadgeText(Model.UnreadNotificationCount)
                             </span>
@@ -444,8 +445,26 @@
                     </summary>
                     <div class="portal-topbar__notifications-menu portal-topbar__tray portal-topbar__tray--notifications">
                         <div class="portal-topbar__tray-header">
-                            <span class="portal-topbar__tray-icon portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
+                            <span class="portal-topbar__tray-icon portal-topbar__icon portal-topbar__icon--notifications@(Model.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
                             <span>@L[Model.NotificationsToggleTextKey]</span>
+                            <form method="post"
+                                  action="@Model.NotificationMuteUrl"
+                                  class="portal-topbar__notifications-mute-form"
+                                  data-portal-topbar-notification-mute-form
+                                  data-mute-text="@L["Mute notifications"]"
+                                  data-unmute-text="@L["Unmute notifications"]"
+                                  data-enhance="false">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                <input type="hidden" name="muted" value="@(Model.NotificationsMuted ? "false" : "true")" data-portal-topbar-notification-mute-value />
+                                <button type="submit"
+                                        class="portal-topbar__tray-icon-button"
+                                        aria-pressed="@(Model.NotificationsMuted ? "true" : "false")"
+                                        title="@(Model.NotificationsMuted ? L["Unmute notifications"] : L["Mute notifications"])"
+                                        aria-label="@(Model.NotificationsMuted ? L["Unmute notifications"] : L["Mute notifications"])">
+                                    <span class="portal-topbar__icon portal-topbar__icon--notifications@(Model.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
+                                </button>
+                            </form>
                         </div>
                         <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
                         <div class="portal-topbar__tray-body">

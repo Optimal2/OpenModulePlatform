@@ -64,9 +64,12 @@
         OpenModulePlatform.Portal.Services.PortalUserSettingsService.NotificationToastsEnabledConfigSetting,
         Context.RequestAborted);
     var notificationToastsGloballyEnabled = OpenModulePlatform.Portal.Services.PortalUserSettingsService.ParseNotificationToastsEnabled(notificationToastsConfigValue);
+    // The user's own mute (NotificationToastsMuted) no longer leaves the toast root out:
+    // the toast script honours it, read from the root and the top bar and updated live by
+    // the tray's toggle, so unmuting there resumes toasts without a reload.
     var notificationToastsEnabled = User.Identity?.IsAuthenticated == true
-        && notificationToastsGloballyEnabled
-        && portalLayoutSettings?.NotificationToastsMuted != true;
+        && notificationToastsGloballyEnabled;
+    var notificationToastsMuted = portalLayoutSettings?.NotificationToastsMuted == true;
     var notificationSoundsEnabled = portalLayoutSettings?.NotificationSoundsEnabled ?? true;
     var pageSearchOverridesCtrlF = portalLayoutSettings?.PageSearchOverridesCtrlF ?? false;
 
@@ -168,6 +171,7 @@
     @if (notificationToastsEnabled)
     {
         <div data-omp-toasts="true"
+             data-notifications-muted="@notificationToastsMuted.ToString().ToLowerInvariant()"
              data-sounds-enabled="@notificationSoundsEnabled.ToString().ToLowerInvariant()"
              data-summary-url="@Url.Content("~/topbar/summary")"
              data-notifications-url="@Url.Content("~/notifications")"

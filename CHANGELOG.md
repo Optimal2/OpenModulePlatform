@@ -8,6 +8,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Mute notifications from the notification tray.** The tray's header carries
+  a toggle, on the title's row, that mutes and unmutes notification toasts and
+  their sounds without a visit to the settings page; it flips the same Portal
+  setting the settings page edits (NotificationToastsMuted), through a shared
+  endpoint (`/notifications/mute`) mapped in every app that shows the top bar.
+  While muted the bell in the bar and the tray show the crossed-out glyph
+  (Material Symbols notifications_off), the unread count stays, and the toast
+  script stops showing and sounding toasts on the open page at once. The
+  script honours the mute wherever the page carries it, on the toast root
+  (the Portal, which now renders the root while muted so unmuting from the
+  tray resumes toasts without a reload) or on the top bar (every other app
+  that shows it); before, only the Portal left toasts out while muted.
+
 - **List info boxes placed by CSS anchor positioning.** Where the browser
   has it, the info box of `.info-badge` and `.list-message` is anchored to
   its badge (below it, left edges aligned, flipping above or leftward when

@@ -26,6 +26,14 @@ public sealed class PortalTopBarService
     private const string PortalSettingCategory = "Portal";
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
     private const byte BitValueKind = 3;
+
+    /// <summary>The Portal user setting the tray's mute toggle flips; the same one the Portal's
+    /// settings page edits as "mute notification toasts".</summary>
+    public const string NotificationToastsMutedSetting = "NotificationToastsMuted";
+    public const string PortalUserSettingCategory = PortalSettingCategory;
+
+    /// <summary>POST endpoint, mapped in every OMP web app, that stores the mute toggle.</summary>
+    public const string NotificationMutePath = "/notifications/mute";
     private const string AppEntryPrefix = "app:";
     private const string AppEntrySuffix = ":home";
     private const string ViewPermissionSuffix = ".View";
@@ -280,6 +288,7 @@ public sealed class PortalTopBarService
                 options.TopBarPolling,
                 ct);
             var dropdownsOpenOnHover = true;
+            var notificationsMuted = false;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
             IReadOnlyList<PortalTopBarMessageConversation> messageConversations = [];
@@ -295,7 +304,9 @@ public sealed class PortalTopBarService
 
             if (userId is int resolvedUserId)
             {
-                dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
+                var bitSettings = await GetPortalBitSettingsAsync(resolvedUserId, ct);
+                dropdownsOpenOnHover = bitSettings.TryGetValue(TopbarDropdownsOpenOnHoverSetting, out var openOnHover) ? openOnHover : true;
+                notificationsMuted = bitSettings.TryGetValue(NotificationToastsMutedSetting, out var muted) && muted;
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
@@ -347,6 +358,8 @@ public sealed class PortalTopBarService
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
                 topBarSummaryUrl: context.BuildEndpointHref(SummaryPath),
                 dropdownsOpenOnHover,
+                notificationsMuted,
+                notificationMuteUrl: context.BuildEndpointHref(NotificationMutePath),
                 notificationUpdateOptions,
                 options,
                 GetLogoutUrl(),
@@ -540,6 +553,8 @@ public sealed class PortalTopBarService
             messagesUrl: "/messages",
             topBarSummaryUrl: SummaryPath,
             dropdownsOpenOnHover: true,
+            notificationsMuted: false,
+            notificationMuteUrl: NotificationMutePath,
             PortalTopBarNotificationUpdateOptions.FromWebAppOptions(options.TopBarPolling),
             options,
             logoutUrl,
@@ -607,6 +622,8 @@ public sealed class PortalTopBarService
         string messagesUrl,
         string topBarSummaryUrl,
         bool dropdownsOpenOnHover,
+        bool notificationsMuted,
+        string notificationMuteUrl,
         PortalTopBarNotificationUpdateOptions notificationUpdateOptions,
         WebAppOptions options,
         string logoutUrl,
@@ -692,6 +709,8 @@ public sealed class PortalTopBarService
             AllModulesShortcut = options.TopbarShortcuts?.AllModules ?? "m",
             FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f",
             DropdownsOpenOnHover = dropdownsOpenOnHover,
+            NotificationsMuted = notificationsMuted,
+            NotificationMuteUrl = notificationMuteUrl,
             SessionStatusCheckEnabled = options.SessionStatusCheck?.Enabled != false,
             SessionStatusUrl = PortalTopBarModel.DefaultSessionStatusPath,
             SessionLoginUrl = loginUrl,
@@ -994,34 +1013,45 @@ public sealed class PortalTopBarService
         return PortalTopBarNotificationUpdateOptions.FromConfig(modeValue, pollIntervalValue);
     }
 
-    private async Task<bool> GetTopbarDropdownsOpenOnHoverAsync(int userId, CancellationToken ct)
+    /// <summary>The top bar's bit-backed Portal user settings (hover, mute) in one round
+    /// trip: each enabled definition with the user's value or its default. A definition the
+    /// installation lacks is simply absent, and the caller falls back to the code default.</summary>
+    private async Task<Dictionary<string, bool>> GetPortalBitSettingsAsync(int userId, CancellationToken ct)
     {
         const string sql = @"
-SELECT CAST(COALESCE(v.setting_value, d.default_bit_value, 1) AS bit)
+SELECT d.setting_name,
+       CAST(COALESCE(v.setting_value, d.default_bit_value) AS bit)
 FROM omp_portal.user_setting_definitions d
 LEFT JOIN omp_portal.user_setting_bit_values v
     ON v.user_setting_definition_id = d.user_setting_definition_id
    AND v.user_id = @user_id
 WHERE d.setting_category = @setting_category
-  AND d.setting_name = @setting_name
+  AND d.setting_name IN (@hover_setting_name, @muted_setting_name)
   AND d.value_kind = @value_kind
   AND d.is_enabled = 1;";
 
+        var values = new Dictionary<string, bool>(StringComparer.Ordinal);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
-        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
+        cmd.Parameters.Add("@hover_setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
+        cmd.Parameters.Add("@muted_setting_name", SqlDbType.NVarChar, 200).Value = NotificationToastsMutedSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
 
-        var result = await cmd.ExecuteScalarAsync(ct);
-        if (result is bool openOnHover)
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
         {
-            return openOnHover;
+            // No stored value and no stored default: leave the key out so the
+            // caller's code default applies, as the per-setting query did.
+            if (!rdr.IsDBNull(1))
+            {
+                values[rdr.GetString(0)] = rdr.GetBoolean(1);
+            }
         }
 
-        return true;
+        return values;
     }
 
     private async Task<string?> GetUserProfileImageUrlAsync(

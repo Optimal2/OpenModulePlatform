@@ -138,6 +138,27 @@ public sealed class UserSettingBitMigrationTests : IClassFixture<UserSettingBitM
     }
 
     [Fact]
+    public async Task SharedWriter_StoresTheMuteToggleAndRemovesTheRowAtDefault()
+    {
+        await _fixture.RunPortalSetupAsync();
+        var userId = await _fixture.InsertUserAsync("bit-writer");
+        var writer = new PortalUserBitSettingWriter(_fixture.CreateConnectionFactory());
+        var service = new PortalUserSettingsService(_fixture.CreateConnectionFactory());
+
+        // The top bar's toggle writes the same setting the Portal's settings page reads.
+        Assert.True(await writer.SetAsync(userId, "Portal", "NotificationToastsMuted", true, CancellationToken.None));
+        Assert.True((await service.GetForUserAsync(userId, CancellationToken.None)).NotificationToastsMuted);
+        Assert.Equal(1, await _fixture.CountBitRowsAsync(userId));
+
+        Assert.True(await writer.SetAsync(userId, "Portal", "NotificationToastsMuted", false, CancellationToken.None));
+        Assert.False((await service.GetForUserAsync(userId, CancellationToken.None)).NotificationToastsMuted);
+        Assert.Equal(0, await _fixture.CountBitRowsAsync(userId));
+
+        // An unknown definition is reported, not swallowed.
+        Assert.False(await writer.SetAsync(userId, "Portal", "NoSuchSetting", true, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task AdminRepository_SavesReadsAndDeletesABitValue()
     {
         await _fixture.RunPortalSetupAsync();

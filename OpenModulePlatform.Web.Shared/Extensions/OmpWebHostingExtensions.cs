@@ -211,6 +211,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<MessageService>();
         builder.Services.AddScoped<BannerService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
+        builder.Services.AddScoped<PortalUserBitSettingWriter>();
 
         // Application performance telemetry. Registered for every OMP web app and enabled by
         // default: the questions it answers -- what is slow, and how did that change as the
@@ -572,6 +573,63 @@ public static class OmpWebHostingExtensions
                 success = true,
                 markedCount,
                 unreadCount = 0
+            });
+        }).RequireAuthorization();
+
+        // The mute toggle in the notification tray. Lives beside the other tray endpoints so
+        // it works in every app that shows the top bar, not only in the Portal: the setting
+        // is the Portal's NotificationToastsMuted, read by the top bar in every app already.
+        app.MapPost(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.NotificationMutePath, async (
+            HttpContext context,
+            PortalUserBitSettingWriter settingWriter,
+            IAntiforgery antiforgery,
+            CancellationToken ct) =>
+        {
+            if (!await ValidateTopbarAntiforgeryAsync(context, antiforgery, authOptions))
+            {
+                return Results.BadRequest();
+            }
+
+            var userId = NotificationService.TryGetOmpUserId(context.User);
+            if (userId is null)
+            {
+                return Results.Forbid();
+            }
+
+            var returnUrl = "/";
+            var muted = true;
+            if (context.Request.HasFormContentType)
+            {
+                var form = await context.Request.ReadFormAsync(ct);
+                var candidateReturnUrl = form["returnUrl"].ToString();
+                if (IsSafeLocalReturnUrl(candidateReturnUrl))
+                {
+                    returnUrl = candidateReturnUrl;
+                }
+
+                muted = !string.Equals(form["muted"].ToString(), "false", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var stored = await settingWriter.SetAsync(
+                userId.Value,
+                OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.PortalUserSettingCategory,
+                OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.NotificationToastsMutedSetting,
+                muted,
+                ct);
+            if (!stored)
+            {
+                return Results.Problem("The notification mute setting is not defined on this installation.", statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (!IsXmlHttpRequest(context.Request))
+            {
+                return Results.LocalRedirect(returnUrl);
+            }
+
+            return Results.Json(new
+            {
+                success = true,
+                muted
             });
         }).RequireAuthorization();
 

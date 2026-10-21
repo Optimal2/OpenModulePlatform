@@ -86,8 +86,24 @@
             && !!document.querySelector("[data-message-thread-composer]");
     }
 
+    // The user's mute (the top bar's toggle, the Portal setting
+    // NotificationToastsMuted) silences toasts and sounds. It is read from the
+    // toast root when the page carries it there (the Portal does), else from
+    // the top bar, and updated live by the toggle's event; a page with neither
+    // has nothing to honour. A muted page keeps polling so the badge stays right.
+    function isMuted() {
+        if (typeof state.muted === "boolean") {
+            return state.muted;
+        }
+        if (state.root && state.root.hasAttribute("data-notifications-muted")) {
+            return state.root.getAttribute("data-notifications-muted") === "true";
+        }
+        var topbar = document.querySelector("[data-portal-topbar-root]");
+        return !!topbar && topbar.getAttribute("data-notifications-muted") === "true";
+    }
+
     function playToastSound(soundKind, shouldSuppress) {
-        if (!state.soundEnabled || shouldSuppress) {
+        if (!state.soundEnabled || shouldSuppress || isMuted()) {
             return;
         }
 
@@ -407,6 +423,9 @@
     }
 
     function enqueueToast(toast, config) {
+        if (isMuted()) {
+            return;
+        }
         if (toast && toast.isMessage) {
             if (!isMessageThreadPageActive()) {
                 playMessageNotificationSound(false);
@@ -429,6 +448,10 @@
     }
 
     function drainQueue(config) {
+        if (isMuted()) {
+            state.queue.length = 0;
+            return;
+        }
         if (!isPageActive()) {
             return;
         }
@@ -820,6 +843,12 @@
         state.container.className = "omp-toast-stack";
         document.body.appendChild(state.container);
         state.soundEnabled = parseBoolean(state.root.getAttribute("data-sounds-enabled"), true);
+        window.addEventListener("omp:notifications-muted", function (event) {
+            state.muted = !!(event && event.detail && event.detail.muted);
+            if (state.muted) {
+                state.queue.length = 0;
+            }
+        });
 
         window.addEventListener("focus", function () {
             handleReactivation(getConfig());
