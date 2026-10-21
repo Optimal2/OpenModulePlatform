@@ -799,6 +799,9 @@
     let activeInfoPopover = null;
     let activeInfoBadge = null;
     let activeInfoCopy = null;
+    // Listeners the open box put on its badge (which outlives the box),
+    // removed with the box so they never pile up across openings.
+    let activeInfoBadgeCleanup = null;
 
     // Where the Popover API exists the popover and its copy box are shown as
     // manual popovers: the browser's top layer puts them above everything,
@@ -856,6 +859,8 @@
     }, true);
 
     function closeInfoPopover() {
+        activeInfoBadgeCleanup?.();
+        activeInfoBadgeCleanup = null;
         activeInfoPopover?.remove();
         activeInfoCopy?.remove();
         activeInfoBadge?.classList.remove('is-open');
@@ -936,6 +941,46 @@
         body.className = 'info-popover__body';
         body.textContent = text;
         popover.appendChild(body);
+        // The copy button is revealed while the pointer is over the box or
+        // the button, or while the badge, the box or the button holds a
+        // visible (keyboard) focus; it hides only when neither signal holds,
+        // after a short grace that covers the gap between box and button. A
+        // box opened from the keyboard therefore shows the button at once,
+        // where a mouse click on the badge (no visible focus) does not.
+        const isFocusVisible = (element) => {
+            try {
+                return element.matches(':focus-visible');
+            } catch (error) {
+                return element === document.activeElement;
+            }
+        };
+        let hovered = false;
+        let focused = isFocusVisible(badge);
+        let concealTimer = 0;
+        const sync = () => {
+            window.clearTimeout(concealTimer);
+            if (hovered || focused) {
+                copy.classList.add('is-revealed');
+                return;
+            }
+            concealTimer = window.setTimeout(() => copy.classList.remove('is-revealed'), 160);
+        };
+        for (const element of [popover, copy]) {
+            element.addEventListener('mouseenter', () => { hovered = true; sync(); });
+            element.addEventListener('mouseleave', () => { hovered = false; sync(); });
+        }
+        const onFocusIn = (event) => { focused = isFocusVisible(event.currentTarget) || isFocusVisible(copy); sync(); };
+        const onFocusOut = () => { focused = false; sync(); };
+        for (const element of [badge, popover, copy]) {
+            element.addEventListener('focusin', onFocusIn);
+            element.addEventListener('focusout', onFocusOut);
+        }
+        activeInfoBadgeCleanup = () => {
+            window.clearTimeout(concealTimer);
+            badge.removeEventListener('focusin', onFocusIn);
+            badge.removeEventListener('focusout', onFocusOut);
+        };
+        sync();
         markForLayer(popover);
         markForLayer(copy);
         // The badge is the anchor while its box is open (one box at a time,

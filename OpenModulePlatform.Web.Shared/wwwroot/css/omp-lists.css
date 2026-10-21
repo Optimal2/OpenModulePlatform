@@ -372,6 +372,36 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     border-color: var(--border-strong, #c4cede);
 }
 
+/* The copy button shows only while the pointer is over the box (or the
+   button itself), or while either has keyboard focus: omp-lists.js sets
+   is-revealed on hover and focus, with a short grace so crossing the gap
+   between box and button does not blink it. Hidden by opacity, not
+   visibility, so it stays in the tab order and focus can reveal it. Where
+   there is no pointer to hover with, it is simply always shown. */
+.info-popover__copy {
+    opacity: 0;
+    pointer-events: none;
+    /* pointer-events follows the fade: off only once the button has faded
+       out, on the moment it starts to fade in. Browsers without discrete
+       transitions switch it at once, which is what the plain rule gives. */
+    transition: opacity 120ms ease, pointer-events 0s linear 120ms;
+    transition-behavior: allow-discrete;
+}
+
+.info-popover__copy.is-revealed {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 120ms ease, pointer-events 0s linear 0s;
+    transition-behavior: allow-discrete;
+}
+
+@media (hover: none) {
+    .info-popover__copy {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
 .info-popover__copy::before {
     content: "";
     width: 12px;

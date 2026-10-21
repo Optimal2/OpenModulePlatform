@@ -67,6 +67,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The info box's copy button shows on hover.** The button beside a list
+  info box (`.info-badge`, `.list-message`) appears while the pointer is
+  over the box or the button, or while either has keyboard focus, and fades
+  out otherwise, so the box reads as plain text until the reader reaches
+  for it. On devices without a pointer to hover with it is always shown.
+
 - **Form fields keep their height beside taller neighbours.** A form field
   is a grid, and in a row of fields it was stretched to the tallest one with
   the extra height shared out among its label and control, so an input
