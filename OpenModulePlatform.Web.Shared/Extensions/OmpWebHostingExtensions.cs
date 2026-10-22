@@ -596,8 +596,12 @@ public static class OmpWebHostingExtensions
                 return Results.Forbid();
             }
 
+            // Three fields, each optional and each "true" or "false": muted sets toasts and
+            // sounds together (Do not disturb), toasts and sounds set one each. A form without
+            // any of them is the plain tray toggle of old and means muted=true.
             var returnUrl = "/";
-            var muted = true;
+            bool? toastsMuted = null;
+            bool? soundsMuted = null;
             if (context.Request.HasFormContentType)
             {
                 var form = await context.Request.ReadFormAsync(ct);
@@ -607,18 +611,39 @@ public static class OmpWebHostingExtensions
                     returnUrl = candidateReturnUrl;
                 }
 
-                muted = !string.Equals(form["muted"].ToString(), "false", StringComparison.OrdinalIgnoreCase);
+                static bool? ReadFlag(string value)
+                    => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ? true
+                        : string.Equals(value, "false", StringComparison.OrdinalIgnoreCase) ? false
+                        : null;
+
+                var both = ReadFlag(form["muted"].ToString());
+                toastsMuted = ReadFlag(form["toasts"].ToString()) ?? both;
+                soundsMuted = ReadFlag(form["sounds"].ToString()) ?? both;
             }
 
-            var stored = await settingWriter.SetAsync(
-                userId.Value,
-                OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.PortalUserSettingCategory,
-                OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.NotificationToastsMutedSetting,
-                muted,
-                ct);
+            if (toastsMuted is null && soundsMuted is null)
+            {
+                toastsMuted = true;
+                soundsMuted = true;
+            }
+
+            const string category = OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.PortalUserSettingCategory;
+            const string toastsSetting = OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.NotificationToastsMutedSetting;
+            const string soundsSetting = OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.NotificationSoundsEnabledSetting;
+            var stored = true;
+            if (toastsMuted is bool toasts)
+            {
+                stored &= await settingWriter.SetAsync(userId.Value, category, toastsSetting, toasts, ct);
+            }
+
+            if (soundsMuted is bool sounds)
+            {
+                stored &= await settingWriter.SetAsync(userId.Value, category, soundsSetting, !sounds, ct);
+            }
+
             if (!stored)
             {
-                return Results.Problem("The notification mute setting is not defined on this installation.", statusCode: StatusCodes.Status503ServiceUnavailable);
+                return Results.Problem("The notification settings are not defined on this installation.", statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
             if (!IsXmlHttpRequest(context.Request))
@@ -626,10 +651,14 @@ public static class OmpWebHostingExtensions
                 return Results.LocalRedirect(returnUrl);
             }
 
+            var toastsNow = toastsMuted ?? await settingWriter.GetAsync(userId.Value, category, toastsSetting, false, ct);
+            var soundsNow = soundsMuted ?? !await settingWriter.GetAsync(userId.Value, category, soundsSetting, true, ct);
             return Results.Json(new
             {
                 success = true,
-                muted
+                muted = toastsNow && soundsNow,
+                toastsMuted = toastsNow,
+                soundsMuted = soundsNow
             });
         }).RequireAuthorization();
 

@@ -254,7 +254,11 @@
 .portal-topbar__icon--notifications,
 .portal-topbar__icon--messages,
 .portal-topbar__icon--settings,
-.portal-topbar__icon--badge {
+.portal-topbar__icon--badge,
+.portal-topbar__icon--do-not-disturb,
+.portal-topbar__icon--volume-up,
+.portal-topbar__icon--toasts,
+.portal-topbar__icon--expand-more {
     background: currentColor;
     -webkit-mask: var(--portal-topbar-icon) center / contain no-repeat;
     mask: var(--portal-topbar-icon) center / contain no-repeat;
@@ -295,6 +299,22 @@
 /* Muted: the crossed-out bell, in the bar and in the tray alike. */
 .portal-topbar__icon--notifications.is-muted {
     --portal-topbar-icon: url("../icons/notifications-off.svg");
+}
+
+.portal-topbar__icon--do-not-disturb {
+    --portal-topbar-icon: url("../icons/do-not-disturb.svg");
+}
+
+.portal-topbar__icon--volume-up {
+    --portal-topbar-icon: url("../icons/volume-up.svg");
+}
+
+.portal-topbar__icon--toasts {
+    --portal-topbar-icon: url("../icons/toasts.svg");
+}
+
+.portal-topbar__icon--expand-more {
+    --portal-topbar-icon: url("../icons/expand-more.svg");
 }
 
 .portal-topbar__icon--messages {
@@ -1570,8 +1590,85 @@ span.portal-topbar__nav-group-link {
     background: var(--portal-topbar-border);
 }
 
-.portal-topbar__profile-separator--logout {
+/* The rule before the session rows (switch role, log out): the same line as
+   the others, with a little more air above, which is how the groups differ. */
+.portal-topbar__profile-separator--session {
     margin-top: 10px;
+}
+
+/* Notification preferences in the user menu: a Do not disturb row whose
+   expander, just left of its switch, extends the panel with the two options
+   underneath. Every row ends in an omp-switch in the same column; the Do
+   not disturb switch parks its knob in the middle when only one of the two
+   options is off. */
+.portal-topbar__profile-pref-head {
+    position: relative;
+}
+
+.portal-topbar__profile-pref-form {
+    display: block;
+    margin: 0;
+    min-width: 0;
+}
+
+/* Icon, text, the expander's column (empty on the option rows) and the
+   switch: the same four columns on every row, so the switches line up. */
+.portal-topbar__profile-pref-row {
+    grid-template-columns: 24px minmax(0, 1fr) 24px 34px;
+}
+
+.portal-topbar__profile-pref-row > .omp-switch {
+    grid-column: 4;
+}
+
+.portal-topbar__profile-pref-row--option {
+    padding-left: 22px;
+    font-weight: 600;
+}
+
+.portal-topbar__profile-pref-expand {
+    position: absolute;
+    top: 50%;
+    right: calc(10px + 34px + 10px);
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--portal-topbar-text-muted);
+    cursor: pointer;
+}
+
+.portal-topbar__profile-pref-expand .portal-topbar__icon {
+    width: 18px;
+    height: 18px;
+    transition: transform 160ms ease;
+}
+
+.portal-topbar__profile-pref-expand[aria-expanded="true"] .portal-topbar__icon {
+    transform: rotate(180deg);
+}
+
+.portal-topbar__profile-pref-expand:hover,
+.portal-topbar__profile-pref-expand:focus-visible {
+    background: var(--portal-topbar-surface-muted);
+    color: var(--portal-topbar-text);
+    outline: none;
+}
+
+.portal-topbar__profile-pref-options {
+    display: grid;
+    gap: 2px;
+    padding-bottom: 2px;
+}
+
+.portal-topbar__profile-pref-options[hidden] {
+    display: none;
 }
 
 .portal-topbar__profile-action-row {

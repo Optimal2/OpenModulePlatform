@@ -30,6 +30,7 @@ public sealed class PortalTopBarService
     /// <summary>The Portal user setting the tray's mute toggle flips; the same one the Portal's
     /// settings page edits as "mute notification toasts".</summary>
     public const string NotificationToastsMutedSetting = "NotificationToastsMuted";
+    public const string NotificationSoundsEnabledSetting = "NotificationSoundsEnabled";
     public const string PortalUserSettingCategory = PortalSettingCategory;
 
     /// <summary>POST endpoint, mapped in every OMP web app, that stores the mute toggle.</summary>
@@ -289,6 +290,7 @@ public sealed class PortalTopBarService
                 ct);
             var dropdownsOpenOnHover = true;
             var notificationsMuted = false;
+            var notificationSoundsMuted = false;
             IReadOnlyList<FavoriteRef> favorites = [];
             IReadOnlyList<PortalTopBarNotification> notifications = [];
             IReadOnlyList<PortalTopBarMessageConversation> messageConversations = [];
@@ -307,6 +309,7 @@ public sealed class PortalTopBarService
                 var bitSettings = await GetPortalBitSettingsAsync(resolvedUserId, ct);
                 dropdownsOpenOnHover = bitSettings.TryGetValue(TopbarDropdownsOpenOnHoverSetting, out var openOnHover) ? openOnHover : true;
                 notificationsMuted = bitSettings.TryGetValue(NotificationToastsMutedSetting, out var muted) && muted;
+                notificationSoundsMuted = bitSettings.TryGetValue(NotificationSoundsEnabledSetting, out var soundsEnabled) && !soundsEnabled;
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
                 notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
                 unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
@@ -359,6 +362,7 @@ public sealed class PortalTopBarService
                 topBarSummaryUrl: context.BuildEndpointHref(SummaryPath),
                 dropdownsOpenOnHover,
                 notificationsMuted,
+                notificationSoundsMuted,
                 notificationMuteUrl: context.BuildEndpointHref(NotificationMutePath),
                 notificationUpdateOptions,
                 options,
@@ -554,6 +558,7 @@ public sealed class PortalTopBarService
             topBarSummaryUrl: SummaryPath,
             dropdownsOpenOnHover: true,
             notificationsMuted: false,
+            notificationSoundsMuted: false,
             notificationMuteUrl: NotificationMutePath,
             PortalTopBarNotificationUpdateOptions.FromWebAppOptions(options.TopBarPolling),
             options,
@@ -623,6 +628,7 @@ public sealed class PortalTopBarService
         string topBarSummaryUrl,
         bool dropdownsOpenOnHover,
         bool notificationsMuted,
+        bool notificationSoundsMuted,
         string notificationMuteUrl,
         PortalTopBarNotificationUpdateOptions notificationUpdateOptions,
         WebAppOptions options,
@@ -710,6 +716,7 @@ public sealed class PortalTopBarService
             FavoritesShortcut = options.TopbarShortcuts?.Favorites ?? "f",
             DropdownsOpenOnHover = dropdownsOpenOnHover,
             NotificationsMuted = notificationsMuted,
+            NotificationSoundsMuted = notificationSoundsMuted,
             NotificationMuteUrl = notificationMuteUrl,
             SessionStatusCheckEnabled = options.SessionStatusCheck?.Enabled != false,
             SessionStatusUrl = PortalTopBarModel.DefaultSessionStatusPath,
@@ -1026,7 +1033,7 @@ LEFT JOIN omp_portal.user_setting_bit_values v
     ON v.user_setting_definition_id = d.user_setting_definition_id
    AND v.user_id = @user_id
 WHERE d.setting_category = @setting_category
-  AND d.setting_name IN (@hover_setting_name, @muted_setting_name)
+  AND d.setting_name IN (@hover_setting_name, @muted_setting_name, @sounds_setting_name)
   AND d.value_kind = @value_kind
   AND d.is_enabled = 1;";
 
@@ -1038,6 +1045,7 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = PortalSettingCategory;
         cmd.Parameters.Add("@hover_setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
         cmd.Parameters.Add("@muted_setting_name", SqlDbType.NVarChar, 200).Value = NotificationToastsMutedSetting;
+        cmd.Parameters.Add("@sounds_setting_name", SqlDbType.NVarChar, 200).Value = NotificationSoundsEnabledSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);

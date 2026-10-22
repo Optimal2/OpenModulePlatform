@@ -41,6 +41,7 @@
          data-shortcut-favorites="@_portalTopBar.FavoritesShortcut"
          data-open-on-hover="@_portalTopBar.DropdownsOpenOnHover.ToString().ToLowerInvariant()"
          data-notifications-muted="@_portalTopBar.NotificationsMuted.ToString().ToLowerInvariant()"
+         data-notification-sounds-muted="@_portalTopBar.NotificationSoundsMuted.ToString().ToLowerInvariant()"
          data-session-status-enabled="@_portalTopBar.SessionStatusCheckEnabled.ToString().ToLowerInvariant()"
          data-session-status-url="@_portalTopBar.SessionStatusUrl"
          data-session-login-url="@_portalTopBar.SessionLoginUrl"
@@ -347,17 +348,17 @@
                                   action="@_portalTopBar.NotificationMuteUrl"
                                   class="portal-topbar__notifications-mute-form"
                                   data-portal-topbar-notification-mute-form
-                                  data-mute-text="@L["Mute notifications"]"
+                                  data-mute-text="@L["Do not disturb"]"
                                   data-unmute-text="@L["Unmute notifications"]"
                                   data-enhance="false">
                                 <AntiforgeryToken />
                                 <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
-                                <input type="hidden" name="muted" value="@(_portalTopBar.NotificationsMuted ? "false" : "true")" data-portal-topbar-notification-mute-value />
+                                <input type="hidden" name="muted" value="@(_portalTopBar.DoNotDisturb ? "false" : "true")" data-portal-topbar-notification-mute-value />
                                 <button type="submit"
                                         class="portal-topbar__tray-icon-button"
-                                        aria-pressed="@(_portalTopBar.NotificationsMuted ? "true" : "false")"
-                                        title="@(_portalTopBar.NotificationsMuted ? L["Unmute notifications"] : L["Mute notifications"])"
-                                        aria-label="@(_portalTopBar.NotificationsMuted ? L["Unmute notifications"] : L["Mute notifications"])">
+                                        aria-pressed="@(_portalTopBar.DoNotDisturb ? "true" : "false")"
+                                        title="@(_portalTopBar.DoNotDisturb ? L["Unmute notifications"] : L["Do not disturb"])"
+                                        aria-label="@(_portalTopBar.DoNotDisturb ? L["Unmute notifications"] : L["Do not disturb"])">
                                     <span class="portal-topbar__icon portal-topbar__icon--notifications@(_portalTopBar.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
                                 </button>
                             </form>
@@ -542,8 +543,81 @@
                             </div>
                         </div>
 
-                        <div class="portal-topbar__profile-separator" role="separator" aria-hidden="true"></div>
-
+                        <div class="portal-topbar__profile-prefs"
+                             data-portal-topbar-notification-prefs
+                             data-sounds-muted="@(_portalTopBar.NotificationSoundsMuted.ToString().ToLowerInvariant())">
+                            <div class="portal-topbar__profile-pref-head">
+                                <form method="post"
+                                      action="@_portalTopBar.NotificationMuteUrl"
+                                      class="portal-topbar__profile-pref-form"
+                                      data-portal-topbar-notification-pref-form
+                                      data-pref="all"
+                                      data-enhance="false">
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
+                                    <input type="hidden" name="muted" value="@(_portalTopBar.DoNotDisturb ? "false" : "true")" data-portal-topbar-notification-pref-value />
+                                    <button type="submit"
+                                            class="portal-topbar__profile-row portal-topbar__profile-action-row portal-topbar__profile-pref-row"
+                                            role="menuitemcheckbox"
+                                            aria-checked="@(_portalTopBar.DoNotDisturb ? "true" : _portalTopBar.DoNotDisturbPartly ? "mixed" : "false")">
+                                        <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--do-not-disturb" aria-hidden="true"></span>
+                                        <span>@L["Do not disturb"]</span>
+                                        <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                                    </button>
+                                </form>
+                                <button type="button"
+                                        class="portal-topbar__profile-pref-expand"
+                                        aria-expanded="false"
+                                        aria-label="@L["Show notification options"]"
+                                        title="@L["Show notification options"]"
+                                        data-portal-topbar-notification-prefs-toggle>
+                                    <span class="portal-topbar__icon portal-topbar__icon--expand-more" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                            <div class="portal-topbar__profile-pref-options" data-portal-topbar-notification-prefs-options hidden>
+                                <form method="post"
+                                      action="@_portalTopBar.NotificationMuteUrl"
+                                      class="portal-topbar__profile-pref-form"
+                                      data-portal-topbar-notification-pref-form
+                                      data-pref="sounds"
+                                      data-enhance="false">
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
+                                    <input type="hidden" name="sounds" value="@(_portalTopBar.NotificationSoundsMuted ? "false" : "true")" data-portal-topbar-notification-pref-value />
+                                    <button type="submit"
+                                            class="portal-topbar__profile-row portal-topbar__profile-action-row portal-topbar__profile-pref-row portal-topbar__profile-pref-row--option"
+                                            role="switch"
+                                            aria-checked="@(_portalTopBar.NotificationSoundsMuted ? "false" : "true")">
+                                        <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--volume-up" aria-hidden="true"></span>
+                                        <span>@L["Notification sounds"]</span>
+                                        <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                                    </button>
+                                </form>
+                                <form method="post"
+                                      action="@_portalTopBar.NotificationMuteUrl"
+                                      class="portal-topbar__profile-pref-form"
+                                      data-portal-topbar-notification-pref-form
+                                      data-pref="toasts"
+                                      data-enhance="false">
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
+                                    <input type="hidden" name="toasts" value="@(_portalTopBar.NotificationsMuted ? "false" : "true")" data-portal-topbar-notification-pref-value />
+                                    <button type="submit"
+                                            class="portal-topbar__profile-row portal-topbar__profile-action-row portal-topbar__profile-pref-row portal-topbar__profile-pref-row--option"
+                                            role="switch"
+                                            aria-checked="@(_portalTopBar.NotificationsMuted ? "false" : "true")">
+                                        <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--toasts" aria-hidden="true"></span>
+                                        <span>@L["Toasts"]</span>
+                                        <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <a class="portal-topbar__profile-row portal-topbar__profile-action-row" href="@_portalTopBar.SettingsUrl" data-enhance-nav="false">
+                            <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--settings" aria-hidden="true"></span>
+                            <span>@L["Settings"]</span>
+                        </a>
+                        <div class="portal-topbar__profile-separator portal-topbar__profile-separator--session" role="separator" aria-hidden="true"></div>
                         @if (_roleContext.AvailableRoles.Count > 1)
                         {
                             <details class="portal-topbar__profile-switch" data-portal-topbar-overlay>
@@ -567,13 +641,6 @@
                                 </div>
                             </details>
                         }
-
-                        <a class="portal-topbar__profile-row portal-topbar__profile-action-row" href="@_portalTopBar.SettingsUrl" data-enhance-nav="false">
-                            <span class="portal-topbar__profile-row-icon portal-topbar__icon portal-topbar__icon--settings" aria-hidden="true"></span>
-                            <span>@L["Settings"]</span>
-                        </a>
-
-                        <div class="portal-topbar__profile-separator portal-topbar__profile-separator--logout" role="separator" aria-hidden="true"></div>
 
                         <form method="post" action="@_portalTopBar.LogoutUrl" class="portal-topbar__logout-form" data-enhance="false">
                             <button type="submit"

@@ -1258,88 +1258,180 @@ window.OmpTime = {
         }
     }
 
-    // The tray's mute toggle flips the Portal setting NotificationToastsMuted
-    // through the shared endpoint. The bell, the tray icon and the button swap
-    // to the crossed-out glyph at once and swap back if the server refuses; the
-    // toast script listens for the event and stops showing (and sounding)
-    // toasts on this page without a reload.
-    function applyNotificationsMuted(root, muted) {
+    // Notification preferences: two Portal settings, NotificationToastsMuted
+    // (no toast is shown) and NotificationSoundsEnabled (its inverse is "sounds
+    // muted"). Do not disturb is both off at once: the tray's toggle, the user
+    // menu's first row and the toast's own button all set both; the two rows
+    // under the expander set one each. Every control is updated from one
+    // place, and the toast script hears about changes through an event so a
+    // page stops showing or sounding toasts without a reload.
+    var NOTIFICATION_PREFERENCES_EVENT = 'omp:notification-preferences';
+
+    function readNotificationPreferences(root) {
+        var prefs = root ? root.querySelector('[data-portal-topbar-notification-prefs]') : null;
+        return {
+            toasts: !!root && root.dataset.notificationsMuted === 'true',
+            sounds: !!prefs && prefs.dataset.soundsMuted === 'true'
+        };
+    }
+
+    function applyNotificationPreferences(root, prefs, options) {
         if (!root) {
             return;
         }
-        root.dataset.notificationsMuted = muted ? 'true' : 'false';
+        var toasts = !!prefs.toasts;
+        var sounds = !!prefs.sounds;
+        var dnd = toasts && sounds;
+        var partly = toasts !== sounds;
+        root.dataset.notificationsMuted = toasts ? 'true' : 'false';
+        root.dataset.notificationSoundsMuted = sounds ? 'true' : 'false';
         root.querySelectorAll('[data-portal-topbar-notifications-icon]').forEach(function (icon) {
-            icon.classList.toggle('is-muted', muted);
+            icon.classList.toggle('is-muted', toasts);
         });
         root.querySelectorAll('[data-portal-topbar-notification-mute-form]').forEach(function (form) {
             var value = form.querySelector('[data-portal-topbar-notification-mute-value]');
             if (value) {
-                value.value = muted ? 'false' : 'true';
+                value.value = dnd ? 'false' : 'true';
             }
             var button = form.querySelector('button');
             if (button) {
-                var label = muted ? (form.dataset.unmuteText || 'Unmute notifications') : (form.dataset.muteText || 'Mute notifications');
-                button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+                var label = dnd ? (form.dataset.unmuteText || 'Unmute notifications') : (form.dataset.muteText || 'Do not disturb');
+                button.setAttribute('aria-pressed', dnd ? 'true' : 'false');
                 button.title = label;
                 button.setAttribute('aria-label', label);
             }
         });
-        try {
-            window.dispatchEvent(new CustomEvent('omp:notifications-muted', { detail: { muted: muted } }));
-        } catch (error) {
-            // An old browser without CustomEvent keeps the setting; only the live page misses it.
+        root.querySelectorAll('[data-portal-topbar-notification-prefs]').forEach(function (block) {
+            block.dataset.soundsMuted = sounds ? 'true' : 'false';
+        });
+        root.querySelectorAll('[data-portal-topbar-notification-pref-form]').forEach(function (form) {
+            var pref = form.dataset.pref;
+            // The hidden value is what a submit asks for: muting on or off.
+            var muted = pref === 'toasts' ? toasts : pref === 'sounds' ? sounds : dnd;
+            var value = form.querySelector('[data-portal-topbar-notification-pref-value]');
+            if (value) {
+                value.value = muted ? 'false' : 'true';
+            }
+            // The switch shows the thing itself: Do not disturb on, toasts on, sounds on.
+            var button = form.querySelector('button');
+            if (button) {
+                var shown = pref === 'all'
+                    ? (dnd ? 'true' : partly ? 'mixed' : 'false')
+                    : (muted ? 'false' : 'true');
+                button.setAttribute('aria-checked', shown);
+            }
+        });
+        if (!options || !options.silent) {
+            try {
+                window.dispatchEvent(new CustomEvent(NOTIFICATION_PREFERENCES_EVENT, {
+                    detail: { toasts: toasts, sounds: sounds, source: 'topbar' }
+                }));
+            } catch (error) {
+                // An old browser without CustomEvent keeps the setting; only the live page misses it.
+            }
         }
     }
 
-    function initNotificationMuteForm(form) {
-        if (!form || form.dataset.portalTopbarNotificationMuteFormInitialized === 'true') {
+    function postNotificationPreferences(form, next, root, previous) {
+        var body = new FormData(form);
+        var pref = form.dataset.pref || 'all';
+        if (pref === 'all') {
+            body.set('muted', next.toasts && next.sounds ? 'true' : 'false');
+        } else if (pref === 'toasts') {
+            body.set('toasts', next.toasts ? 'true' : 'false');
+        } else {
+            body.set('sounds', next.sounds ? 'true' : 'false');
+        }
+        applyNotificationPreferences(root, next);
+        return fetch(form.action, {
+            method: 'POST',
+            body: body,
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(function (response) {
+                if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                    reportNotificationSessionWarning('auth');
+                    throw new Error('Notification preferences require sign-in.');
+                }
+                if (!response.ok) {
+                    throw new Error('Notification preferences failed with status ' + response.status + '.');
+                }
+                return response.json();
+            })
+            .then(function (payload) {
+                if (payload && typeof payload.toastsMuted === 'boolean' && typeof payload.soundsMuted === 'boolean'
+                    && (payload.toastsMuted !== next.toasts || payload.soundsMuted !== next.sounds)) {
+                    applyNotificationPreferences(root, { toasts: payload.toastsMuted, sounds: payload.soundsMuted });
+                }
+            })
+            .catch(function (error) {
+                applyNotificationPreferences(root, previous);
+                console.warn(error);
+            });
+    }
+
+    function initNotificationPreferenceForm(form, pref) {
+        if (!form || form.dataset.portalTopbarNotificationPrefInitialized === 'true') {
             return;
         }
-        form.dataset.portalTopbarNotificationMuteFormInitialized = 'true';
+        form.dataset.portalTopbarNotificationPrefInitialized = 'true';
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             event.stopPropagation();
-            if (form.dataset.portalTopbarNotificationMuteSubmitting === 'true') {
+            if (form.dataset.portalTopbarNotificationPrefSubmitting === 'true') {
                 return;
             }
             var root = form.closest('[data-portal-topbar-root]');
-            var value = form.querySelector('[data-portal-topbar-notification-mute-value]');
-            var next = !!value && value.value === 'true';
-            var previous = !!root && root.dataset.notificationsMuted === 'true';
-            form.dataset.portalTopbarNotificationMuteSubmitting = 'true';
-            var body = new FormData(form);
-            body.set('muted', next ? 'true' : 'false');
-            applyNotificationsMuted(root, next);
-            fetch(form.action, {
-                method: 'POST',
-                body: body,
-                credentials: 'same-origin',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-                .then(function (response) {
-                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
-                        reportNotificationSessionWarning('auth');
-                        throw new Error('Notification mute requires sign-in.');
-                    }
-                    if (!response.ok) {
-                        throw new Error('Notification mute failed with status ' + response.status + '.');
-                    }
-                    return response.json();
-                })
-                .then(function (payload) {
-                    if (payload && typeof payload.muted === 'boolean' && payload.muted !== next) {
-                        applyNotificationsMuted(root, payload.muted);
-                    }
-                })
-                .catch(function (error) {
-                    applyNotificationsMuted(root, previous);
-                    console.warn(error);
-                })
-                .finally(function () {
-                    form.dataset.portalTopbarNotificationMuteSubmitting = 'false';
-                });
+            var previous = readNotificationPreferences(root);
+            var value = form.querySelector('[data-portal-topbar-notification-mute-value], [data-portal-topbar-notification-pref-value]');
+            var turnOn = !!value && value.value === 'true';
+            var next = pref === 'toasts'
+                ? { toasts: turnOn, sounds: previous.sounds }
+                : pref === 'sounds'
+                    ? { toasts: previous.toasts, sounds: turnOn }
+                    : { toasts: turnOn, sounds: turnOn };
+            form.dataset.portalTopbarNotificationPrefSubmitting = 'true';
+            postNotificationPreferences(form, next, root, previous).finally(function () {
+                form.dataset.portalTopbarNotificationPrefSubmitting = 'false';
+            });
+        });
+    }
+
+    function initNotificationMuteForm(form) {
+        initNotificationPreferenceForm(form, 'all');
+    }
+
+    function initNotificationPrefsToggle(button) {
+        if (!button || button.dataset.portalTopbarNotificationPrefsToggleInitialized === 'true') {
+            return;
+        }
+        button.dataset.portalTopbarNotificationPrefsToggleInitialized = 'true';
+        button.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            var block = button.closest('[data-portal-topbar-notification-prefs]');
+            var options = block ? block.querySelector('[data-portal-topbar-notification-prefs-options]') : null;
+            if (!options) {
+                return;
+            }
+            var open = options.hidden;
+            options.hidden = !open;
+            button.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+
+    // A change made elsewhere on the page (the toast's own button) reaches
+    // every top bar on the page; the event carries the whole state.
+    function handleExternalNotificationPreferences(event) {
+        var detail = event && event.detail ? event.detail : null;
+        if (!detail || detail.source === 'topbar') {
+            return;
+        }
+        document.querySelectorAll('[data-portal-topbar-root]').forEach(function (root) {
+            applyNotificationPreferences(root, { toasts: !!detail.toasts, sounds: !!detail.sounds }, { silent: true });
         });
     }
 
@@ -2749,6 +2841,7 @@ window.OmpTime = {
         window.addEventListener('load', rebalanceAll);
         window.addEventListener(FAVORITE_CHANGED_EVENT, handleExternalFavoriteChanged);
         window.addEventListener(NOTIFICATION_CHANGED_EVENT, handleExternalNotificationChanged);
+        window.addEventListener(NOTIFICATION_PREFERENCES_EVENT, handleExternalNotificationPreferences);
     }
 
     function initTopbarComponents(topbar) {
@@ -2760,6 +2853,10 @@ window.OmpTime = {
         topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mute-form]').forEach(initNotificationMuteForm);
+        topbar.querySelectorAll('[data-portal-topbar-notification-pref-form]').forEach(function (form) {
+            initNotificationPreferenceForm(form, form.dataset.pref || 'all');
+        });
+        topbar.querySelectorAll('[data-portal-topbar-notification-prefs-toggle]').forEach(initNotificationPrefsToggle);
         topbar.querySelectorAll('[data-portal-topbar-message-mark-all-form]').forEach(initMessageMarkAllForm);
         topbar.querySelectorAll('[data-portal-topbar-notifications-list]').forEach(initNotificationLazyList);
         updateNotificationEmptyState(topbar);

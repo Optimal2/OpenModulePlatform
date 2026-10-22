@@ -86,11 +86,13 @@
             && !!document.querySelector("[data-message-thread-composer]");
     }
 
-    // The user's mute (the top bar's toggle, the Portal setting
-    // NotificationToastsMuted) silences toasts and sounds. It is read from the
-    // toast root when the page carries it there (the Portal does), else from
-    // the top bar, and updated live by the toggle's event; a page with neither
-    // has nothing to honour. A muted page keeps polling so the badge stays right.
+    // The user's two notification settings, toasts muted (NotificationToastsMuted:
+    // no toast is shown) and sounds muted (NotificationSoundsEnabled off), are
+    // independent: a page can sound without showing, or show without sounding.
+    // They are read from the toast root when the page carries them there (the
+    // Portal does), else from the top bar, and updated live by the preferences
+    // event; a page with neither has nothing to honour. A page with toasts muted
+    // keeps polling so the badge stays right and the sound still plays.
     function isMuted() {
         if (typeof state.muted === "boolean") {
             return state.muted;
@@ -102,8 +104,19 @@
         return !!topbar && topbar.getAttribute("data-notifications-muted") === "true";
     }
 
+    function isSoundMuted() {
+        if (typeof state.soundMuted === "boolean") {
+            return state.soundMuted;
+        }
+        if (state.root && state.root.hasAttribute("data-sounds-enabled")) {
+            return !parseBoolean(state.root.getAttribute("data-sounds-enabled"), true);
+        }
+        var topbar = document.querySelector("[data-portal-topbar-root]");
+        return !!topbar && topbar.getAttribute("data-notification-sounds-muted") === "true";
+    }
+
     function playToastSound(soundKind, shouldSuppress) {
-        if (!state.soundEnabled || shouldSuppress || isMuted()) {
+        if (!state.soundEnabled || shouldSuppress || isSoundMuted()) {
             return;
         }
 
@@ -423,15 +436,16 @@
     }
 
     function enqueueToast(toast, config) {
-        if (isMuted()) {
-            return;
-        }
+        // The sound first, on its own terms: it plays even when no toast is shown.
         if (toast && toast.isMessage) {
             if (!isMessageThreadPageActive()) {
                 playMessageNotificationSound(false);
             }
         } else if (toast) {
             playNotificationSound();
+        }
+        if (isMuted()) {
+            return;
         }
 
         if (!isPageActive()) {
@@ -660,6 +674,47 @@
         close.className = "omp-toast__close";
         close.setAttribute("aria-label", config.closeLabel);
         close.textContent = "\u00d7";
+        // Do not disturb from the toast itself: posts to the top bar's own
+        // Do not disturb form's action with its antiforgery token, so it works
+        // wherever the top bar does, then tells the page through the event.
+        var dndForm = document.querySelector('[data-portal-topbar-notification-pref-form][data-pref="all"], [data-portal-topbar-notification-mute-form]');
+        var dnd = null;
+        if (dndForm) {
+            dnd = document.createElement("button");
+            dnd.type = "button";
+            dnd.className = "omp-toast__dnd";
+            element.classList.add("omp-toast--dnd");
+            var dndLabel = (dndForm.querySelector("button span:not([aria-hidden])") || {}).textContent
+                || dndForm.dataset.muteText
+                || "Do not disturb";
+            dnd.title = dndLabel.trim();
+            dnd.setAttribute("aria-label", dndLabel.trim());
+            dnd.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var body = new FormData(dndForm);
+                body.set("muted", "true");
+                fetch(dndForm.action, {
+                    method: "POST",
+                    body: body,
+                    credentials: "same-origin",
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                }).then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Do not disturb failed with status " + response.status + ".");
+                    }
+                    try {
+                        window.dispatchEvent(new CustomEvent("omp:notification-preferences", {
+                            detail: { toasts: true, sounds: true, source: "toast" }
+                        }));
+                    } catch (error) {
+                        // No CustomEvent: the setting is stored; the page learns it on reload.
+                    }
+                }).catch(function (error) {
+                    console.warn(error);
+                });
+            });
+        }
 
         var title = document.createElement("div");
         title.className = "omp-toast__title";
@@ -678,6 +733,9 @@
         content.textContent = toast.content;
 
         element.append(close, title, timer, content);
+        if (dnd) {
+            element.append(dnd);
+        }
 
         var visibleState = {
             element: element,
@@ -700,6 +758,9 @@
         });
 
         element.addEventListener("keydown", function (event) {
+            if (event.target !== element) {
+                return; // Enter/Space on the close or Do not disturb button is the button's.
+            }
             if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 window.location.href = toast.targetUrl || config.notificationsUrl;
@@ -843,10 +904,20 @@
         state.container.className = "omp-toast-stack";
         document.body.appendChild(state.container);
         state.soundEnabled = parseBoolean(state.root.getAttribute("data-sounds-enabled"), true);
-        window.addEventListener("omp:notifications-muted", function (event) {
-            state.muted = !!(event && event.detail && event.detail.muted);
+        window.addEventListener("omp:notification-preferences", function (event) {
+            var detail = event && event.detail ? event.detail : {};
+            state.muted = !!detail.toasts;
+            state.soundMuted = !!detail.sounds;
+            // The sound setting itself: turning sounds back on from the top bar on a
+            // page that loaded with them off must make them audible without a reload.
+            state.soundEnabled = !detail.sounds;
             if (state.muted) {
                 state.queue.length = 0;
+                if (detail.source === "toast") {
+                    state.visible.slice().forEach(function (item) {
+                        dismissToast(item, getConfig());
+                    });
+                }
             }
         });
 

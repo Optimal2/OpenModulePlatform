@@ -21,6 +21,33 @@ public sealed class PortalUserBitSettingWriter
         _db = db;
     }
 
+    /// <summary>Reads the user's value, or the definition's default, or <paramref name="defaultValue"/>
+    /// when the installation lacks the definition.</summary>
+    public async Task<bool> GetAsync(int userId, string category, string settingName, bool defaultValue, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT CAST(COALESCE(v.setting_value, d.default_bit_value, @default_value) AS bit)
+FROM omp_portal.user_setting_definitions d
+LEFT JOIN omp_portal.user_setting_bit_values v
+    ON v.user_setting_definition_id = d.user_setting_definition_id
+   AND v.user_id = @user_id
+WHERE d.setting_category = @setting_category
+  AND d.setting_name = @setting_name
+  AND d.value_kind = @value_kind
+  AND d.is_enabled = 1;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+        cmd.Parameters.Add("@setting_category", SqlDbType.NVarChar, 100).Value = category;
+        cmd.Parameters.Add("@setting_name", SqlDbType.NVarChar, 200).Value = settingName;
+        cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = BitValueKind;
+        cmd.Parameters.Add("@default_value", SqlDbType.Bit).Value = defaultValue;
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is bool value ? value : defaultValue;
+    }
+
     /// <summary>Stores <paramref name="value"/> for the user; returns false when the definition
     /// does not exist or is disabled, so a caller can answer with a clear failure instead of a
     /// silent no-op.</summary>

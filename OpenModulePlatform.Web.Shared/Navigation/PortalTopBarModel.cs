@@ -191,9 +191,20 @@ public sealed class PortalTopBarModel
 
     public bool DropdownsOpenOnHover { get; init; } = true;
 
-    /// <summary>True when the user has muted notification toasts and sounds; the top bar then
-    /// shows the crossed-out bell and the tray's toggle offers to unmute.</summary>
+    /// <summary>True when the user has muted notification toasts (no toast is shown); the
+    /// top bar then shows the crossed-out bell.</summary>
     public bool NotificationsMuted { get; init; }
+
+    /// <summary>True when the user has turned notification sounds off.</summary>
+    public bool NotificationSoundsMuted { get; init; }
+
+    /// <summary>Do not disturb: toasts and sounds both off. The tray's toggle and the user
+    /// menu's first row switch both at once.</summary>
+    public bool DoNotDisturb => NotificationsMuted && NotificationSoundsMuted;
+
+    /// <summary>Exactly one of toasts and sounds is off: the user menu shows the Do not
+    /// disturb row as partly on.</summary>
+    public bool DoNotDisturbPartly => NotificationsMuted != NotificationSoundsMuted;
 
     public string NotificationMuteUrl { get; init; } = "/notifications/mute";
 

@@ -8,18 +8,27 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
-- **Mute notifications from the notification tray.** The tray's header carries
-  a toggle, on the title's row, that mutes and unmutes notification toasts and
-  their sounds without a visit to the settings page; it flips the same Portal
-  setting the settings page edits (NotificationToastsMuted), through a shared
-  endpoint (`/notifications/mute`) mapped in every app that shows the top bar.
-  While muted the bell in the bar and the tray show the crossed-out glyph
-  (Material Symbols notifications_off), the unread count stays, and the toast
-  script stops showing and sounding toasts on the open page at once. The
-  script honours the mute wherever the page carries it, on the toast root
-  (the Portal, which now renders the root while muted so unmuting from the
-  tray resumes toasts without a reload) or on the top bar (every other app
-  that shows it); before, only the Portal left toasts out while muted.
+- **Do not disturb, from the tray, the user menu and the toast itself.** The
+  two notification settings the settings page edits, toasts muted
+  (NotificationToastsMuted) and sounds (NotificationSoundsEnabled), are now
+  independent on the open page too: toasts can show silently, and a sound can
+  play without a toast. Do not disturb is both off at once. The notification
+  tray's header carries a Do not disturb toggle; the user menu opens, after
+  the grey who-you-are box, with a Do not disturb row (a switch, its
+  knob in the middle when only one of the two is off) whose expander
+  extends the panel with on/off switches for Notification sounds and
+  Toasts (a shared `omp-switch` control, drawn from the theme tokens, read
+  from its row's aria-checked), then Settings,
+  a rule, Switch role and Log out; and every toast carries a Do not disturb
+  button beside its close button. All of them post to one shared endpoint
+  (`/notifications/mute`, fields muted, toasts, sounds) mapped in every app
+  that shows the top bar, and tell the page through an event, so the page
+  stops showing or sounding toasts at once. While toasts are muted the bell
+  in the bar and the tray show the crossed-out glyph (Material Symbols
+  notifications_off); the new rows use Material Symbols do_not_disturb_on,
+  web_asset (toasts) and volume_up, and the expander expand_more. The Portal
+  renders the toast root while muted, so unmuting resumes toasts without a
+  reload.
 
 - **List info boxes placed by CSS anchor positioning.** Where the browser
   has it, the info box of `.info-badge` and `.list-message` is anchored to

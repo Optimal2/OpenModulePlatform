@@ -106,6 +106,48 @@
     outline: none;
 }
 
+/* Do not disturb, one click from the toast itself: beside the close button,
+   the same shape, with the icon the user menu's row carries. */
+/* Room for the Do not disturb button beside the close button; apps without a
+   top bar get no such button and keep the narrower padding. */
+.omp-toast--dnd {
+    padding-right: 74px;
+}
+
+.omp-toast__dnd {
+    position: absolute;
+    top: 8px;
+    right: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted, #5b667a);
+    cursor: pointer;
+    z-index: 6;
+}
+
+.omp-toast__dnd::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/do-not-disturb.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/do-not-disturb.svg") center / contain no-repeat;
+}
+
+.omp-toast__dnd:hover,
+.omp-toast__dnd:focus-visible {
+    background: color-mix(in srgb, var(--text, #172033) 8%, transparent);
+    color: var(--text, #172033);
+    outline: none;
+}
+
 .omp-toast__title {
     min-width: 0;
     overflow: hidden;

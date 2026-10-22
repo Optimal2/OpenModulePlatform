@@ -271,6 +271,54 @@ html[data-theme-mode="dark"] .omp-theme-switch__toggle .omp-theme-switch__icon,
     mask: url("../icons/check.svg") center / contain no-repeat;
 }
 
+/* A switch: an on/off control read from its parent's aria-checked, so any
+   button or row with role="switch" (or a tri-state menuitemcheckbox) can
+   carry one. On fills the track with the link colour and slides the knob
+   right; off leaves the track muted; "mixed" parks the knob in the middle on
+   a half-tinted track. Drawn with tokens, so it follows the theme. */
+.omp-switch {
+    position: relative;
+    display: inline-block;
+    flex: none;
+    width: 34px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--omp-control-border);
+    transition: background-color 140ms ease;
+}
+
+.omp-switch__knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--omp-surface);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.3);
+    transition: transform 140ms ease;
+}
+
+[aria-checked="true"] > .omp-switch,
+[aria-checked="true"] .omp-switch {
+    background: var(--omp-link);
+}
+
+[aria-checked="true"] > .omp-switch .omp-switch__knob,
+[aria-checked="true"] .omp-switch .omp-switch__knob {
+    transform: translateX(14px);
+}
+
+[aria-checked="mixed"] > .omp-switch,
+[aria-checked="mixed"] .omp-switch {
+    background: color-mix(in srgb, var(--omp-link) 55%, var(--omp-control-border));
+}
+
+[aria-checked="mixed"] > .omp-switch .omp-switch__knob,
+[aria-checked="mixed"] .omp-switch .omp-switch__knob {
+    transform: translateX(7px);
+}
+
 @media print {
     .omp-theme-switch {
         display: none !important;
