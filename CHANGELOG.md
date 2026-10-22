@@ -67,6 +67,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The theme menu has a heading.** The top bar's theme menu opens with a
+  heading row (icon and "Theme") and a rule above its options, the same
+  shape as the language, notification and message menus.
+
 - **The info box's copy button shows on hover.** The button beside a list
   info box (`.info-badge`, `.list-message`) appears while the pointer is
   over the box or the button, or while either has keyboard focus, and fades

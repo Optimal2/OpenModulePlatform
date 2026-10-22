@@ -207,6 +207,31 @@ html[data-theme-mode="dark"] .omp-theme-switch__toggle .omp-theme-switch__icon,
     display: none;
 }
 
+/* The menu's heading and rule, the same row as the other top bar menus
+   (language, notifications, messages): the icon in the option's icon
+   column, the title in the muted small bold of a menu heading. */
+.omp-theme-switch__heading {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 32px;
+    padding: 4px 10px;
+    color: var(--omp-text-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.omp-theme-switch__heading .omp-theme-switch__icon {
+    justify-self: center;
+}
+
+.omp-theme-switch__separator {
+    height: 1px;
+    margin: 4px 4px 6px;
+    background: var(--omp-border);
+}
+
 .omp-theme-switch__option {
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr) 16px;
