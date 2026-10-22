@@ -47,3 +47,17 @@ The SQL bootstrap scripts require operator-provided values such as `@BootstrapPo
 - review bootstrap RBAC principals before exposing the Portal to real users
 - do not treat the example service app as production-hardened automation
 - review authentication, proxy, and cookie settings before exposing any OMP web application to the internet
+
+## EU Cyber Resilience Act
+
+The maintainer is Optimal2 AB, Sweden. These practices support the obligations of
+Regulation (EU) 2024/2847 (Cyber Resilience Act) where they apply:
+
+- **Coordinated vulnerability disclosure.** Report vulnerabilities privately through
+  GitHub private vulnerability reporting (the repository's Security tab, "Report a
+  vulnerability"). It is enabled for this repository. Fixed vulnerabilities are
+  published as GitHub security advisories.
+- **Software bill of materials.** Every build of `main` produces a CycloneDX SBOM of the solution (test projects and development dependencies excluded) as the `sbom` artifact of the CI workflow. OMP is delivered through universal packages, so the SBOM is tied to the commit the package was built from.
+- **Actively exploited vulnerabilities and severe incidents** affecting a supported
+  release are handled under the CRA reporting obligations, which apply from
+  11 September 2026.

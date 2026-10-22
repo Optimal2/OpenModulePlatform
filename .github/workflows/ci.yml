@@ -17,6 +17,35 @@ permissions:
   contents: read
 
 jobs:
+  # Software bill of materials for the EU Cyber Resilience Act (Annex I,
+  # Part II(1)). OMP ships through universal packages, not GitHub releases, so
+  # every main build carries a CycloneDX SBOM of the solution (test projects
+  # and development dependencies excluded) as a workflow artifact.
+  sbom:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Generate SBOM (CycloneDX)
+        shell: pwsh
+        run: |
+          dotnet restore OpenModulePlatform.slnx
+          if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed ($LASTEXITCODE)" }
+          dotnet tool install --tool-path .sbom-tool CycloneDX --version 6.3.1
+          if ($LASTEXITCODE -ne 0) { throw "CycloneDX tool install failed ($LASTEXITCODE)" }
+          ./.sbom-tool/dotnet-CycloneDX OpenModulePlatform.slnx --exclude-test-projects --exclude-dev `
+            --output-format Json --output sbom --filename "OpenModulePlatform-sbom-${{ github.sha }}.cdx.json" `
+            --set-name OpenModulePlatform --set-version "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { throw "SBOM generation failed ($LASTEXITCODE)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/*.cdx.json
+
   razor-determinism:
     runs-on: windows-latest
     timeout-minutes: 30
