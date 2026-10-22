@@ -37,6 +37,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed ($LASTEXITCODE)" }
           dotnet tool install --tool-path .sbom-tool CycloneDX --version 6.3.1
           if ($LASTEXITCODE -ne 0) { throw "CycloneDX tool install failed ($LASTEXITCODE)" }
+          # --exclude-dev is marked deprecated in 6.3.1 but still filters; without it the
+          # SBOM gains development-only packages. Revisit when the pin is raised.
           ./.sbom-tool/dotnet-CycloneDX OpenModulePlatform.slnx --exclude-test-projects --exclude-dev `
             --output-format Json --output sbom --filename "OpenModulePlatform-sbom-${{ github.sha }}.cdx.json" `
             --set-name OpenModulePlatform --set-version "${{ github.sha }}"
@@ -45,6 +47,7 @@ jobs:
         with:
           name: sbom
           path: sbom/*.cdx.json
+          if-no-files-found: error
 
   razor-determinism:
     runs-on: windows-latest
