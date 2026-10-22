@@ -295,7 +295,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
     {
         using var root = new TempDirectory();
         var rigs = CreateSubDirectory(root.Path, "Rigs");
-        var rig = CreateSubDirectory(rigs, "VGR-Sim");
+        var rig = CreateSubDirectory(rigs, "Customer-Sim");
         var settings = CreateSettings(root.Path);
         settings.MaintenanceAllowedDirectories.Add(rigs);
 
