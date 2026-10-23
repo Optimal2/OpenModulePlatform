@@ -159,10 +159,12 @@ INSERT INTO omp.Hosts (HostId, InstanceId, HostKey, DisplayName) VALUES (@hostId
         string? pipeName,
         bool isActive = true,
         int lastSeenSecondsAgo = 0,
-        string serviceName = "OMP.HostAgent")
+        string serviceName = "OMP.HostAgent",
+        int? refreshSeconds = null,
+        string? version = null)
     {
         await using var conn = await OpenAsync();
-        await RegisterHostAgentAsync(conn, hostId, pipeName, isActive, lastSeenSecondsAgo, serviceName);
+        await RegisterHostAgentAsync(conn, hostId, pipeName, isActive, lastSeenSecondsAgo, serviceName, refreshSeconds, version);
     }
 
     private static Task RegisterHostAgentAsync(
@@ -171,15 +173,51 @@ INSERT INTO omp.Hosts (HostId, InstanceId, HostKey, DisplayName) VALUES (@hostId
         string? pipeName,
         bool isActive,
         int lastSeenSecondsAgo,
-        string serviceName)
+        string serviceName,
+        int? refreshSeconds = null,
+        string? version = null)
         => ExecuteAsync(conn, @"
-INSERT INTO omp.HostAgentRuntimeStates (HostId, ServiceName, IsActive, LastSeenUtc, RpcPipeName)
-VALUES (@hostId, @serviceName, @isActive, DATEADD(SECOND, -@age, SYSUTCDATETIME()), @pipeName);",
+INSERT INTO omp.HostAgentRuntimeStates (HostId, ServiceName, Version, IsActive, LastSeenUtc, RpcPipeName, RefreshSeconds)
+VALUES (@hostId, @serviceName, @version, @isActive, DATEADD(SECOND, -@age, SYSUTCDATETIME()), @pipeName, @refreshSeconds);",
             ("@hostId", hostId),
             ("@serviceName", serviceName),
+            ("@version", (object?)version ?? DBNull.Value),
             ("@isActive", isActive),
             ("@age", lastSeenSecondsAgo),
-            ("@pipeName", (object?)pipeName ?? DBNull.Value));
+            ("@pipeName", (object?)pipeName ?? DBNull.Value),
+            ("@refreshSeconds", (object?)refreshSeconds ?? DBNull.Value));
+
+    public async Task<int?> ReadRegisteredRefreshSecondsAsync(Guid hostId, string serviceName)
+    {
+        await using var conn = await OpenAsync();
+        await using var cmd = new SqlCommand(
+            "SELECT RefreshSeconds FROM omp.HostAgentRuntimeStates WHERE HostId = @hostId AND ServiceName = @serviceName",
+            conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        return await cmd.ExecuteScalarAsync() is int value ? value : null;
+    }
+
+    /// <summary>
+    /// Stores <paramref name="rawJson"/> verbatim as a host's active host configuration. With
+    /// <paramref name="bypassJsonCheck"/> the table's ISJSON check is suspended for the insert,
+    /// the way a row written before that check existed would look.
+    /// </summary>
+    public async Task AddRawHostConfigurationAsync(string hostKey, string rawJson, bool bypassJsonCheck = false)
+    {
+        await using var conn = await OpenAsync();
+        var sql = @"
+INSERT INTO omp.HostConfigurationDocuments (HostKey, ConfigurationVersion, ConfigurationJson, ConfigurationSha256)
+VALUES (@hostKey, N'1.0.0', @json, N'sha');";
+        if (bypassJsonCheck)
+        {
+            sql = "ALTER TABLE omp.HostConfigurationDocuments NOCHECK CONSTRAINT CK_omp_HostConfigurationDocuments_Json;"
+                + sql
+                + "ALTER TABLE omp.HostConfigurationDocuments CHECK CONSTRAINT CK_omp_HostConfigurationDocuments_Json;";
+        }
+
+        await ExecuteAsync(conn, sql, ("@hostKey", hostKey), ("@json", rawJson));
+    }
 
     public async Task DisableAppAsync(int appId)
     {

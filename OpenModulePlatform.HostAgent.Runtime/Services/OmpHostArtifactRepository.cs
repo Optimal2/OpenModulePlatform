@@ -286,8 +286,8 @@ WHEN NOT MATCHED THEN
         @nowUtc
     );
 
--- Dynamic SQL so a HostAgent running against a database that predates the column keeps
--- publishing its state; the column is then simply not written.
+-- Dynamic SQL so a HostAgent running against a database that predates a column keeps
+-- publishing its state; that column is then simply not written.
 IF COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RpcPipeName') IS NOT NULL
 BEGIN
     EXEC sys.sp_executesql
@@ -296,12 +296,23 @@ BEGIN
         @rpcPipeName = @rpcPipeName,
         @hostId = @hostId,
         @serviceName = @serviceName;
+END;
+
+IF COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RefreshSeconds') IS NOT NULL
+BEGIN
+    EXEC sys.sp_executesql
+        N'UPDATE omp.HostAgentRuntimeStates SET RefreshSeconds = @refreshSeconds WHERE HostId = @hostId AND ServiceName = @serviceName;',
+        N'@refreshSeconds int, @hostId uniqueidentifier, @serviceName nvarchar(200)',
+        @refreshSeconds = @refreshSeconds,
+        @hostId = @hostId,
+        @serviceName = @serviceName;
 END;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@rpcPipeName", SqlDbType.NVarChar, HostAgentRuntimeRpcPipeNameMaxLength, NullIfWhiteSpace(process.RpcPipeName));
+        Add(cmd, "@refreshSeconds", SqlDbType.Int, process.RefreshSeconds);
         Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
         Add(cmd, "@serviceName", SqlDbType.NVarChar, HostAgentRuntimeServiceNameMaxLength, process.ServiceName);
         Add(cmd, "@version", SqlDbType.NVarChar, HostAgentRuntimeVersionMaxLength, NullIfWhiteSpace(process.Version));

@@ -10,6 +10,8 @@ public sealed class HostAgentProcessContext
 
     private string? _rpcPipeName;
 
+    private int? _refreshSeconds;
+
     public HostAgentProcessContext(
         string serviceName,
         string version,
@@ -62,6 +64,22 @@ public sealed class HostAgentProcessContext
         }
     }
 
+    /// <summary>
+    /// The <c>HostAgent:RefreshSeconds</c> the current cycle runs with, or null before the
+    /// first cycle. Published to <c>omp.HostAgentRuntimeStates.RefreshSeconds</c> so readers
+    /// of <c>LastSeenUtc</c> can size their freshness window to this agent's own interval.
+    /// </summary>
+    public int? RefreshSeconds
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _refreshSeconds;
+            }
+        }
+    }
+
     public bool IsQuiesceRequested { get; private set; }
 
     public void SetRpcPipeName(string? pipeName)
@@ -69,6 +87,14 @@ public sealed class HostAgentProcessContext
         lock (_lock)
         {
             _rpcPipeName = string.IsNullOrWhiteSpace(pipeName) ? null : pipeName.Trim();
+        }
+    }
+
+    public void SetRefreshSeconds(int refreshSeconds)
+    {
+        lock (_lock)
+        {
+            _refreshSeconds = Math.Max(1, refreshSeconds);
         }
     }
 

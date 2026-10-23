@@ -65,7 +65,17 @@ registers a pipe), when you want to pin the pipe, or to state that RPC is off:
 All three properties are optional. A missing `pipeName` means the pipe an active
 HostAgent registered for the host; it is never derived from the host key. When
 several documents for a host are active, the one with the highest
-`configurationVersion` applies.
+`configurationVersion` applies. If that document cannot be read (not valid JSON,
+not an object, duplicate property names), provisioning refuses with
+`HostConfigurationInvalid` instead of using the registered pipe.
+
+Operator note on downgrades: a HostAgent older than the `RpcPipeName`
+registration (0.3.333) does not clear the pipe a newer agent registered on the
+same runtime-state row, and keeps that row fresh. Provisioning then still uses
+the registered pipe. That is intended, because the pipe name does not depend on
+the agent version; the provisioning log names the registering agent's version.
+If the downgraded agent serves a different `HostAgent:RpcPipeName`, set
+`pipeName` here.
 
 ## Config Overlay JSON
 

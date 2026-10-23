@@ -29,6 +29,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   named pipe the process actually serves to
   `omp.HostAgentRuntimeStates.RpcPipeName` (NULL while RPC is off or not started).
   Against a database without the column, HostAgent keeps publishing the rest.
+- **HostAgent registers its refresh interval; provisioning sizes freshness to it.**
+  Every runtime-state publish also writes `HostAgent:RefreshSeconds` to the new
+  nullable `omp.HostAgentRuntimeStates.RefreshSeconds` column. Worker app instance
+  provisioning trusts a registered pipe seen within ten minutes, or within three
+  of the agent's own intervals when that is longer, so a healthy agent with
+  `RefreshSeconds` above 200 no longer looks stale. A refusal now names the
+  registering agent's service, version and why it was not trusted, and every
+  pipe taken from a registration is logged with the agent version. An active
+  host configuration that cannot be read now refuses the call with the new
+  `HostConfigurationInvalid` instead of silently falling back to the
+  registration. A downgrade below the pipe registration keeps the registered
+  pipe trusted, by design (see `docs/WORKER_RUNTIME.md`).
 - **Do not disturb, from the tray, the user menu and the toast itself.** The
   two notification settings the settings page edits, toasts muted
   (NotificationToastsMuted) and sounds (NotificationSoundsEnabled), are now

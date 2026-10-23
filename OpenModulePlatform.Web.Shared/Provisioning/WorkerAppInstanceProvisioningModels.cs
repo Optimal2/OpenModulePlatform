@@ -51,9 +51,11 @@ public sealed class WorkerAppInstanceProvisioningRequest
     /// <remarks>
     /// The pipe of each host is, in order: <c>values.hostAgentRpc.pipeName</c> in the host's
     /// active host configuration (highest <c>ConfigurationVersion</c> among active documents),
-    /// else the pipe an active HostAgent registered in <c>omp.HostAgentRuntimeStates</c> within
-    /// the last <see cref="WorkerAppInstanceProvisioningService.HostAgentRegistrationMaxAgeSeconds"/>
-    /// seconds, else the call fails with
+    /// else the pipe an active HostAgent registered in <c>omp.HostAgentRuntimeStates</c> and
+    /// refreshed within its freshness window
+    /// (<see cref="WorkerAppInstanceProvisioningService.GetRegistrationMaxAgeSeconds"/>: at least
+    /// <see cref="WorkerAppInstanceProvisioningService.HostAgentRegistrationMaxAgeSeconds"/>
+    /// seconds, three refresh intervals for a slower agent), else the call fails with
     /// <see cref="WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable"/>. It is never
     /// derived from the host key. A HostAgent older than the pipe registration never registers
     /// one, so its host must have <c>values.hostAgentRpc.pipeName</c> set explicitly.
@@ -170,7 +172,14 @@ public enum WorkerAppInstanceProvisioningError
     /// SQL Server refused the provisioning lock for another reason than a timeout: the call
     /// was a deadlock victim, was cancelled, or failed. Retrying is safe.
     /// </summary>
-    LockFailed
+    LockFailed,
+
+    /// <summary>
+    /// A host's active host configuration is not a readable JSON object. The call is refused
+    /// instead of falling back to the HostAgent registration; the message names the host and
+    /// the parse problem.
+    /// </summary>
+    HostConfigurationInvalid
 }
 
 /// <summary>

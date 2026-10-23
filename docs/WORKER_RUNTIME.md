@@ -140,16 +140,38 @@ built from its own host:
    `pipeName` and `timeoutSeconds` apply.
 2. Otherwise, or when that object has no `pipeName`, the pipe is the
    `RpcPipeName` an active HostAgent registered for the host: an
-   `omp.HostAgentRuntimeStates` row with `IsActive = 1` and `LastSeenUtc` at most
-   ten minutes old. The timeout is `values.hostAgentRpc.timeoutSeconds` when set,
-   else the request's `DefaultHostAgentRpcTimeoutSeconds` (30 by default).
-3. Otherwise the whole call is refused with `HostAgentRpcUnavailable`, the message
-   names the host, and nothing is created.
+   `omp.HostAgentRuntimeStates` row with `IsActive = 1` and a `LastSeenUtc`
+   within its freshness window. The window is ten minutes, or three of the
+   agent's own refresh intervals when that is longer: the row's `RefreshSeconds`
+   is the `HostAgent:RefreshSeconds` the agent publishes, so a healthy agent with
+   a slow cycle (for example 900 seconds, window 45 minutes) never looks stale. A
+   row without `RefreshSeconds` (an agent older than that column) gets ten
+   minutes. The timeout is `values.hostAgentRpc.timeoutSeconds` when set, else
+   the request's `DefaultHostAgentRpcTimeoutSeconds` (30 by default).
+3. Otherwise the whole call is refused with `HostAgentRpcUnavailable`, and nothing
+   is created. The message names the host and, when an active HostAgent row
+   exists, its service name and version and why it was not trusted (no pipe, or
+   last seen outside its window).
+
+An active host configuration that cannot be read (not valid JSON, not a JSON
+object, or duplicate property names) refuses the call with
+`HostConfigurationInvalid` naming the host and the parse problem. It is not
+treated as "no configuration", because falling back to the registration would
+hide a broken pin or an RPC opt-out.
 
 The pipe is never derived from the host key: a HostAgent may serve a custom
 `RpcPipeName`, and a runtime-state row also survives a disabled or uninstalled
 agent. A HostAgent older than the `RpcPipeName` registration never registers a
 pipe, so its host must have `values.hostAgentRpc.pipeName` set explicitly.
+
+After a downgrade to a HostAgent older than the registration (0.3.333), the
+`RpcPipeName` the newer agent wrote stays on its runtime-state row, and the older
+agent keeps that row's `LastSeenUtc` fresh, so provisioning keeps trusting that
+pipe. This is accepted: the pipe name comes from `HostAgent:RpcPipeName` (or the
+host key), never from the agent version, so it is still the pipe the host serves.
+The resolver logs the registering agent's version with every pipe it takes from a
+registration, so such a case is visible. Pin `values.hostAgentRpc.pipeName` if the
+downgraded agent is configured with a different pipe.
 
 A template supplies the binding only. Its IDs and its workers' configuration are
 never copied.

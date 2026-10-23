@@ -497,6 +497,114 @@ public sealed class WorkerAppInstanceProvisioningServiceTests : IClassFixture<Wo
         Assert.Equal("current-pipe", Assert.Single(result.Workers).HostAgentRpcPipeName);
     }
 
+    [Theory]
+    [InlineData(null, 600)]
+    [InlineData(30, 600)]
+    [InlineData(200, 600)]
+    [InlineData(900, 2700)]
+    public void RegistrationWindow_IsTheDefaultOrThreeOfTheAgentsOwnIntervals(int? refreshSeconds, long expected)
+        => Assert.Equal(expected, WorkerAppInstanceProvisioningService.GetRegistrationMaxAgeSeconds(refreshSeconds));
+
+    [Fact]
+    public async Task SlowHeartbeatAgent_IsTrustedWithinItsOwnWindow()
+    {
+        // RefreshSeconds 900: last seen 25 minutes ago is past the 10-minute default but
+        // within three of the agent's own intervals, so the healthy agent is not stale.
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[0], "slow-pipe", lastSeenSecondsAgo: 1500, refreshSeconds: 900);
+
+        var result = await _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+            WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("slow", scenario.Hosts[0]), CancellationToken.None);
+
+        Assert.Equal("slow-pipe", Assert.Single(result.Workers).HostAgentRpcPipeName);
+    }
+
+    [Fact]
+    public async Task SlowHeartbeatAgent_PastItsOwnWindow_IsStaleAndTheRefusalNamesItsVersion()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(
+            scenario.Hosts[0], "slow-pipe", lastSeenSecondsAgo: 3000, refreshSeconds: 900, version: "0.3.334");
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("stale", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable, error.Error);
+        Assert.Contains(scenario.HostKey(0), error.Message);
+        Assert.Contains("version 0.3.334", error.Message);
+        Assert.Contains("2700 s freshness window", error.Message);
+        Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "stale"));
+    }
+
+    [Fact]
+    public async Task DefaultIntervalAgent_PastTheDefaultWindow_IsStale()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[0], "pipe", lastSeenSecondsAgo: 700, refreshSeconds: 30);
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("default_stale", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable, error.Error);
+        Assert.Contains("600 s freshness window", error.Message);
+    }
+
+    [Fact]
+    public async Task PipelessRegistration_RefusalNamesTheRegisteringAgentVersion()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[0], null, version: "0.3.300");
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("old_agent", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable, error.Error);
+        Assert.Contains("version 0.3.300", error.Message);
+        Assert.Contains("registered no RPC pipe", error.Message);
+    }
+
+    [Fact]
+    public async Task HostAgentPublish_RegistersItsRefreshSeconds()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        var process = new HostAgentProcessContext("OMP.HostAgent.slow", "2.0.0", HostAgentRuntimeMode.Normal, null);
+        process.SetRpcPipeName("slow.pipe." + scenario.Suffix);
+        process.SetRefreshSeconds(900);
+        var repository = new OmpHostArtifactRepository(new TestHostAgentConnectionFactory(_fixture.ConnectionString));
+        await repository.PublishHostAgentRuntimeStateAsync(
+            scenario.Hosts[0], process, HostAgentRuntimeMode.Normal, artifactId: null, installPath: null, isActive: true, statusMessage: null, CancellationToken.None);
+
+        Assert.Equal(900, await _fixture.ReadRegisteredRefreshSecondsAsync(scenario.Hosts[0], "OMP.HostAgent.slow"));
+    }
+
+    [Theory]
+    [InlineData("{\"values\":{\"hostAgentRpc\":", true)]
+    [InlineData("[{\"values\":{}}]", false)]
+    [InlineData("{\"values\":{\"hostAgentRpc\":{\"pipeName\":\"a\"}},\"values\":{}}", false)]
+    public async Task UnreadableHostConfiguration_IsRefusedInsteadOfFallingBackToTheRegistration(string rawJson, bool bypassJsonCheck)
+    {
+        // The host has a fresh registration, so a silent fallback would succeed.
+        var scenario = await _fixture.SeedAsync(hostCount: 1);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.AddRawHostConfigurationAsync(scenario.HostKey(0), rawJson, bypassJsonCheck);
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("unreadable", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.HostConfigurationInvalid, error.Error);
+        Assert.Contains(scenario.HostKey(0), error.Message);
+        Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "unreadable"));
+        Assert.Equal(0, await _fixture.CountWorkersAsync(scenario));
+    }
+
     [Fact]
     public async Task HostConfiguration_TakesPrecedenceOverTheRegisteredPipe()
     {

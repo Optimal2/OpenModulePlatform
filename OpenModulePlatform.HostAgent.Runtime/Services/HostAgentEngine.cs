@@ -86,6 +86,7 @@ public sealed class HostAgentEngine
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
+        _process.SetRefreshSeconds(settings.RefreshSeconds);
 
         var hostKey = settings.ResolveHostKey();
         var runtimeMode = _process.RuntimeMode;

@@ -31,9 +31,11 @@ namespace OpenModulePlatform.Web.Shared.Provisioning;
 /// Each new worker's <c>ConfigurationJson</c> carries the HostAgent RPC settings of its own
 /// host, resolved by <see cref="ResolveHostAgentRpcAsync"/>: the host's active host
 /// configuration <c>values.hostAgentRpc</c>, else the pipe an active HostAgent registered.
-/// When any host has neither, the call fails and nothing is created. A HostAgent older than
-/// the <c>omp.HostAgentRuntimeStates.RpcPipeName</c> registration never registers a pipe, so
-/// its host needs <c>values.hostAgentRpc.pipeName</c> set explicitly.
+/// When any host has neither, the call fails and nothing is created; so does an active host
+/// configuration that cannot be read. A HostAgent older than the
+/// <c>omp.HostAgentRuntimeStates.RpcPipeName</c> registration never registers a pipe, so its
+/// host needs <c>values.hostAgentRpc.pipeName</c> set explicitly. After a downgrade to such an
+/// agent the pipe the newer agent registered stays trusted; it is still the host's pipe.
 /// </para>
 /// <para>
 /// Authorization is <c>OMP.Portal.Admin</c>, or the request's module permission when an
@@ -52,10 +54,24 @@ public sealed class WorkerAppInstanceProvisioningService
     public const string DefaultHostAgentPipePrefix = "OpenModulePlatform.HostAgent.";
 
     /// <summary>
-    /// How recently a HostAgent must have published its runtime state for its registered RPC
-    /// pipe to count: twenty times the default 30-second HostAgent refresh interval.
+    /// The shortest freshness window for a HostAgent registration: how recently the agent
+    /// must have published its runtime state for its registered RPC pipe to count, twenty
+    /// times the default 30-second HostAgent refresh interval.
     /// </summary>
+    /// <remarks>
+    /// An agent that publishes its <c>RefreshSeconds</c> gets
+    /// <see cref="HostAgentRegistrationRefreshMultiplier"/> times that interval when it is
+    /// longer, so a healthy agent with a slow cycle never looks stale. See
+    /// <see cref="GetRegistrationMaxAgeSeconds"/>.
+    /// </remarks>
     public const int HostAgentRegistrationMaxAgeSeconds = 600;
+
+    /// <summary>
+    /// How many of its own refresh intervals a HostAgent may miss before its registration is
+    /// stale, for an agent whose interval makes that longer than
+    /// <see cref="HostAgentRegistrationMaxAgeSeconds"/>.
+    /// </summary>
+    public const int HostAgentRegistrationRefreshMultiplier = 3;
 
     private const int AppInstanceKeyMaxLength = 100;
     private const int DisplayNameMaxLength = 200;
@@ -315,17 +331,29 @@ public sealed class WorkerAppInstanceProvisioningService
     /// RPC and the call fails, and its <c>pipeName</c> and <c>timeoutSeconds</c> win.</item>
     /// <item>Otherwise, or when that object has no <c>pipeName</c>, the pipe an active
     /// HostAgent registered for the host: <c>omp.HostAgentRuntimeStates.RpcPipeName</c> of a
-    /// row with <c>IsActive = 1</c> whose <c>LastSeenUtc</c> is at most
-    /// <see cref="HostAgentRegistrationMaxAgeSeconds"/> old.</item>
+    /// row with <c>IsActive = 1</c> whose <c>LastSeenUtc</c> lies within that row's freshness
+    /// window, <see cref="GetRegistrationMaxAgeSeconds"/> of its published
+    /// <c>RefreshSeconds</c>.</item>
     /// <item>Otherwise the host has no RPC settings and the whole call fails.</item>
     /// </list>
     /// A pipe is never derived from the host key alone: a HostAgent can serve a custom
     /// <c>RpcPipeName</c>, and a runtime-state row also survives a disabled or uninstalled
     /// agent. A HostAgent older than the <c>RpcPipeName</c> column never registers its pipe, so
     /// its host must have <c>values.hostAgentRpc.pipeName</c> set explicitly. Another host's
-    /// pipe or another worker's configuration is never used.
+    /// pipe or another worker's configuration is never used. An active host configuration that
+    /// is not a readable JSON object refuses the call with
+    /// <see cref="WorkerAppInstanceProvisioningError.HostConfigurationInvalid"/> instead of
+    /// falling back to the registration.
+    /// <para>
+    /// Accepted after a downgrade: an agent older than the registration leaves the
+    /// <c>RpcPipeName</c> a newer agent wrote on its row and keeps refreshing
+    /// <c>LastSeenUtc</c>, so that pipe stays trusted. It is still the pipe the host serves,
+    /// because the pipe name comes from <c>HostAgent:RpcPipeName</c> (or the host key), never
+    /// from the agent version. The log entry and the refusal name the registering agent's
+    /// version so such a case stays visible.
+    /// </para>
     /// </remarks>
-    private static async Task<(HostAgentRpcEndpoint? Endpoint, string? Reason)> ResolveHostAgentRpcAsync(
+    private async Task<(HostAgentRpcEndpoint? Endpoint, string? Reason)> ResolveHostAgentRpcAsync(
         SqlConnection conn,
         SqlTransaction tx,
         HostRow host,
@@ -338,22 +366,24 @@ FROM omp.HostConfigurationDocuments d
 WHERE d.HostKey = @hostKey
   AND d.IsActive = 1;";
 
-        // Dynamic SQL: against a database that predates the column the batch must still
-        // compile, and no registered pipe exists there.
+        // Dynamic SQL: against a database that predates RpcPipeName the batch must still
+        // compile, and no registered pipe exists there. RefreshSeconds is newer still; without
+        // it every row gets the default window. SQL Server measures the age, on the same clock
+        // that wrote LastSeenUtc.
         const string registrationSql = @"
 IF COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RpcPipeName') IS NOT NULL
 BEGIN
-    EXEC sys.sp_executesql
-        N'SELECT TOP (1) s.RpcPipeName
+    DECLARE @sql nvarchar(max) = N'SELECT s.ServiceName, s.Version, s.RpcPipeName, '
+        + CASE WHEN COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RefreshSeconds') IS NULL
+               THEN N'CAST(NULL AS int)'
+               ELSE N's.RefreshSeconds'
+          END
+        + N', DATEDIFF_BIG(SECOND, s.LastSeenUtc, SYSUTCDATETIME())
           FROM omp.HostAgentRuntimeStates s
           WHERE s.HostId = @hostId
             AND s.IsActive = 1
-            AND NULLIF(LTRIM(RTRIM(s.RpcPipeName)), N'''') IS NOT NULL
-            AND s.LastSeenUtc >= DATEADD(SECOND, -@maxAgeSeconds, SYSUTCDATETIME())
-          ORDER BY s.LastSeenUtc DESC, s.ServiceName;',
-        N'@hostId uniqueidentifier, @maxAgeSeconds int',
-        @hostId = @hostId,
-        @maxAgeSeconds = @maxAgeSeconds;
+          ORDER BY s.LastSeenUtc DESC, s.ServiceName;';
+    EXEC sys.sp_executesql @sql, N'@hostId uniqueidentifier', @hostId = @hostId;
 END;";
 
         var documents = new List<(int Id, string Version, string Json)>();
@@ -384,17 +414,69 @@ END;";
             return (new HostAgentRpcEndpoint(recorded.PipeName.Trim(), timeoutSeconds), null);
         }
 
-        string? registeredPipe = null;
+        var registrations = new List<HostAgentRegistration>();
         await using (var cmd = new SqlCommand(registrationSql, conn, tx))
         {
             cmd.Parameters.Add("@hostId", SqlDbType.UniqueIdentifier).Value = host.HostId;
-            cmd.Parameters.Add("@maxAgeSeconds", SqlDbType.Int).Value = HostAgentRegistrationMaxAgeSeconds;
-            registeredPipe = await cmd.ExecuteScalarAsync(ct) as string;
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                registrations.Add(new HostAgentRegistration(
+                    rdr.GetString(0),
+                    rdr.IsDBNull(1) ? null : rdr.GetString(1),
+                    rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                    rdr.IsDBNull(3) ? null : rdr.GetInt32(3),
+                    rdr.IsDBNull(4) ? null : rdr.GetInt64(4)));
+            }
         }
 
-        return string.IsNullOrWhiteSpace(registeredPipe)
-            ? (null, $"no values.hostAgentRpc.pipeName in its active host configuration and no active HostAgent seen in the last {HostAgentRegistrationMaxAgeSeconds / 60} minutes has registered an RPC pipe")
-            : (new HostAgentRpcEndpoint(registeredPipe.Trim(), timeoutSeconds), null);
+        var trusted = registrations.FirstOrDefault(registration => registration.HasPipe && registration.IsFresh);
+        if (trusted is null)
+        {
+            return (null, $"no values.hostAgentRpc.pipeName in its active host configuration, and {DescribeUntrustedRegistration(registrations)}");
+        }
+
+        var pipeName = trusted.PipeName!.Trim();
+        _logger.LogInformation(
+            "Resolved the HostAgent RPC pipe of host {HostKey} from the registration of HostAgent {ServiceName} version {AgentVersion}, last seen {AgeSeconds} s ago (window {WindowSeconds} s). PipeName={PipeName}",
+            host.HostKey,
+            trusted.ServiceName,
+            trusted.Version ?? "unknown",
+            trusted.AgeSeconds,
+            trusted.MaxAgeSeconds,
+            pipeName);
+        return (new HostAgentRpcEndpoint(pipeName, timeoutSeconds), null);
+    }
+
+    /// <summary>
+    /// The freshness window of a HostAgent registration: <see cref="HostAgentRegistrationMaxAgeSeconds"/>,
+    /// or <see cref="HostAgentRegistrationRefreshMultiplier"/> times the agent's published
+    /// <c>RefreshSeconds</c> when that is longer. A row without <c>RefreshSeconds</c> (an agent
+    /// older than that column) gets the default window.
+    /// </summary>
+    public static long GetRegistrationMaxAgeSeconds(int? refreshSeconds)
+        => refreshSeconds is int seconds && seconds > 0
+            ? Math.Max(HostAgentRegistrationMaxAgeSeconds, (long)seconds * HostAgentRegistrationRefreshMultiplier)
+            : HostAgentRegistrationMaxAgeSeconds;
+
+    private static string DescribeUntrustedRegistration(IReadOnlyList<HostAgentRegistration> registrations)
+    {
+        // Rows come newest LastSeenUtc first, so the first one is the agent that matters.
+        var latest = registrations.FirstOrDefault();
+        if (latest is null)
+        {
+            return "no active HostAgent has registered for it";
+        }
+
+        var agent = $"its active HostAgent '{latest.ServiceName}' (version {latest.Version ?? "unknown"})";
+        if (!latest.HasPipe)
+        {
+            return $"{agent} has registered no RPC pipe (an agent older than the RpcPipeName registration, or one with RPC disabled or not started)";
+        }
+
+        return latest.AgeSeconds is long age
+            ? $"{agent} was last seen {age} s ago, outside its {latest.MaxAgeSeconds} s freshness window"
+            : $"{agent} has never published a LastSeenUtc";
     }
 
     private static RecordedRpc? ReadRecordedRpc(string? configurationJson, string hostKey)
@@ -404,18 +486,28 @@ END;";
             return null;
         }
 
-        JsonNode? root;
+        // A configuration that cannot be read is not "no configuration": falling back to the
+        // registration would hide a broken pipe pin or RPC opt-out. The table's ISJSON check
+        // does not cover everything: it accepts duplicate property names (which JsonObject
+        // rejects when the object is first read) and a JSON array, and a row may predate it.
+        JsonObject? rpc;
         try
         {
-            root = JsonNode.Parse(configurationJson);
+            if (JsonNode.Parse(configurationJson) is not JsonObject document)
+            {
+                throw new FormatException("the document is not a JSON object");
+            }
+
+            rpc = GetProperty(GetProperty(document, "values") as JsonObject, "hostAgentRpc") as JsonObject;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
         {
-            return null;
+            throw Refuse(
+                WorkerAppInstanceProvisioningError.HostConfigurationInvalid,
+                $"The active host configuration of host '{hostKey}' cannot be read ({ex.Message}). Fix or replace that host configuration. Nothing was created.");
         }
 
-        if (GetProperty(root as JsonObject, "values") is not JsonObject values
-            || GetProperty(values, "hostAgentRpc") is not JsonObject rpc)
+        if (rpc is null)
         {
             return null;
         }
@@ -432,7 +524,7 @@ END;";
 
             return new RecordedRpc(enabled, pipeName, timeout);
         }
-        catch (Exception ex) when (ex is FormatException or InvalidOperationException)
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException or ArgumentException)
         {
             throw Refuse(
                 WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable,
@@ -1118,6 +1210,21 @@ VALUES
     internal sealed record HostAgentRpcEndpoint(string PipeName, int TimeoutSeconds);
 
     private sealed record RecordedRpc(bool Enabled, string? PipeName, int? TimeoutSeconds);
+
+    private sealed record HostAgentRegistration(
+        string ServiceName,
+        string? Version,
+        string? PipeName,
+        int? RefreshSeconds,
+        long? AgeSeconds)
+    {
+        public bool HasPipe => !string.IsNullOrWhiteSpace(PipeName);
+
+        public long MaxAgeSeconds => GetRegistrationMaxAgeSeconds(RefreshSeconds);
+
+        // A LastSeenUtc slightly in the future (negative age) still counts as fresh.
+        public bool IsFresh => AgeSeconds is long age && age <= MaxAgeSeconds;
+    }
 
     private sealed record ValidatedRequest(
         string ModuleKey,

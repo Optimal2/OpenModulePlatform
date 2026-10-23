@@ -1898,6 +1898,16 @@ BEGIN
 END
 GO
 
+-- The HostAgent:RefreshSeconds the process runs its cycle (and so its runtime-state publish)
+-- with, written with every publish. Consumers judging LastSeenUtc freshness use it so a
+-- healthy agent with a long interval never looks stale. NULL for a HostAgent older than this
+-- column; consumers then fall back to their default window.
+IF COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RefreshSeconds') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAgentRuntimeStates ADD RefreshSeconds int NULL;
+END
+GO
+
 IF OBJECT_ID(N'omp.HostAgentLeases', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostAgentLeases

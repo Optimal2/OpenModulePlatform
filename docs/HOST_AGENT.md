@@ -909,9 +909,17 @@ The published runtime state includes `RpcPipeName`: the named pipe the process
 actually serves its RPC on (`HostAgent:RpcPipeName`, or
 `OpenModulePlatform.HostAgent.{HostKey}` when that setting is empty). It is NULL
 while RPC is disabled or not yet started, and always NULL for a HostAgent older
-than the column. Worker provisioning reads it only from an active row seen in the
-last ten minutes (see `docs/WORKER_RUNTIME.md`). Against a database that predates
-the column, HostAgent keeps publishing the rest of its state.
+than the column. It also includes `RefreshSeconds`, the `HostAgent:RefreshSeconds`
+the current cycle runs with. Worker provisioning reads the pipe only from an
+active row seen within ten minutes, or within three of the agent's own refresh
+intervals when that is longer, so `RefreshSeconds` has no upper bound for this
+purpose (see `docs/WORKER_RUNTIME.md`). Against a database that predates either
+column, HostAgent keeps publishing the rest of its state.
+
+A downgrade to a HostAgent older than `RpcPipeName` leaves the pipe the newer
+agent wrote on the row (and `RefreshSeconds` too); the older agent keeps the row
+fresh, so provisioning keeps using that pipe. That is accepted, because the pipe
+name does not depend on the agent version.
 
 When the current HostAgent sees an enabled desired state with a different
 artifact version, it provisions that artifact, copies it to a versioned folder
