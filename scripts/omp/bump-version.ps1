@@ -380,8 +380,90 @@ function Test-JsonFileWouldChange {
     # Encoding-only differences deliberately do not trigger a rewrite: the persist
     # loop also checks this predicate and skips Save-JsonFile, preserving the original
     # bytes (including a BOM). Any actual text rewrite selects a definition bump first.
-    $current = [IO.File]::ReadAllText($Path)
+    $current = Read-Utf8Text -Path $Path
     return ($current -cne (Get-JsonFileText -Value $Value))
+}
+
+# Module definitions carry user-facing text (U+2019, a/o with diacritics, em
+# dashes). Every JSON file this script touches is read and written as UTF-8
+# without BOM, named explicitly, so the result never depends on the console
+# code page, [Console]::OutputEncoding, $OutputEncoding or chcp. The decoder
+# throws on invalid bytes instead of silently writing U+FFFD back.
+$script:Utf8NoBomStrict = [Text.UTF8Encoding]::new($false, $true)
+
+function Read-Utf8Text {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return [IO.File]::ReadAllText($Path, $script:Utf8NoBomStrict)
+}
+
+function Read-JsonFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return (Read-Utf8Text -Path $Path) | ConvertFrom-Json
+}
+
+function Get-NonAsciiText {
+    param([AllowEmptyString()][string]$Text)
+
+    $builder = [Text.StringBuilder]::new()
+    foreach ($ch in $Text.ToCharArray()) {
+        if ([int]$ch -gt 127) {
+            [void]$builder.Append($ch)
+        }
+    }
+
+    return $builder.ToString()
+}
+
+function Format-CodePointList {
+    param([AllowEmptyString()][string]$Text)
+
+    return (@($Text.ToCharArray() | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ' ')
+}
+
+function Assert-NonAsciiUnchanged {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedNonAscii,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ActualNonAscii,
+        [Parameter(Mandatory = $true)][string]$Stage
+    )
+
+    if ($ActualNonAscii -cne $ExpectedNonAscii) {
+        throw ("Encoding guard: non-ASCII text in '$Path' would change $Stage. " +
+            "Expected [$(Format-CodePointList -Text $ExpectedNonAscii)], " +
+            "found [$(Format-CodePointList -Text $ActualNonAscii)].")
+    }
+}
+
+function Assert-NonAsciiPreserved {
+    <#
+        Post-write byte check. A version bump never edits text, so every non-ASCII
+        character in the file must be unchanged, in order. Re-reads the bytes that
+        were actually written and fails loudly on a BOM, on invalid UTF-8, or on
+        any non-ASCII difference -- the signature of a code-page round trip that
+        turned U+2019 into mojibake (2026-10-23).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedNonAscii
+    )
+
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        throw "Encoding guard: '$Path' was written with a UTF-8 BOM; expected UTF-8 without BOM."
+    }
+
+    try {
+        $writtenText = $script:Utf8NoBomStrict.GetString($bytes)
+    }
+    catch {
+        throw "Encoding guard: '$Path' is not valid UTF-8 after the write: $($_.Exception.Message)"
+    }
+
+    Assert-NonAsciiUnchanged -Path $Path -ExpectedNonAscii $ExpectedNonAscii `
+        -ActualNonAscii (Get-NonAsciiText -Text $writtenText) -Stage 'after the write'
 }
 
 function Save-JsonFile {
@@ -392,7 +474,18 @@ function Save-JsonFile {
 
     $formattedJson = Get-JsonFileText -Value $Value
     if ($PSCmdlet.ShouldProcess($Path, 'Write JSON file')) {
-        [IO.File]::WriteAllText($Path, $formattedJson, [Text.UTF8Encoding]::new($false))
+        # The baseline is the file as it was before the bump; a new file is held
+        # to the text this script meant to write. A difference already visible in
+        # the text to be written is refused before the file is touched.
+        $expectedNonAscii = Get-NonAsciiText -Text $formattedJson
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            $expectedNonAscii = Get-NonAsciiText -Text (Read-Utf8Text -Path $Path)
+            Assert-NonAsciiUnchanged -Path $Path -ExpectedNonAscii $expectedNonAscii `
+                -ActualNonAscii (Get-NonAsciiText -Text $formattedJson) -Stage 'in the text to be written'
+        }
+
+        [IO.File]::WriteAllText($Path, $formattedJson, $script:Utf8NoBomStrict)
+        Assert-NonAsciiPreserved -Path $Path -ExpectedNonAscii $expectedNonAscii
     }
 }
 
@@ -507,7 +600,7 @@ function Update-WidgetPackageFile {
         throw "Widget file was not found: $Path"
     }
 
-    $json = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $json = Read-JsonFile -Path $Path
     Set-JsonProperty -Object $json -Name 'packageVersion' -Value $Version
     foreach ($widget in @((Get-JsonPropertyValue -Object $json -Name 'widgets'))) {
         if ($null -ne $widget) {
@@ -534,7 +627,7 @@ try {
         throw "Component manifest not found: $manifestPath"
     }
 
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $manifest = Read-JsonFile -Path $manifestPath
     $components = @($manifest.components)
     $moduleDefinitions = @($manifest.moduleDefinitions)
     $repositoryVersion = [string](Get-JsonPropertyValue -Object $manifest -Name 'repositoryVersion')
@@ -835,7 +928,7 @@ try {
             $definitionPath = Resolve-FullPath -Path (Join-Path $repositoryRoot $relativeDefinitionPath)
             $definitionPathByKey[$componentModuleKey] = $definitionPath
             if (Test-Path -LiteralPath $definitionPath -PathType Leaf) {
-                $definitionJsonByKey[$componentModuleKey] = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $definitionJsonByKey[$componentModuleKey] = Read-JsonFile -Path $definitionPath
             }
             else {
                 $definitionJsonByKey[$componentModuleKey] = $null
@@ -1009,7 +1102,7 @@ try {
             $definitionKey = [string]$moduleDefinition.moduleKey
             $definitionJson = $definitionJsonByKey[$definitionKey]
             if ($null -eq $definitionJson) {
-                $definitionJson = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $definitionJson = Read-JsonFile -Path $definitionPath
             }
             Set-JsonProperty -Object $definitionJson -Name 'definitionVersion' -Value $nextVersion
             if ($PSCmdlet.ShouldProcess($definitionPath, "Set definitionVersion to $nextVersion")) {

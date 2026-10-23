@@ -5,6 +5,72 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Module definitions carry user-facing text (U+2019, a/o with diacritics, em
+# dashes). They are read and written as UTF-8 without BOM, named explicitly, so
+# the result never depends on the console code page, [Console]::OutputEncoding,
+# $OutputEncoding or chcp; the decoder throws on invalid bytes. Embedding only
+# rewrites base64 content and sha256, so every non-ASCII character must survive
+# unchanged -- the same guard as scripts/omp/bump-version.ps1 (2026-10-23).
+$script:Utf8NoBomStrict = [System.Text.UTF8Encoding]::new($false, $true)
+
+function Get-NonAsciiText {
+    param([AllowEmptyString()][string]$Text)
+
+    $builder = [System.Text.StringBuilder]::new()
+    foreach ($ch in $Text.ToCharArray()) {
+        if ([int]$ch -gt 127) {
+            [void]$builder.Append($ch)
+        }
+    }
+
+    return $builder.ToString()
+}
+
+function Assert-NonAsciiUnchanged {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedNonAscii,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ActualNonAscii,
+        [Parameter(Mandatory = $true)][string]$Stage
+    )
+
+    if ($ActualNonAscii -cne $ExpectedNonAscii) {
+        $expected = (@($ExpectedNonAscii.ToCharArray() | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ' ')
+        $actual = (@($ActualNonAscii.ToCharArray() | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ' ')
+        throw "Encoding guard: non-ASCII text in '$Path' would change $Stage. Expected [$expected], found [$actual]."
+    }
+}
+
+function Write-ModuleDefinitionText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$OriginalText
+    )
+
+    $expectedNonAscii = Get-NonAsciiText -Text $OriginalText
+    Assert-NonAsciiUnchanged -Path $Path -ExpectedNonAscii $expectedNonAscii `
+        -ActualNonAscii (Get-NonAsciiText -Text $Text) -Stage 'in the text to be written'
+
+    [System.IO.File]::WriteAllText($Path, $Text, $script:Utf8NoBomStrict)
+
+    # Post-write byte check: re-read exactly what landed on disk.
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        throw "Encoding guard: '$Path' was written with a UTF-8 BOM; expected UTF-8 without BOM."
+    }
+
+    try {
+        $writtenText = $script:Utf8NoBomStrict.GetString($bytes)
+    }
+    catch {
+        throw "Encoding guard: '$Path' is not valid UTF-8 after the write: $($_.Exception.Message)"
+    }
+
+    Assert-NonAsciiUnchanged -Path $Path -ExpectedNonAscii $expectedNonAscii `
+        -ActualNonAscii (Get-NonAsciiText -Text $writtenText) -Stage 'after the write'
+}
+
 function Get-Sha256Hex {
     param([string]$Text)
 
@@ -209,7 +275,7 @@ foreach ($definition in @($manifest.moduleDefinitions)) {
 $definitionFiles = $definitionFiles | Sort-Object FullName
 
 foreach ($definitionFile in $definitionFiles) {
-    $jsonText = Get-Content -LiteralPath $definitionFile.FullName -Raw -Encoding UTF8
+    $jsonText = [System.IO.File]::ReadAllText($definitionFile.FullName, $script:Utf8NoBomStrict)
     $document = ConvertFrom-JsonDocument -Json $jsonText -Depth $jsonDepth
 
     # runtimeMaintenance.steps carry SQL in the same fields as sqlScripts and are
@@ -278,7 +344,7 @@ foreach ($definitionFile in $definitionFiles) {
         # LF checkout. ConvertTo-Json emits the platform newline ([Environment]::NewLine
         # would be CRLF here); normalize to LF exactly like bump-version.ps1.
         $portableJson = ($updated + "`n").Replace("`r`n", "`n")
-        [System.IO.File]::WriteAllText($definitionFile.FullName, $portableJson, [System.Text.UTF8Encoding]::new($false))
+        Write-ModuleDefinitionText -Path $definitionFile.FullName -Text $portableJson -OriginalText $jsonText
         Write-Host "Embedded SQL in $($definitionFile.Name)"
     }
 }
