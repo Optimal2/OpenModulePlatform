@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Worker app instance provisioning for module admin pages.**
+  `WorkerAppInstanceProvisioningService` in OpenModulePlatform.Web.Shared creates
+  one host-neutral worker app instance and one worker per selected host in a
+  single transaction, so a module can offer "create new app instance" without
+  writing SQL against platform tables. Module instance, installation name and a
+  compatible artifact come from platform metadata or a template instance. Each
+  worker's HostAgent RPC settings come from its own host: the host
+  configuration's new `values.hostAgentRpc`, or the HostAgent default pipe when
+  a HostAgent has registered there. A host without either refuses the whole
+  call. Repeated and concurrent calls with the same key reuse the instance and
+  only add missing workers. See `docs/WORKER_RUNTIME.md`.
 - **Do not disturb, from the tray, the user menu and the toast itself.** The
   two notification settings the settings page edits, toasts muted
   (NotificationToastsMuted) and sounds (NotificationSoundsEnabled), are now

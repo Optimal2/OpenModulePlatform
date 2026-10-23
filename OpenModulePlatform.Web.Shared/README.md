@@ -9,6 +9,9 @@ The library provides:
 - shared RBAC integration
 - common Razor Page base classes
 - lightweight HTTP helpers
+- worker app instance provisioning for module admin pages
+  (`Provisioning/WorkerAppInstanceProvisioningService`, described in
+  `docs/WORKER_RUNTIME.md`)
 
 Use this project when building an OMP web application that should align with the shared portal conventions.
 

@@ -43,8 +43,25 @@ JSON objects or standalone config-overlay zips.
 ```
 
 Host configuration imports are stored in `omp.HostConfigurationDocuments`.
-OMP core does not interpret the `values` object directly. Repository-level or
-customer-specific generation scripts decide which values are meaningful.
+OMP core interprets one key in the `values` object: `hostAgentRpc`. Repository-level
+or customer-specific generation scripts decide which other values are meaningful.
+
+`values.hostAgentRpc` records the host's HostAgent RPC endpoint for worker
+provisioning (see `docs/WORKER_RUNTIME.md`). Set it when the host's HostAgent uses
+a non-default `RpcPipeName`, or to state that RPC is off:
+
+```json
+"values": {
+  "hostAgentRpc": {
+    "enabled": true,
+    "pipeName": "<pipe-name>",
+    "timeoutSeconds": 30
+  }
+}
+```
+
+All three properties are optional. A missing `pipeName` means
+`OpenModulePlatform.HostAgent.{hostKey}`.
 
 ## Config Overlay JSON
 

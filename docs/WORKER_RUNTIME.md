@@ -97,6 +97,78 @@ The public Portal now includes:
 
 These pages are schema-aware and degrade to empty lists until the database has been updated with the current SQL install script.
 
+## Provisioning worker app instances from a module
+
+A module admin page can create worker app instances without writing SQL against
+platform tables. `WorkerAppInstanceProvisioningService`
+(`OpenModulePlatform.Web.Shared/Provisioning`) is registered by
+`AddOmpWebDefaults` in every OMP web app.
+
+```csharp
+Task<WorkerAppInstanceProvisioningResult> ProvisionWorkerAppInstanceAsync(
+    ClaimsPrincipal caller,
+    WorkerAppInstanceProvisioningRequest request,
+    CancellationToken ct);
+```
+
+One call creates one logical app instance (`HostId` and `TargetHostTemplateId`
+NULL) and one `omp.WorkerInstances` row per requested host. That covers both
+topologies:
+
+- **Shared:** one app instance with several workers that many module objects
+  use. The service creates it once; the module then points its objects at it.
+- **Dedicated:** one app instance per module object, with one worker on a
+  standalone server or one worker per host behind a load balancer. Any number of
+  hosts is accepted.
+
+| Value | Source |
+|---|---|
+| Module key, app key, app instance key, display name, hosts | Supplied by the caller |
+| Configuration path for the worker's RPC settings, for example `MyModule:HostAgentRpc` | Supplied by the caller |
+| Module instance | The template instance, else `ModuleInstanceId`, else the module's only enabled module instance |
+| Installation name | The template instance, else the one name all existing instances of the app share (none: NULL; several: refused) |
+| Artifact | The template's artifact, else the newest enabled artifact of the app whose package type fits and that the applied module definition accepts |
+| Worker `ConfigurationJson` | The host's own HostAgent RPC settings, see below |
+| IDs | New for every created row |
+
+Each new worker gets `{ "<path>": { "Enabled": true, "PipeName": ..., "TimeoutSeconds": ... } }`
+built from its own host:
+
+1. If the host's active host configuration has `values.hostAgentRpc`
+   (`pipeName`, `timeoutSeconds`, `enabled`), those values apply. `enabled: false`
+   refuses the call.
+2. Otherwise, if a HostAgent has registered on the host
+   (`omp.HostAgentRuntimeStates`), the pipe is HostAgent's default
+   `OpenModulePlatform.HostAgent.{HostKey}` and the timeout is the request's
+   `DefaultHostAgentRpcTimeoutSeconds` (30 by default). A host whose HostAgent sets
+   a non-default `RpcPipeName` must record it under `values.hostAgentRpc`.
+3. Otherwise the whole call is refused and nothing is created.
+
+A template supplies the binding only. Its IDs and its workers' configuration are
+never copied.
+
+The call runs in one transaction under an application lock on the module and
+app instance key. A refused or failed call leaves no rows. A repeated call with
+the same key reuses the matching app instance and only adds workers for hosts
+that have none. Existing app and worker rows, including their configuration and
+artifact, are never updated. Concurrent duplicate calls run one after the other,
+and the later calls report `AppInstanceCreated = false`.
+
+The caller is authorized when RBAC grants it `OMP.Portal.Admin`, or when it holds
+`ModuleAdministrationPermission` and an app of the same module declares that
+permission in `omp.AppPermissions`. `WebApp:AllowAnonymous` does not bypass this
+check. Refusals raise `WorkerAppInstanceProvisioningException`, whose `Error` is
+one of: `Unauthorized`, `InvalidRequest`, `AppNotFound`, `NotAWorkerApp`,
+`ModuleInstanceUnresolved`, `TemplateMismatch`, `InstallationNameUnresolved`,
+`NoCompatibleArtifact`, `IncompatibleArtifact`, `HostNotFound`, `HostDisabled`,
+`HostOutsideInstallation` (the host belongs to another `omp.Instances` row),
+`HostAgentRpcUnavailable`, `KeyCollision` (the key is used by a host-bound
+instance or another app), and `Busy`.
+
+The new rows are enabled, allowed and in the running desired state, so the
+platform may start the workers once the transaction commits. Disabling or
+removing instances stays in Portal administration.
+
 ## Still out of scope
 
 The public repository still does not implement:

@@ -212,6 +212,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<BannerService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
         builder.Services.AddScoped<PortalUserBitSettingWriter>();
+        builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Provisioning.WorkerAppInstanceProvisioningService>();
 
         // Application performance telemetry. Registered for every OMP web app and enabled by
         // default: the questions it answers -- what is slow, and how did that change as the
