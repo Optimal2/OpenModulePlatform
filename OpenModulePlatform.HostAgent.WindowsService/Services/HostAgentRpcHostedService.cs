@@ -97,6 +97,21 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         var pipeSecurity = CreatePipeSecurity(settings);
         _logger.LogInformation("HostAgent RPC named pipe started. PipeName={PipeName}", pipeName);
 
+        // The runtime-state heartbeat publishes this as omp.HostAgentRuntimeStates.RpcPipeName,
+        // so platform services read the pipe actually served instead of guessing it.
+        _process.SetRpcPipeName(pipeName);
+        try
+        {
+            await AcceptClientsAsync(pipeName, pipeSecurity, stoppingToken);
+        }
+        finally
+        {
+            _process.SetRpcPipeName(null);
+        }
+    }
+
+    private async Task AcceptClientsAsync(string pipeName, PipeSecurity pipeSecurity, CancellationToken stoppingToken)
+    {
         while (!stoppingToken.IsCancellationRequested)
         {
             NamedPipeServerStream? pipe = null;

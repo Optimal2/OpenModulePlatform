@@ -905,6 +905,14 @@ another service currently owns that host lease. A HostAgent started in takeover
 mode may take the lease so the new service can become the only active agent for
 the host.
 
+The published runtime state includes `RpcPipeName`: the named pipe the process
+actually serves its RPC on (`HostAgent:RpcPipeName`, or
+`OpenModulePlatform.HostAgent.{HostKey}` when that setting is empty). It is NULL
+while RPC is disabled or not yet started, and always NULL for a HostAgent older
+than the column. Worker provisioning reads it only from an active row seen in the
+last ten minutes (see `docs/WORKER_RUNTIME.md`). Against a database that predates
+the column, HostAgent keeps publishing the rest of its state.
+
 When the current HostAgent sees an enabled desired state with a different
 artifact version, it provisions that artifact, copies it to a versioned folder
 below `HostAgent:SelfUpgrade:InstallRoot`, writes a takeover appsettings file,

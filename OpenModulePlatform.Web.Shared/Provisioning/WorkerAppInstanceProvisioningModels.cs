@@ -48,6 +48,16 @@ public sealed class WorkerAppInstanceProvisioningRequest
     /// for example <c>MyModule:HostAgentRpc</c>. The service writes
     /// <c>Enabled</c>, <c>PipeName</c> and <c>TimeoutSeconds</c> under that path.
     /// </summary>
+    /// <remarks>
+    /// The pipe of each host is, in order: <c>values.hostAgentRpc.pipeName</c> in the host's
+    /// active host configuration (highest <c>ConfigurationVersion</c> among active documents),
+    /// else the pipe an active HostAgent registered in <c>omp.HostAgentRuntimeStates</c> within
+    /// the last <see cref="WorkerAppInstanceProvisioningService.HostAgentRegistrationMaxAgeSeconds"/>
+    /// seconds, else the call fails with
+    /// <see cref="WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable"/>. It is never
+    /// derived from the host key. A HostAgent older than the pipe registration never registers
+    /// one, so its host must have <c>values.hostAgentRpc.pipeName</c> set explicitly.
+    /// </remarks>
     public string HostAgentRpcConfigurationPath { get; init; } = "";
 
     /// <summary>
@@ -57,8 +67,11 @@ public sealed class WorkerAppInstanceProvisioningRequest
 
     /// <summary>
     /// Optional module permission that authorizes the caller besides the platform administrator
-    /// permission. It is honoured only when an app of the same module declares it in
+    /// permission. It is honoured only when an enabled app of the same module declares it in
     /// <c>omp.AppPermissions</c>, so one module cannot authorize provisioning in another.
+    /// Whether the caller holds it is RBAC's answer: a permission granted only through an
+    /// ambient role (Everyone, AuthenticatedUsers) is an installation policy decision that the
+    /// service does not override.
     /// </summary>
     public string? ModuleAdministrationPermission { get; init; }
 }
@@ -98,7 +111,10 @@ public sealed record ProvisionedWorkerInstance(
 /// <summary>Why a provisioning call was refused. Nothing is written for any of these.</summary>
 public enum WorkerAppInstanceProvisioningError
 {
-    /// <summary>The caller lacks the platform administrator permission and a valid module permission.</summary>
+    /// <summary>
+    /// The caller is not authenticated, or lacks the platform administrator permission and a
+    /// module permission that an enabled app of the module declares.
+    /// </summary>
     Unauthorized,
 
     /// <summary>The request itself is malformed (empty keys, no hosts, duplicate hosts, bad path).</summary>
@@ -119,7 +135,10 @@ public enum WorkerAppInstanceProvisioningError
     /// <summary>The installation name differs between existing instances; pass a template.</summary>
     InstallationNameUnresolved,
 
-    /// <summary>No enabled artifact of the app is compatible with the module definition.</summary>
+    /// <summary>
+    /// No enabled artifact of the app is compatible with the module definition, or the reused
+    /// app instance has no artifact (its workers would never start).
+    /// </summary>
     NoCompatibleArtifact,
 
     /// <summary>The template's artifact is disabled or not compatible.</summary>
@@ -134,14 +153,24 @@ public enum WorkerAppInstanceProvisioningError
     /// <summary>A host belongs to another installation (omp.Instances row) than the module instance.</summary>
     HostOutsideInstallation,
 
-    /// <summary>The platform has no HostAgent RPC settings for a host.</summary>
+    /// <summary>
+    /// The platform has no trustworthy HostAgent RPC pipe for a host: its active host
+    /// configuration has no <c>values.hostAgentRpc.pipeName</c> (or disables RPC) and no
+    /// active, recently seen HostAgent registered a pipe. The message names the host(s).
+    /// </summary>
     HostAgentRpcUnavailable,
 
     /// <summary>The app instance key or a worker key is already used by a different row.</summary>
     KeyCollision,
 
     /// <summary>Another call held the provisioning lock for the same key for too long.</summary>
-    Busy
+    Busy,
+
+    /// <summary>
+    /// SQL Server refused the provisioning lock for another reason than a timeout: the call
+    /// was a deadlock victim, was cancelled, or failed. Retrying is safe.
+    /// </summary>
+    LockFailed
 }
 
 /// <summary>

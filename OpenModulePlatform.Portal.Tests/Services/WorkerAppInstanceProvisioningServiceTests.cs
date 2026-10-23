@@ -1,3 +1,6 @@
+using Microsoft.Data.SqlClient;
+using OpenModulePlatform.HostAgent.Runtime.Models;
+using OpenModulePlatform.HostAgent.Runtime.Services;
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Provisioning;
 
@@ -213,7 +216,7 @@ public sealed class WorkerAppInstanceProvisioningServiceTests : IClassFixture<Wo
             service.ProvisionWorkerAppInstanceAsync(WorkerAppInstanceProvisioningTestFixture.Caller(), request, CancellationToken.None));
         Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "retry"));
 
-        await _fixture.RegisterHostAgentAsync(scenario.Hosts[1]);
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[1], WorkerAppInstanceProvisioningTestFixture.DefaultPipe(scenario.HostKey(1)));
         var result = await service.ProvisionWorkerAppInstanceAsync(WorkerAppInstanceProvisioningTestFixture.Caller(), request, CancellationToken.None);
 
         Assert.True(result.AppInstanceCreated);
@@ -320,13 +323,228 @@ public sealed class WorkerAppInstanceProvisioningServiceTests : IClassFixture<Wo
         Assert.Equal(WorkerAppInstanceProvisioningError.NotAWorkerApp, error.Error);
     }
 
+    [Fact]
+    public async Task UnauthenticatedCaller_IsRefusedEvenWhenPermissionsWouldAllowIt()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(PortalAdminNavigation.AdminPermission, scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.AnonymousCaller(), scenario.Request("anon", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.Unauthorized, error.Error);
+        Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "anon"));
+    }
+
+    [Fact]
+    public async Task PermissionDeclaredOnlyByADisabledApp_DoesNotAuthorize()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.DisableAppAsync(scenario.WebAppId);
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("disabled_decl", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.Unauthorized, error.Error);
+        Assert.Equal(0, await _fixture.CountWorkersAsync(scenario));
+    }
+
+    [Fact]
+    public async Task TemplateOfAnotherApp_IsATemplateMismatch()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        var webTemplate = await _fixture.AddAppInstanceAsync(scenario, "web_tmpl", scenario.WebAppId, null, "web");
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(),
+                WithTemplate(scenario.Request("from_web", scenario.Hosts[0]), webTemplate),
+                CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.TemplateMismatch, error.Error);
+        Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "from_web"));
+    }
+
+    [Fact]
+    public async Task ModuleInstanceOfAnotherModule_IsUnresolved()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        var other = await _fixture.SeedAsync(hostCount: 0);
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(),
+                WithModuleInstance(scenario.Request("foreign_mi", scenario.Hosts[0]), other.ModuleInstanceId),
+                CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.ModuleInstanceUnresolved, error.Error);
+        Assert.Equal(0, await _fixture.CountWorkersAsync(scenario));
+        Assert.Equal(0, await _fixture.CountWorkersAsync(other));
+    }
+
+    [Fact]
+    public async Task HostKeysThatNormalizeToTheSameWorkerKey_AreACollisionAndCreateNothing()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 0);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        var dash = await _fixture.AddHostAsync(scenario.InstanceId, $"NORM-{scenario.Suffix}.test", withHostAgent: true);
+        var underscore = await _fixture.AddHostAsync(scenario.InstanceId, $"norm_{scenario.Suffix}.test", withHostAgent: true);
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("norm", dash, underscore), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.KeyCollision, error.Error);
+        Assert.Contains($"norm_norm_{scenario.Suffix}_test", error.Message);
+        Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "norm"));
+        Assert.Equal(0, await _fixture.CountWorkersAsync(scenario));
+    }
+
+    [Fact]
+    public async Task OverlongWorkerKeys_AreTruncatedToDistinctHostIdSuffixedKeys()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 0);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        var longHost = new string('h', 100);
+        var first = await _fixture.AddHostAsync(scenario.InstanceId, $"{longHost}-a-{scenario.Suffix}", withHostAgent: true);
+        var second = await _fixture.AddHostAsync(scenario.InstanceId, $"{longHost}-b-{scenario.Suffix}", withHostAgent: true);
+        var appInstanceKey = "k" + new string('x', 99);
+
+        var result = await _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+            WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request(appInstanceKey, first, second), CancellationToken.None);
+
+        Assert.All(result.Workers, worker => Assert.True(worker.WorkerInstanceKey.Length <= 150));
+        Assert.Equal($"{appInstanceKey}_{first.ToString("N")[..12]}", result.Workers[0].WorkerInstanceKey);
+        Assert.Equal($"{appInstanceKey}_{second.ToString("N")[..12]}", result.Workers[1].WorkerInstanceKey);
+    }
+
+    [Fact]
+    public async Task ReusedInstanceWithoutArtifact_IsRefusedAndAddsNoWorker()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.AddAppInstanceAsync(scenario, "no_artifact", scenario.WorkerAppId, null, "worker");
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("no_artifact", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.NoCompatibleArtifact, error.Error);
+        Assert.Equal(0, await _fixture.CountWorkersAsync(scenario));
+    }
+
+    [Theory]
+    [InlineData(false, 0, "pipe")]
+    [InlineData(true, 3600, "pipe")]
+    [InlineData(true, 0, null)]
+    public async Task InactiveStaleOrPipelessRegistration_IsNotTrusted(bool isActive, int lastSeenSecondsAgo, string? pipeName)
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(
+            scenario.Hosts[0],
+            pipeName is null ? null : WorkerAppInstanceProvisioningTestFixture.DefaultPipe(scenario.HostKey(0)),
+            isActive,
+            lastSeenSecondsAgo);
+
+        var error = await Assert.ThrowsAsync<WorkerAppInstanceProvisioningException>(() =>
+            _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+                WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("untrusted", scenario.Hosts[0]), CancellationToken.None));
+
+        Assert.Equal(WorkerAppInstanceProvisioningError.HostAgentRpcUnavailable, error.Error);
+        Assert.Contains(scenario.HostKey(0), error.Message);
+        Assert.Equal(0, await _fixture.CountAppInstancesAsync(scenario, "untrusted"));
+    }
+
+    [Fact]
+    public async Task CustomPipePublishedByHostAgent_IsWrittenToTheWorker()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+
+        // The real HostAgent publish path, as a HostAgent with RpcPipeName = "custom.pipe.<suffix>" runs it.
+        var process = new HostAgentProcessContext("OMP.HostAgent.v2", "2.0.0", HostAgentRuntimeMode.Normal, null);
+        process.SetRpcPipeName("custom.pipe." + scenario.Suffix);
+        var repository = new OmpHostArtifactRepository(new TestHostAgentConnectionFactory(_fixture.ConnectionString));
+        await repository.PublishHostAgentRuntimeStateAsync(
+            scenario.Hosts[0], process, HostAgentRuntimeMode.Normal, artifactId: null, installPath: null, isActive: true, statusMessage: null, CancellationToken.None);
+
+        var result = await _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+            WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("custom", scenario.Hosts[0]), CancellationToken.None);
+
+        Assert.Equal("custom.pipe." + scenario.Suffix, Assert.Single(result.Workers).HostAgentRpcPipeName);
+        var worker = Assert.Single(await _fixture.ReadWorkersAsync(result.AppInstanceId));
+        Assert.Contains($"\"PipeName\":\"custom.pipe.{scenario.Suffix}\",\"TimeoutSeconds\":30", worker.ConfigurationJson);
+        Assert.DoesNotContain("OpenModulePlatform.HostAgent.", worker.ConfigurationJson);
+    }
+
+    [Fact]
+    public async Task OnlyTheActiveRegistrationCounts_WhenAnOlderServiceRowRemains()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[0], "retired-pipe", isActive: false, serviceName: "OMP.HostAgent.v1");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[0], "current-pipe", isActive: true, lastSeenSecondsAgo: 30, serviceName: "OMP.HostAgent.v2");
+
+        var result = await _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+            WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("takeover", scenario.Hosts[0]), CancellationToken.None);
+
+        Assert.Equal("current-pipe", Assert.Single(result.Workers).HostAgentRpcPipeName);
+    }
+
+    [Fact]
+    public async Task HostConfiguration_TakesPrecedenceOverTheRegisteredPipe()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 2, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[0], "registered-zero");
+        await _fixture.RegisterHostAgentAsync(scenario.Hosts[1], "registered-one");
+        await _fixture.AddHostConfigurationAsync(scenario.HostKey(0), "{\"hostAgentRpc\":{\"pipeName\":\"configured-zero\"}}");
+        await _fixture.AddHostConfigurationAsync(scenario.HostKey(1), "{\"hostAgentRpc\":{\"timeoutSeconds\":75}}");
+
+        var result = await _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+            WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("precedence", scenario.Hosts[0], scenario.Hosts[1]), CancellationToken.None);
+
+        var workers = (await _fixture.ReadWorkersAsync(result.AppInstanceId)).ToDictionary(worker => worker.HostId);
+        Assert.Contains("\"PipeName\":\"configured-zero\",\"TimeoutSeconds\":30", workers[scenario.Hosts[0]].ConfigurationJson);
+        // A configuration without pipeName still contributes its timeout to the registered pipe.
+        Assert.Contains("\"PipeName\":\"registered-one\",\"TimeoutSeconds\":75", workers[scenario.Hosts[1]].ConfigurationJson);
+    }
+
+    [Fact]
+    public async Task ActiveHostConfiguration_IsTheHighestConfigurationVersionNotTheLatestUpdate()
+    {
+        var scenario = await _fixture.SeedAsync(hostCount: 1, hostsWithHostAgent: []);
+        await _fixture.AddArtifactAsync(scenario.WorkerAppId, "1.0.0");
+        await _fixture.AddHostConfigurationAsync(
+            scenario.HostKey(0), "{\"hostAgentRpc\":{\"pipeName\":\"pinned-1-10\"}}", version: "1.10.0", updatedSecondsAgo: 3600);
+        await _fixture.AddHostConfigurationAsync(scenario.HostKey(0), "{}", version: "1.9.0");
+
+        var result = await _fixture.CreateService(scenario.ModulePermission).ProvisionWorkerAppInstanceAsync(
+            WorkerAppInstanceProvisioningTestFixture.Caller(), scenario.Request("versioned", scenario.Hosts[0]), CancellationToken.None);
+
+        Assert.Equal("pinned-1-10", Assert.Single(result.Workers).HostAgentRpcPipeName);
+    }
+
     private static WorkerAppInstanceProvisioningRequest WithTemplate(WorkerAppInstanceProvisioningRequest request, Guid templateId)
-        => Copy(request, templateId, request.ModuleAdministrationPermission);
+        => Copy(request, templateId, request.ModuleAdministrationPermission, request.ModuleInstanceId);
 
     private static WorkerAppInstanceProvisioningRequest WithPermission(WorkerAppInstanceProvisioningRequest request, string? permission)
-        => Copy(request, request.TemplateAppInstanceId, permission);
+        => Copy(request, request.TemplateAppInstanceId, permission, request.ModuleInstanceId);
 
-    private static WorkerAppInstanceProvisioningRequest Copy(WorkerAppInstanceProvisioningRequest request, Guid? templateId, string? permission)
+    private static WorkerAppInstanceProvisioningRequest WithModuleInstance(WorkerAppInstanceProvisioningRequest request, Guid moduleInstanceId)
+        => Copy(request, request.TemplateAppInstanceId, request.ModuleAdministrationPermission, moduleInstanceId);
+
+    private static WorkerAppInstanceProvisioningRequest Copy(
+        WorkerAppInstanceProvisioningRequest request,
+        Guid? templateId,
+        string? permission,
+        Guid? moduleInstanceId)
         => new()
         {
             ModuleKey = request.ModuleKey,
@@ -336,6 +554,14 @@ public sealed class WorkerAppInstanceProvisioningServiceTests : IClassFixture<Wo
             HostIds = request.HostIds,
             HostAgentRpcConfigurationPath = request.HostAgentRpcConfigurationPath,
             TemplateAppInstanceId = templateId,
+            ModuleInstanceId = moduleInstanceId,
             ModuleAdministrationPermission = permission
         };
+
+    private sealed class TestHostAgentConnectionFactory(string connectionString) : ISqlConnectionFactory
+    {
+        public string GetConnectionString() => connectionString;
+
+        public SqlConnection Create() => new(connectionString);
+    }
 }

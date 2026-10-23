@@ -47,8 +47,10 @@ OMP core interprets one key in the `values` object: `hostAgentRpc`. Repository-l
 or customer-specific generation scripts decide which other values are meaningful.
 
 `values.hostAgentRpc` records the host's HostAgent RPC endpoint for worker
-provisioning (see `docs/WORKER_RUNTIME.md`). Set it when the host's HostAgent uses
-a non-default `RpcPipeName`, or to state that RPC is off:
+provisioning (see `docs/WORKER_RUNTIME.md`). It takes precedence over the pipe a
+HostAgent registers itself. Set it when the host's HostAgent is older than the
+`RpcPipeName` registration in `omp.HostAgentRuntimeStates` (such an agent never
+registers a pipe), when you want to pin the pipe, or to state that RPC is off:
 
 ```json
 "values": {
@@ -60,8 +62,10 @@ a non-default `RpcPipeName`, or to state that RPC is off:
 }
 ```
 
-All three properties are optional. A missing `pipeName` means
-`OpenModulePlatform.HostAgent.{hostKey}`.
+All three properties are optional. A missing `pipeName` means the pipe an active
+HostAgent registered for the host; it is never derived from the host key. When
+several documents for a host are active, the one with the highest
+`configurationVersion` applies.
 
 ## Config Overlay JSON
 

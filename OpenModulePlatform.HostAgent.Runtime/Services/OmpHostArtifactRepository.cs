@@ -16,6 +16,7 @@ public sealed partial class OmpHostArtifactRepository : IOmpHostArtifactReposito
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
     private const int MinimumLeaseSeconds = 30;
     private const int HostAgentRuntimeServiceNameMaxLength = 200;
+    private const int HostAgentRuntimeRpcPipeNameMaxLength = 256;
     private const int HostAgentRuntimeVersionMaxLength = 50;
     private const int HostAgentRuntimeInstallPathMaxLength = 500;
     private const int HostAgentRuntimeModeMaxLength = 40;
@@ -283,11 +284,24 @@ WHEN NOT MATCHED THEN
         @statusMessage,
         @nowUtc,
         @nowUtc
-    );";
+    );
+
+-- Dynamic SQL so a HostAgent running against a database that predates the column keeps
+-- publishing its state; the column is then simply not written.
+IF COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RpcPipeName') IS NOT NULL
+BEGIN
+    EXEC sys.sp_executesql
+        N'UPDATE omp.HostAgentRuntimeStates SET RpcPipeName = @rpcPipeName WHERE HostId = @hostId AND ServiceName = @serviceName;',
+        N'@rpcPipeName nvarchar(256), @hostId uniqueidentifier, @serviceName nvarchar(200)',
+        @rpcPipeName = @rpcPipeName,
+        @hostId = @hostId,
+        @serviceName = @serviceName;
+END;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@rpcPipeName", SqlDbType.NVarChar, HostAgentRuntimeRpcPipeNameMaxLength, NullIfWhiteSpace(process.RpcPipeName));
         Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
         Add(cmd, "@serviceName", SqlDbType.NVarChar, HostAgentRuntimeServiceNameMaxLength, process.ServiceName);
         Add(cmd, "@version", SqlDbType.NVarChar, HostAgentRuntimeVersionMaxLength, NullIfWhiteSpace(process.Version));

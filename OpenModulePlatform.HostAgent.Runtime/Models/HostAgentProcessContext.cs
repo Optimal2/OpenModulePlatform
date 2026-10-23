@@ -8,6 +8,8 @@ public sealed class HostAgentProcessContext
 
     private string _runtimeMode;
 
+    private string? _rpcPipeName;
+
     public HostAgentProcessContext(
         string serviceName,
         string version,
@@ -45,7 +47,30 @@ public sealed class HostAgentProcessContext
         }
     }
 
+    /// <summary>
+    /// The named pipe this process currently serves HostAgent RPC on, or null while RPC is
+    /// disabled or not started. Published to <c>omp.HostAgentRuntimeStates.RpcPipeName</c>.
+    /// </summary>
+    public string? RpcPipeName
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _rpcPipeName;
+            }
+        }
+    }
+
     public bool IsQuiesceRequested { get; private set; }
+
+    public void SetRpcPipeName(string? pipeName)
+    {
+        lock (_lock)
+        {
+            _rpcPipeName = string.IsNullOrWhiteSpace(pipeName) ? null : pipeName.Trim();
+        }
+    }
 
     public void RequestQuiesce()
     {

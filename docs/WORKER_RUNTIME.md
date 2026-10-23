@@ -134,15 +134,22 @@ topologies:
 Each new worker gets `{ "<path>": { "Enabled": true, "PipeName": ..., "TimeoutSeconds": ... } }`
 built from its own host:
 
-1. If the host's active host configuration has `values.hostAgentRpc`
-   (`pipeName`, `timeoutSeconds`, `enabled`), those values apply. `enabled: false`
-   refuses the call.
-2. Otherwise, if a HostAgent has registered on the host
-   (`omp.HostAgentRuntimeStates`), the pipe is HostAgent's default
-   `OpenModulePlatform.HostAgent.{HostKey}` and the timeout is the request's
-   `DefaultHostAgentRpcTimeoutSeconds` (30 by default). A host whose HostAgent sets
-   a non-default `RpcPipeName` must record it under `values.hostAgentRpc`.
-3. Otherwise the whole call is refused and nothing is created.
+1. The host's active host configuration is the `omp.HostConfigurationDocuments`
+   row for its host key with `IsActive = 1` and the highest `ConfigurationVersion`.
+   If it has `values.hostAgentRpc`, `enabled: false` refuses the call, and its
+   `pipeName` and `timeoutSeconds` apply.
+2. Otherwise, or when that object has no `pipeName`, the pipe is the
+   `RpcPipeName` an active HostAgent registered for the host: an
+   `omp.HostAgentRuntimeStates` row with `IsActive = 1` and `LastSeenUtc` at most
+   ten minutes old. The timeout is `values.hostAgentRpc.timeoutSeconds` when set,
+   else the request's `DefaultHostAgentRpcTimeoutSeconds` (30 by default).
+3. Otherwise the whole call is refused with `HostAgentRpcUnavailable`, the message
+   names the host, and nothing is created.
+
+The pipe is never derived from the host key: a HostAgent may serve a custom
+`RpcPipeName`, and a runtime-state row also survives a disabled or uninstalled
+agent. A HostAgent older than the `RpcPipeName` registration never registers a
+pipe, so its host must have `values.hostAgentRpc.pipeName` set explicitly.
 
 A template supplies the binding only. Its IDs and its workers' configuration are
 never copied.
@@ -154,16 +161,23 @@ that have none. Existing app and worker rows, including their configuration and
 artifact, are never updated. Concurrent duplicate calls run one after the other,
 and the later calls report `AppInstanceCreated = false`.
 
-The caller is authorized when RBAC grants it `OMP.Portal.Admin`, or when it holds
-`ModuleAdministrationPermission` and an app of the same module declares that
-permission in `omp.AppPermissions`. `WebApp:AllowAnonymous` does not bypass this
-check. Refusals raise `WorkerAppInstanceProvisioningException`, whose `Error` is
+A reused app instance without an artifact is refused with `NoCompatibleArtifact`:
+WorkerManager never starts workers bound to no artifact.
+
+The caller is authorized when it is authenticated and RBAC grants it
+`OMP.Portal.Admin`, or when it holds `ModuleAdministrationPermission` and an
+enabled app of the same module declares that permission in `omp.AppPermissions`.
+`WebApp:AllowAnonymous` does not bypass this check. A permission held only through
+an ambient role (Everyone, AuthenticatedUsers) is an installation policy decision
+that the service does not override. Refusals raise `WorkerAppInstanceProvisioningException`, whose `Error` is
 one of: `Unauthorized`, `InvalidRequest`, `AppNotFound`, `NotAWorkerApp`,
 `ModuleInstanceUnresolved`, `TemplateMismatch`, `InstallationNameUnresolved`,
 `NoCompatibleArtifact`, `IncompatibleArtifact`, `HostNotFound`, `HostDisabled`,
 `HostOutsideInstallation` (the host belongs to another `omp.Instances` row),
 `HostAgentRpcUnavailable`, `KeyCollision` (the key is used by a host-bound
-instance or another app), and `Busy`.
+instance or another app), `Busy` (the lock timed out behind another call), and
+`LockFailed` (SQL Server refused the lock as a deadlock victim, a cancellation or
+an error; retrying is safe).
 
 The new rows are enabled, allowed and in the running desired state, so the
 platform may start the workers once the transaction commits. Disabling or

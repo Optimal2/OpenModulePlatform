@@ -15,10 +15,20 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   writing SQL against platform tables. Module instance, installation name and a
   compatible artifact come from platform metadata or a template instance. Each
   worker's HostAgent RPC settings come from its own host: the host
-  configuration's new `values.hostAgentRpc`, or the HostAgent default pipe when
-  a HostAgent has registered there. A host without either refuses the whole
-  call. Repeated and concurrent calls with the same key reuse the instance and
-  only add missing workers. See `docs/WORKER_RUNTIME.md`.
+  configuration's new `values.hostAgentRpc` (the document with the highest
+  `ConfigurationVersion` among the active ones), else the pipe an active HostAgent
+  seen in the last ten minutes registered in the new nullable
+  `omp.HostAgentRuntimeStates.RpcPipeName` column. The pipe is never derived from
+  the host key; a host without either refuses the whole call, and a HostAgent
+  older than the registration needs `values.hostAgentRpc.pipeName` set. A reused
+  instance without an artifact is refused, a module permission counts only when
+  an enabled app declares it, and a lock deadlock or cancellation reports
+  `LockFailed` instead of `Busy`. Repeated and concurrent calls with the same key
+  reuse the instance and only add missing workers. See `docs/WORKER_RUNTIME.md`.
+- **HostAgent registers its RPC pipe.** Every runtime-state publish writes the
+  named pipe the process actually serves to
+  `omp.HostAgentRuntimeStates.RpcPipeName` (NULL while RPC is off or not started).
+  Against a database without the column, HostAgent keeps publishing the rest.
 - **Do not disturb, from the tray, the user menu and the toast itself.** The
   two notification settings the settings page edits, toasts muted
   (NotificationToastsMuted) and sounds (NotificationSoundsEnabled), are now

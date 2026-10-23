@@ -76,6 +76,10 @@ DROP DATABASE [{DatabaseName}];",
     public static ClaimsPrincipal Caller()
         => new(new ClaimsIdentity([new Claim(ClaimTypes.Name, "provisioning-test")], "Test"));
 
+    /// <summary>A principal without an authentication type, so <c>IsAuthenticated</c> is false.</summary>
+    public static ClaimsPrincipal AnonymousCaller()
+        => new(new ClaimsIdentity([new Claim(ClaimTypes.Name, "anonymous")]));
+
     /// <summary>
     /// Seeds an installation with one module (a web app declaring the module permission and a
     /// worker app), one enabled module instance, and the given hosts. Hosts listed in
@@ -137,22 +141,51 @@ INSERT INTO omp.Hosts (HostId, InstanceId, HostKey, DisplayName) VALUES (@hostId
             ("@hostId", hostId), ("@instanceId", instanceId), ("@hostKey", hostKey));
         if (withHostAgent)
         {
-            await RegisterHostAgentAsync(conn, hostId);
+            await RegisterHostAgentAsync(conn, hostId, DefaultPipe(hostKey), isActive: true, lastSeenSecondsAgo: 0, "OMP.HostAgent");
         }
 
         return hostId;
     }
 
-    public async Task RegisterHostAgentAsync(Guid hostId)
+    /// <summary>The pipe a HostAgent with an empty RpcPipeName setting serves and registers.</summary>
+    public static string DefaultPipe(string hostKey) => "OpenModulePlatform.HostAgent." + hostKey;
+
+    /// <summary>
+    /// Writes a HostAgent runtime-state row the way HostAgent publishes it. A null
+    /// <paramref name="pipeName"/> is what an agent older than the RpcPipeName column leaves.
+    /// </summary>
+    public async Task RegisterHostAgentAsync(
+        Guid hostId,
+        string? pipeName,
+        bool isActive = true,
+        int lastSeenSecondsAgo = 0,
+        string serviceName = "OMP.HostAgent")
     {
         await using var conn = await OpenAsync();
-        await RegisterHostAgentAsync(conn, hostId);
+        await RegisterHostAgentAsync(conn, hostId, pipeName, isActive, lastSeenSecondsAgo, serviceName);
     }
 
-    private static Task RegisterHostAgentAsync(SqlConnection conn, Guid hostId)
+    private static Task RegisterHostAgentAsync(
+        SqlConnection conn,
+        Guid hostId,
+        string? pipeName,
+        bool isActive,
+        int lastSeenSecondsAgo,
+        string serviceName)
         => ExecuteAsync(conn, @"
-INSERT INTO omp.HostAgentRuntimeStates (HostId, ServiceName, IsActive) VALUES (@hostId, N'OMP.HostAgent', 1);",
-            ("@hostId", hostId));
+INSERT INTO omp.HostAgentRuntimeStates (HostId, ServiceName, IsActive, LastSeenUtc, RpcPipeName)
+VALUES (@hostId, @serviceName, @isActive, DATEADD(SECOND, -@age, SYSUTCDATETIME()), @pipeName);",
+            ("@hostId", hostId),
+            ("@serviceName", serviceName),
+            ("@isActive", isActive),
+            ("@age", lastSeenSecondsAgo),
+            ("@pipeName", (object?)pipeName ?? DBNull.Value));
+
+    public async Task DisableAppAsync(int appId)
+    {
+        await using var conn = await OpenAsync();
+        await ExecuteAsync(conn, "UPDATE omp.Apps SET IsEnabled = 0 WHERE AppId = @appId", ("@appId", appId));
+    }
 
     public async Task<Guid> AddInstallationAsync(string suffix)
     {
@@ -219,14 +252,18 @@ VALUES (@id, @appInstanceId, @hostId, @key, @key, @configurationJson);",
         return id;
     }
 
-    public async Task AddHostConfigurationAsync(string hostKey, string valuesJson)
+    public async Task AddHostConfigurationAsync(
+        string hostKey,
+        string valuesJson,
+        string version = "1.0.0",
+        int updatedSecondsAgo = 0)
     {
-        var json = $"{{\"formatVersion\":1,\"objectType\":\"host-configuration\",\"hostKey\":\"{hostKey}\",\"configurationVersion\":\"1.0.0\",\"values\":{valuesJson}}}";
+        var json = $"{{\"formatVersion\":1,\"objectType\":\"host-configuration\",\"hostKey\":\"{hostKey}\",\"configurationVersion\":\"{version}\",\"values\":{valuesJson}}}";
         await using var conn = await OpenAsync();
         await ExecuteAsync(conn, @"
-INSERT INTO omp.HostConfigurationDocuments (HostKey, ConfigurationVersion, ConfigurationJson, ConfigurationSha256)
-VALUES (@hostKey, N'1.0.0', @json, N'sha');",
-            ("@hostKey", hostKey), ("@json", json));
+INSERT INTO omp.HostConfigurationDocuments (HostKey, ConfigurationVersion, ConfigurationJson, ConfigurationSha256, UpdatedUtc)
+VALUES (@hostKey, @version, @json, N'sha', DATEADD(SECOND, -@age, SYSUTCDATETIME()));",
+            ("@hostKey", hostKey), ("@version", version), ("@json", json), ("@age", updatedSecondsAgo));
     }
 
     public async Task<int> CountAppInstancesAsync(Scenario scenario, string key)

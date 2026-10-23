@@ -1889,6 +1889,15 @@ BEGIN
 END
 GO
 
+-- The named pipe the HostAgent process actually serves its RPC on, written with every
+-- runtime-state publish. NULL while RPC is disabled or not started yet, and always NULL for
+-- a HostAgent older than this column: consumers must never derive a pipe from the host key.
+IF COL_LENGTH(N'omp.HostAgentRuntimeStates', N'RpcPipeName') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAgentRuntimeStates ADD RpcPipeName nvarchar(256) NULL;
+END
+GO
+
 IF OBJECT_ID(N'omp.HostAgentLeases', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostAgentLeases
