@@ -66,7 +66,7 @@
     var notificationToastsGloballyEnabled = OpenModulePlatform.Portal.Services.PortalUserSettingsService.ParseNotificationToastsEnabled(notificationToastsConfigValue);
     // The user's own mute (NotificationToastsMuted) no longer leaves the toast root out:
     // the toast script honours it, read from the root and the top bar and updated live by
-    // the tray's toggle, so unmuting there resumes toasts without a reload.
+    // the user menu's Do not disturb row, so unmuting there resumes toasts without a reload.
     var notificationToastsEnabled = User.Identity?.IsAuthenticated == true
         && notificationToastsGloballyEnabled;
     var notificationToastsMuted = portalLayoutSettings?.NotificationToastsMuted == true;

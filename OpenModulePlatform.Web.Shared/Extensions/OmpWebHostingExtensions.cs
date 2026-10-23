@@ -577,7 +577,8 @@ public static class OmpWebHostingExtensions
             });
         }).RequireAuthorization();
 
-        // The mute toggle in the notification tray. Lives beside the other tray endpoints so
+        // The notification preferences (Do not disturb, toasts, sounds) the user menu and
+        // the toasts post. Lives beside the other tray endpoints so
         // it works in every app that shows the top bar, not only in the Portal: the setting
         // is the Portal's NotificationToastsMuted, read by the top bar in every app already.
         app.MapPost(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService.NotificationMutePath, async (

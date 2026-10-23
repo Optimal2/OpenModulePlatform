@@ -677,7 +677,7 @@
         // Do not disturb from the toast itself: posts to the top bar's own
         // Do not disturb form's action with its antiforgery token, so it works
         // wherever the top bar does, then tells the page through the event.
-        var dndForm = document.querySelector('[data-portal-topbar-notification-pref-form][data-pref="all"], [data-portal-topbar-notification-mute-form]');
+        var dndForm = document.querySelector('[data-portal-topbar-notification-pref-form][data-pref="all"]');
         var dnd = null;
         if (dndForm) {
             dnd = document.createElement("button");

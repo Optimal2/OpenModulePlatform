@@ -27,8 +27,8 @@ public sealed class PortalTopBarService
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
     private const byte BitValueKind = 3;
 
-    /// <summary>The Portal user setting the tray's mute toggle flips; the same one the Portal's
-    /// settings page edits as "mute notification toasts".</summary>
+    /// <summary>The Portal user setting the user menu's Do not disturb row flips (with
+    /// sounds); the same one the Portal's settings page edits as Toasts.</summary>
     public const string NotificationToastsMutedSetting = "NotificationToastsMuted";
     public const string NotificationSoundsEnabledSetting = "NotificationSoundsEnabled";
     public const string PortalUserSettingCategory = PortalSettingCategory;

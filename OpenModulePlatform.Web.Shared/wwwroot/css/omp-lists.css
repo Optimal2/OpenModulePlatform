@@ -125,6 +125,10 @@
     color: var(--link-hover);
 }
 
+.list-filter__count[hidden] {
+    display: none;
+}
+
 .list-filter__count {
     display: inline-flex;
     align-items: center;

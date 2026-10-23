@@ -1260,8 +1260,8 @@ window.OmpTime = {
 
     // Notification preferences: two Portal settings, NotificationToastsMuted
     // (no toast is shown) and NotificationSoundsEnabled (its inverse is "sounds
-    // muted"). Do not disturb is both off at once: the tray's toggle, the user
-    // menu's first row and the toast's own button all set both; the two rows
+    // muted"). Do not disturb is both off at once: the user menu's first row
+    // and the toast's own button set both; the two rows
     // under the expander set one each. Every control is updated from one
     // place, and the toast script hears about changes through an event so a
     // page stops showing or sounding toasts without a reload.
@@ -1285,22 +1285,6 @@ window.OmpTime = {
         var partly = toasts !== sounds;
         root.dataset.notificationsMuted = toasts ? 'true' : 'false';
         root.dataset.notificationSoundsMuted = sounds ? 'true' : 'false';
-        root.querySelectorAll('[data-portal-topbar-notifications-icon]').forEach(function (icon) {
-            icon.classList.toggle('is-muted', toasts);
-        });
-        root.querySelectorAll('[data-portal-topbar-notification-mute-form]').forEach(function (form) {
-            var value = form.querySelector('[data-portal-topbar-notification-mute-value]');
-            if (value) {
-                value.value = dnd ? 'false' : 'true';
-            }
-            var button = form.querySelector('button');
-            if (button) {
-                var label = dnd ? (form.dataset.unmuteText || 'Unmute notifications') : (form.dataset.muteText || 'Do not disturb');
-                button.setAttribute('aria-pressed', dnd ? 'true' : 'false');
-                button.title = label;
-                button.setAttribute('aria-label', label);
-            }
-        });
         root.querySelectorAll('[data-portal-topbar-notification-prefs]').forEach(function (block) {
             block.dataset.soundsMuted = sounds ? 'true' : 'false';
         });
@@ -1386,7 +1370,7 @@ window.OmpTime = {
             }
             var root = form.closest('[data-portal-topbar-root]');
             var previous = readNotificationPreferences(root);
-            var value = form.querySelector('[data-portal-topbar-notification-mute-value], [data-portal-topbar-notification-pref-value]');
+            var value = form.querySelector('[data-portal-topbar-notification-pref-value]');
             var turnOn = !!value && value.value === 'true';
             var next = pref === 'toasts'
                 ? { toasts: turnOn, sounds: previous.sounds }
@@ -1398,10 +1382,6 @@ window.OmpTime = {
                 form.dataset.portalTopbarNotificationPrefSubmitting = 'false';
             });
         });
-    }
-
-    function initNotificationMuteForm(form) {
-        initNotificationPreferenceForm(form, 'all');
     }
 
     function initNotificationPrefsToggle(button) {
@@ -2852,7 +2832,6 @@ window.OmpTime = {
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
-        topbar.querySelectorAll('[data-portal-topbar-notification-mute-form]').forEach(initNotificationMuteForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-pref-form]').forEach(function (form) {
             initNotificationPreferenceForm(form, form.dataset.pref || 'all');
         });

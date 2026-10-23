@@ -37,7 +37,6 @@
   <data name="No new notifications" xml:space="preserve"><value>No new notifications</value></data>
   <data name="No notifications" xml:space="preserve"><value>No notifications</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Mark all as read</value></data>
-  <data name="Unmute notifications" xml:space="preserve"><value>Unmute notifications</value></data>
   <data name="Do not disturb" xml:space="preserve"><value>Do not disturb</value></data>
   <data name="Toasts" xml:space="preserve"><value>Toasts</value></data>
   <data name="Notification sounds" xml:space="preserve"><value>Notification sounds</value></data>

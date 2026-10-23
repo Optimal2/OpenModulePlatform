@@ -333,7 +333,7 @@
                 <details class="portal-topbar__notifications" data-portal-topbar-overlay data-portal-topbar-hover-menu data-portal-topbar-notifications>
                     <summary title="@L[_portalTopBar.NotificationsToggleTextKey]" aria-label="@L[_portalTopBar.NotificationsToggleTextKey]">
                         <span class="portal-topbar__summary-icon">
-                            <span class="portal-topbar__icon portal-topbar__icon--notifications@(_portalTopBar.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
+                            <span class="portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
                             <span class="portal-topbar__notification-badge" data-portal-topbar-notification-badge @attributes="HiddenWhen(_portalTopBar.UnreadNotificationCount == 0)">
                                 @NotificationBadgeText(_portalTopBar.UnreadNotificationCount)
                             </span>
@@ -342,26 +342,8 @@
                     </summary>
                     <div class="portal-topbar__notifications-menu portal-topbar__tray portal-topbar__tray--notifications">
                         <div class="portal-topbar__tray-header">
-                            <span class="portal-topbar__tray-icon portal-topbar__icon portal-topbar__icon--notifications@(_portalTopBar.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
+                            <span class="portal-topbar__tray-icon portal-topbar__icon portal-topbar__icon--notifications" aria-hidden="true"></span>
                             <span>@L[_portalTopBar.NotificationsToggleTextKey]</span>
-                            <form method="post"
-                                  action="@_portalTopBar.NotificationMuteUrl"
-                                  class="portal-topbar__notifications-mute-form"
-                                  data-portal-topbar-notification-mute-form
-                                  data-mute-text="@L["Do not disturb"]"
-                                  data-unmute-text="@L["Unmute notifications"]"
-                                  data-enhance="false">
-                                <AntiforgeryToken />
-                                <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
-                                <input type="hidden" name="muted" value="@(_portalTopBar.DoNotDisturb ? "false" : "true")" data-portal-topbar-notification-mute-value />
-                                <button type="submit"
-                                        class="portal-topbar__tray-icon-button"
-                                        aria-pressed="@(_portalTopBar.DoNotDisturb ? "true" : "false")"
-                                        title="@(_portalTopBar.DoNotDisturb ? L["Unmute notifications"] : L["Do not disturb"])"
-                                        aria-label="@(_portalTopBar.DoNotDisturb ? L["Unmute notifications"] : L["Do not disturb"])">
-                                    <span class="portal-topbar__icon portal-topbar__icon--notifications@(_portalTopBar.NotificationsMuted ? " is-muted" : "")" data-portal-topbar-notifications-icon aria-hidden="true"></span>
-                                </button>
-                            </form>
                         </div>
                         <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
                         <div class="portal-topbar__tray-body">

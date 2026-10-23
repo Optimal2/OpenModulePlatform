@@ -296,11 +296,6 @@
     --portal-topbar-icon: url("../icons/notifications.svg");
 }
 
-/* Muted: the crossed-out bell, in the bar and in the tray alike. */
-.portal-topbar__icon--notifications.is-muted {
-    --portal-topbar-icon: url("../icons/notifications-off.svg");
-}
-
 .portal-topbar__icon--do-not-disturb {
     --portal-topbar-icon: url("../icons/do-not-disturb.svg");
 }
@@ -693,7 +688,7 @@ span.portal-topbar__nav-group-link {
 
 .portal-topbar__tray-header {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr);
     align-items: center;
     gap: 10px;
     min-height: 32px;
@@ -701,39 +696,6 @@ span.portal-topbar__nav-group-link {
     color: var(--portal-topbar-text-muted);
     font-size: 0.78rem;
     font-weight: 800;
-}
-
-/* The tray's own controls (the notification mute toggle) sit at the header's
-   right edge, on the title's row: an icon-only button in the tray's muted
-   colour that takes the surface tint on hover like the footer actions. */
-.portal-topbar__notifications-mute-form {
-    display: contents;
-}
-
-.portal-topbar__tray-icon-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--portal-topbar-text-muted);
-    cursor: pointer;
-}
-
-.portal-topbar__tray-icon-button .portal-topbar__icon {
-    width: 18px;
-    height: 18px;
-}
-
-.portal-topbar__tray-icon-button:hover,
-.portal-topbar__tray-icon-button:focus-visible {
-    background: var(--portal-topbar-surface-muted);
-    color: var(--portal-topbar-text);
-    outline: none;
 }
 
 .portal-topbar__tray-icon {
