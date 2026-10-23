@@ -41,6 +41,25 @@ function Assert-NonAsciiUnchanged {
     }
 }
 
+function Read-ModuleDefinitionText {
+    # Strip a UTF-8 BOM here rather than via File.ReadAllText, whose BOM detection
+    # swaps in a lenient decoder and would turn invalid bytes into U+FFFD.
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $offset = 0
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $offset = 3
+    }
+
+    try {
+        return $script:Utf8NoBomStrict.GetString($bytes, $offset, $bytes.Length - $offset)
+    }
+    catch {
+        throw "Encoding guard: '$Path' is not valid UTF-8: $($_.Exception.Message)"
+    }
+}
+
 function Write-ModuleDefinitionText {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -275,7 +294,7 @@ foreach ($definition in @($manifest.moduleDefinitions)) {
 $definitionFiles = $definitionFiles | Sort-Object FullName
 
 foreach ($definitionFile in $definitionFiles) {
-    $jsonText = [System.IO.File]::ReadAllText($definitionFile.FullName, $script:Utf8NoBomStrict)
+    $jsonText = Read-ModuleDefinitionText -Path $definitionFile.FullName
     $document = ConvertFrom-JsonDocument -Json $jsonText -Depth $jsonDepth
 
     # runtimeMaintenance.steps carry SQL in the same fields as sqlScripts and are

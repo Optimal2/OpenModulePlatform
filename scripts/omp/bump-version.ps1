@@ -392,9 +392,27 @@ function Test-JsonFileWouldChange {
 $script:Utf8NoBomStrict = [Text.UTF8Encoding]::new($false, $true)
 
 function Read-Utf8Text {
+    <#
+        Reads the raw bytes and decodes them with the strict decoder. A leading
+        UTF-8 BOM is stripped here, not by File.ReadAllText: its BOM detection
+        swaps in a lenient decoder, so a BOM'd file with invalid bytes would
+        decode to U+FFFD instead of being refused. The next write normalizes
+        the file to UTF-8 without BOM.
+    #>
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    return [IO.File]::ReadAllText($Path, $script:Utf8NoBomStrict)
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $offset = 0
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $offset = 3
+    }
+
+    try {
+        return $script:Utf8NoBomStrict.GetString($bytes, $offset, $bytes.Length - $offset)
+    }
+    catch {
+        throw "Encoding guard: '$Path' is not valid UTF-8: $($_.Exception.Message)"
+    }
 }
 
 function Read-JsonFile {
@@ -466,6 +484,28 @@ function Assert-NonAsciiPreserved {
         -ActualNonAscii (Get-NonAsciiText -Text $writtenText) -Stage 'after the write'
 }
 
+function Assert-JsonFileWritable {
+    <#
+        Pre-write encoding check. The baseline is the file as it was before the
+        bump; a version bump only edits ASCII, so a non-ASCII difference already
+        visible in the text to be written is refused before any file is touched.
+        Returns the baseline non-ASCII text (the text to be written for a new file).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$FormattedJson
+    )
+
+    $expectedNonAscii = Get-NonAsciiText -Text $FormattedJson
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $expectedNonAscii = Get-NonAsciiText -Text (Read-Utf8Text -Path $Path)
+        Assert-NonAsciiUnchanged -Path $Path -ExpectedNonAscii $expectedNonAscii `
+            -ActualNonAscii (Get-NonAsciiText -Text $FormattedJson) -Stage 'in the text to be written'
+    }
+
+    return $expectedNonAscii
+}
+
 function Save-JsonFile {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -474,15 +514,9 @@ function Save-JsonFile {
 
     $formattedJson = Get-JsonFileText -Value $Value
     if ($PSCmdlet.ShouldProcess($Path, 'Write JSON file')) {
-        # The baseline is the file as it was before the bump; a new file is held
-        # to the text this script meant to write. A difference already visible in
-        # the text to be written is refused before the file is touched.
-        $expectedNonAscii = Get-NonAsciiText -Text $formattedJson
-        if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            $expectedNonAscii = Get-NonAsciiText -Text (Read-Utf8Text -Path $Path)
-            Assert-NonAsciiUnchanged -Path $Path -ExpectedNonAscii $expectedNonAscii `
-                -ActualNonAscii (Get-NonAsciiText -Text $formattedJson) -Stage 'in the text to be written'
-        }
+        # The selection was already checked before the first write; this repeat
+        # is the last line of defence for the file actually being written.
+        $expectedNonAscii = Assert-JsonFileWritable -Path $Path -FormattedJson $formattedJson
 
         [IO.File]::WriteAllText($Path, $formattedJson, $script:Utf8NoBomStrict)
         Assert-NonAsciiPreserved -Path $Path -ExpectedNonAscii $expectedNonAscii
@@ -1044,12 +1078,45 @@ try {
     }
 
     # Validate the entire selection before the first write, so a missing definition
-    # cannot leave earlier definitions or the manifest partially bumped.
+    # or an encoding-guard refusal cannot leave earlier definitions, widgets or the
+    # manifest partially bumped. Version edits are ASCII-only, so the encoding
+    # check on the current in-memory text holds for the text eventually written.
     foreach ($moduleDefinition in $selectedModuleDefinitions) {
+        $definitionKey = [string]$moduleDefinition.moduleKey
         $definitionPath = Resolve-FullPath -Path (Join-Path $repositoryRoot ([string]$moduleDefinition.path))
         if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
-            throw "Module definition '$($moduleDefinition.moduleKey)' file was not found: $definitionPath"
+            throw "Module definition '$definitionKey' file was not found: $definitionPath"
         }
+
+        # Load it once here, so the write below serializes the object checked here.
+        if ($null -eq $definitionJsonByKey[$definitionKey]) {
+            $definitionJsonByKey[$definitionKey] = Read-JsonFile -Path $definitionPath
+            $definitionPathByKey[$definitionKey] = $definitionPath
+        }
+    }
+
+    foreach ($entry in $definitionJsonByKey.GetEnumerator()) {
+        $candidatePath = [string]$definitionPathByKey[$entry.Key]
+        if ($null -eq $entry.Value -or [string]::IsNullOrWhiteSpace($candidatePath)) {
+            continue
+        }
+
+        $null = Assert-JsonFileWritable -Path $candidatePath -FormattedJson (Get-JsonFileText -Value $entry.Value)
+    }
+
+    foreach ($widgetEntry in $selectedWidgets) {
+        $widgetPath = Resolve-FullPath -Path (Join-Path $repositoryRoot ([string]$widgetEntry.Path))
+        if (-not (Test-Path -LiteralPath $widgetPath -PathType Leaf)) {
+            throw "Widget file was not found: $widgetPath"
+        }
+
+        $null = Assert-JsonFileWritable -Path $widgetPath -FormattedJson (Get-JsonFileText -Value (Read-JsonFile -Path $widgetPath))
+    }
+
+    # Every selected definition and widget adds an update below, so this is exactly
+    # the condition under which the manifest is written at the end.
+    if ($updates.Count -gt 0 -or $selectedModuleDefinitions.Count -gt 0 -or $selectedWidgets.Count -gt 0) {
+        $null = Assert-JsonFileWritable -Path $manifestPath -FormattedJson (Get-JsonFileText -Value $manifest)
     }
 
     # Persist any compatibleArtifacts changes made above.

@@ -65,6 +65,33 @@ Describe 'Bump-Version: non-ASCII text survives a bump byte-identically' {
             } | ConvertTo-Json -Depth 8) + "`n"
         }
 
+        function Invoke-ProbeBump {
+            param(
+                [Parameter(Mandatory = $true)][string]$Root,
+                [string[]]$ModuleKey = @('probe')
+            )
+
+            $global:LASTEXITCODE = 0
+            $records = & $script:bumpVersion -RepositoryRoot $Root -ModuleKey $ModuleKey -SkipRepositoryVersion 2>&1
+            $exitCode = $LASTEXITCODE
+            # Join the record messages, not Out-String: Windows PowerShell 5.1 wraps
+            # the rendered error at the console width, splitting the words matched.
+            $output = (@($records | ForEach-Object {
+                        if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
+                    })) -join "`n"
+            return [pscustomobject]@{ ExitCode = $exitCode; Output = $output }
+        }
+
+        function New-InvalidUtf8DefinitionBytes {
+            # C3 28 is a lead byte followed by a non-continuation byte: never valid UTF-8.
+            $ascii = (Get-ProbeDefinitionJson).Replace($script:probe, 'BAD!')
+            $bytes = [Collections.Generic.List[byte]]::new($script:utf8NoBom.GetBytes($ascii))
+            $index = [Text.Encoding]::ASCII.GetString($bytes.ToArray()).IndexOf('BAD!')
+            $bytes[$index] = 0xC3
+            $bytes[$index + 1] = 0x28
+            return $bytes.ToArray()
+        }
+
         function Assert-ProbeBumpPreservesNonAscii {
             param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -142,6 +169,76 @@ Describe 'Bump-Version: non-ASCII text survives a bump byte-identically' {
         $output | Should -Match 'U\+2019'
         # Refused before the write: the definition keeps its original bytes.
         ([IO.File]::ReadAllBytes($defPath) -join ',') | Should -BeExactly ($bytesBefore -join ',')
+    }
+
+    It 'bumps a definition written with a UTF-8 BOM and normalizes it to UTF-8 without BOM' {
+        $root = Join-Path $TestDrive 'bom'
+        New-ProbeRepository -Root $root -DefinitionJson (Get-ProbeDefinitionJson)
+        $defPath = Join-Path $root 'probe-def.json'
+        $plainBytes = [IO.File]::ReadAllBytes($defPath)
+        [IO.File]::WriteAllBytes($defPath, [byte[]](@(0xEF, 0xBB, 0xBF) + $plainBytes))
+
+        $result = Invoke-ProbeBump -Root $root
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+
+        $bytesAfter = [IO.File]::ReadAllBytes($defPath)
+        (($bytesAfter[0..2]) -join ',') | Should -Not -Be '239,187,191'
+        (Get-NonAsciiBytes -Bytes $bytesAfter) | Should -BeExactly (Get-NonAsciiBytes -Bytes $plainBytes)
+        $script:utf8NoBom.GetString($bytesAfter) | Should -Match '"definitionVersion":\s*"0\.0\.2"'
+    }
+
+    It 'refuses invalid UTF-8 bytes with the named encoding guard (BOM: <Bom>)' -ForEach @(
+        @{ Bom = $false }
+        @{ Bom = $true }
+    ) {
+        $root = Join-Path $TestDrive "invalid-bytes-$Bom"
+        New-ProbeRepository -Root $root -DefinitionJson (Get-ProbeDefinitionJson)
+        $defPath = Join-Path $root 'probe-def.json'
+        $manifestPath = Join-Path $root 'omp-components.json'
+        $bytes = @(New-InvalidUtf8DefinitionBytes)
+        if ($Bom) {
+            $bytes = @(0xEF, 0xBB, 0xBF) + $bytes
+        }
+        [IO.File]::WriteAllBytes($defPath, [byte[]]$bytes)
+        $manifestBefore = [IO.File]::ReadAllBytes($manifestPath)
+
+        $result = Invoke-ProbeBump -Root $root
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Encoding guard: '.*probe-def\.json' is not valid UTF-8"
+        ([IO.File]::ReadAllBytes($defPath) -join ',') | Should -BeExactly ($bytes -join ',')
+        ([IO.File]::ReadAllBytes($manifestPath) -join ',') | Should -BeExactly ($manifestBefore -join ',')
+    }
+
+    It 'refuses the whole selection before the first write when a later definition fails the guard' {
+        $root = Join-Path $TestDrive 'multi'
+        New-ProbeRepository -Root $root -DefinitionJson (Get-ProbeDefinitionJson)
+        # A second definition holding U+2019 as a JSON escape, which the rewrite
+        # would turn into the literal character.
+        $second = (Get-ProbeDefinitionJson).Replace('"probe"', '"probe2"').Replace([string][char]0x2019, ([string][char]92 + 'u2019'))
+        [IO.File]::WriteAllText((Join-Path $root 'probe2-def.json'), $second, $script:utf8NoBom)
+        $manifest = (@{
+            repositoryKey = 'probe'
+            repositoryVersion = '0.0.1'
+            components = @()
+            moduleDefinitions = @(
+                @{ moduleKey = 'probe'; definitionVersion = '0.0.1'; path = 'probe-def.json' }
+                @{ moduleKey = 'probe2'; definitionVersion = '0.0.1'; path = 'probe2-def.json' })
+        } | ConvertTo-Json -Depth 8) + "`n"
+        $manifestPath = Join-Path $root 'omp-components.json'
+        [IO.File]::WriteAllText($manifestPath, $manifest, $script:utf8NoBom)
+
+        $files = @('probe-def.json', 'probe2-def.json', 'omp-components.json')
+        $before = @{}
+        foreach ($file in $files) {
+            $before[$file] = [IO.File]::ReadAllBytes((Join-Path $root $file)) -join ','
+        }
+
+        $result = Invoke-ProbeBump -Root $root -ModuleKey 'probe', 'probe2'
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Encoding guard: non-ASCII text in '.*probe2-def\.json'"
+        foreach ($file in $files) {
+            ([IO.File]::ReadAllBytes((Join-Path $root $file)) -join ',') | Should -BeExactly $before[$file] -Because "$file must not be written"
+        }
     }
 }
 
