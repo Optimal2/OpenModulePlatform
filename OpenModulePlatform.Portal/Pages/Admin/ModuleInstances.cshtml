@@ -22,15 +22,31 @@
 }
 else
 {
-    <table class="grid">
+    <div class="toolbar top-gap">
+        <details class="list-filter" data-list-filter="module-instances-list">
+            <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+            <div class="list-filter__menu">
+                <fieldset class="list-filter__group" data-filter-group="enabled">
+                    <legend>@L["Enabled"]</legend>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-equals="1" /> @L["Enabled"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-equals="0" /> @L["Disabled"]</label>
+                </fieldset>
+                <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+            </div>
+        </details>
+        <input type="search" class="list-search" data-list-search="module-instances-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="module-instances-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+    </div>
+    <div class="empty-state" data-list-empty="module-instances-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="module-instances-list" class="grid sortable-list" data-sortable-list data-page-size="50">
         <thead>
             <tr>
-                <th>@L["Instance"]</th>
-                <th>@L["Module"]</th>
-                <th>@L["Module instance key"]</th>
-                <th>@L["Display name"]</th>
-                <th>@L["Enabled"]</th>
-                            <th>@L["Actions"]</th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Instance"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module instance key"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Display name"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
+                <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -41,7 +57,7 @@ else
                 <td><code>@row.ModuleKey</code></td>
                 <td><code>@row.ModuleInstanceKey</code></td>
                 <td>@row.DisplayName</td>
-                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td data-sort-value="@(row.IsEnabled ? 1 : 0)"><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
                 <td class="admin-action-cell">
                     <a class="action-link admin-icon-button admin-icon-button--edit"
                        href="~/admin/moduleinstanceedit?id=@row.ModuleInstanceId"
@@ -54,4 +70,7 @@ else
         }
         </tbody>
     </table>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="module-instances-list" hidden>@L["Show more"]</button>
+    </div>
 }

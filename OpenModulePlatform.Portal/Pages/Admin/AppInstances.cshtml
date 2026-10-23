@@ -25,21 +25,37 @@
 }
 else
 {
+    <div class="toolbar top-gap">
+        <details class="list-filter" data-list-filter="app-instances-list">
+            <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+            <div class="list-filter__menu">
+                <fieldset class="list-filter__group" data-filter-group="allowed">
+                    <legend>@L["Allowed"]</legend>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="8" data-filter-equals="1" /> @L["Allowed"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="8" data-filter-equals="0" /> @L["Blocked"]</label>
+                </fieldset>
+                <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+            </div>
+        </details>
+        <input type="search" class="list-search" data-list-search="app-instances-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="app-instances-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+    </div>
+    <div class="empty-state" data-list-empty="app-instances-list" hidden>@L["No rows match the current filters."]</div>
     <div class="table-scroll app-instances-scroll">
-        <table class="grid app-instances-grid">
+        <table id="app-instances-list" class="grid sortable-list app-instances-grid" data-sortable-list data-page-size="50">
         <thead>
             <tr>
-                <th>@L["Instance"]</th>
-                <th>@L["Module instance"]</th>
-                <th>@L["App"]</th>
-                <th>@L["App instance key"]</th>
-                <th>@L["Host"]</th>
-                <th>@L["Route"]</th>
-                <th>@L["Installation"]</th>
-                <th>@L["Artifact"]</th>
-                <th>@L["Allowed"]</th>
-                <th>@L["Last seen"]</th>
-                <th>@L["Actions"]</th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Instance"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module instance"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App instance key"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Route"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Installation"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Artifact"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Allowed"]</button></th>
+                <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last seen"]</button></th>
+                <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -67,7 +83,7 @@ else
                 <td>@row.RoutePath</td>
                 <td>@row.InstallationName</td>
                 <td>@row.ArtifactVersion</td>
-                <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
+                <td data-sort-value="@(row.IsAllowed ? 1 : 0)"><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
                 <td data-sort-value="@OmpTime.UtcIso(row.LastSeenUtc)">@OmpTime.Format(row.LastSeenUtc)</td>
                 <td>
                     <div class="admin-icon-actions">
@@ -97,5 +113,8 @@ else
         }
         </tbody>
         </table>
+    </div>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="app-instances-list" hidden>@L["Show more"]</button>
     </div>
 }

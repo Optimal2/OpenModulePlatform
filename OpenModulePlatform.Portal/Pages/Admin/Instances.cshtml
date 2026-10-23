@@ -22,14 +22,30 @@
 }
 else
 {
-    <table class="grid">
+    <div class="toolbar top-gap">
+        <details class="list-filter" data-list-filter="instances-list">
+            <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+            <div class="list-filter__menu">
+                <fieldset class="list-filter__group" data-filter-group="enabled">
+                    <legend>@L["Enabled"]</legend>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="1" /> @L["Enabled"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="0" /> @L["Disabled"]</label>
+                </fieldset>
+                <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+            </div>
+        </details>
+        <input type="search" class="list-search" data-list-search="instances-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="instances-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+    </div>
+    <div class="empty-state" data-list-empty="instances-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="instances-list" class="grid sortable-list" data-sortable-list data-page-size="50">
         <thead>
             <tr>
-                <th>@L["Instance key"]</th>
-                <th>@L["Display name"]</th>
-                <th>@L["Installation profile"]</th>
-                <th>@L["Enabled"]</th>
-                            <th>@L["Actions"]</th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Instance key"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Display name"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Installation profile"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
+                <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -39,10 +55,13 @@ else
                 <td><code>@row.InstanceKey</code></td>
                 <td>@row.DisplayName</td>
                 <td>@row.InstanceTemplateKey</td>
-                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td data-sort-value="@(row.IsEnabled ? 1 : 0)"><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
                 <td><a class="action-link" href="~/admin/instanceedit?id=@row.InstanceId">@L["Edit"]</a></td>
             </tr>
         }
         </tbody>
     </table>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="instances-list" hidden>@L["Show more"]</button>
+    </div>
 }

@@ -25,18 +25,62 @@
 }
 else
 {
-    <table class="grid">
+    var environments = Model.Rows
+        .Select(r => r.Environment)
+        .Where(v => !string.IsNullOrWhiteSpace(v))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+    var osFamilies = Model.Rows
+        .Select(r => r.OsFamily)
+        .Where(v => !string.IsNullOrWhiteSpace(v))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    <div class="toolbar top-gap">
+        <details class="list-filter" data-list-filter="hosts-list">
+            <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+            <div class="list-filter__menu">
+                @if (environments.Count > 0)
+                {
+                    <fieldset class="list-filter__group" data-filter-group="environment">
+                        <legend>@L["Environment"]</legend>
+                        @foreach (var environment in environments)
+                        {
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-equals="@environment!.ToLowerInvariant()" /> @L[environment!]</label>
+                        }
+                    </fieldset>
+                }
+                @if (osFamilies.Count > 0)
+                {
+                    <fieldset class="list-filter__group" data-filter-group="os">
+                        <legend>@L["OS"]</legend>
+                        @foreach (var osFamily in osFamilies)
+                        {
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="5" data-filter-equals="@osFamily!.ToLowerInvariant()" /> @L[osFamily!]</label>
+                        }
+                    </fieldset>
+                }
+                <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+            </div>
+        </details>
+        <input type="search" class="list-search" data-list-search="hosts-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="hosts-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+    </div>
+    <div class="empty-state" data-list-empty="hosts-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="hosts-list" class="grid sortable-list" data-sortable-list data-page-size="50">
         <thead>
             <tr>
-                <th>@L["Instance"]</th>
-                <th>@L["Host key"]</th>
-                <th>@L["Display name"]</th>
-                <th>@L["Base URL"]</th>
-                <th>@L["Environment"]</th>
-                <th>@L["OS"]</th>
-                <th>@L["Architecture"]</th>
-                <th>@L["Last seen"]</th>
-                            <th>@L["Actions"]</th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Instance"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host key"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Display name"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Base URL"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Environment"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["OS"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Architecture"]</button></th>
+                <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last seen"]</button></th>
+                <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -47,8 +91,8 @@ else
                 <td><code>@row.HostKey</code></td>
                 <td>@row.DisplayName</td>
                 <td><code>@row.BaseUrl</code></td>
-                <td>@(string.IsNullOrWhiteSpace(row.Environment) ? string.Empty : L[row.Environment].Value)</td>
-                <td>@(string.IsNullOrWhiteSpace(row.OsFamily) ? string.Empty : L[row.OsFamily].Value)</td>
+                <td data-sort-value="@row.Environment?.ToLowerInvariant()">@(string.IsNullOrWhiteSpace(row.Environment) ? string.Empty : L[row.Environment].Value)</td>
+                <td data-sort-value="@row.OsFamily?.ToLowerInvariant()">@(string.IsNullOrWhiteSpace(row.OsFamily) ? string.Empty : L[row.OsFamily].Value)</td>
                 <td>@(string.IsNullOrWhiteSpace(row.Architecture) ? string.Empty : L[row.Architecture].Value)</td>
                 <td data-sort-value="@OmpTime.UtcIso(row.LastSeenUtc)">@OmpTime.Format(row.LastSeenUtc)</td>
                 <td><a class="action-link" href="~/admin/hostedit?id=@row.HostId">@L["Edit"]</a></td>
@@ -56,4 +100,7 @@ else
         }
         </tbody>
     </table>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="hosts-list" hidden>@L["Show more"]</button>
+    </div>
 }

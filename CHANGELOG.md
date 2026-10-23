@@ -87,6 +87,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The Instances, Hosts, Module instances and App instances admin lists use
+  the shared list component.** The four pages render the same rows and
+  actions as before but through `omp-lists` (sortable columns, row search, a
+  row counter, filters on Enabled/Allowed, Environment and OS,
+  and paging at 50 rows), so they gain the list features every other admin
+  list already has, including page search's reveal.
+
 - **The theme menu has a heading.** The top bar's theme menu opens with a
   heading row (icon and "Theme") and a rule above its options, the same
   shape as the language, notification and message menus.
