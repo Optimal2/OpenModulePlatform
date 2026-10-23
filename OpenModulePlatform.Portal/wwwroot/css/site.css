@@ -2362,37 +2362,507 @@ textarea {
     margin-bottom: 14px;
 }
 
-.settings-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 16px 0 12px;
+/* The settings page is a centred column narrower than the content shell:
+   the header and the shell (menu left, panel right) share it. */
+.settings-page {
+    max-width: 1400px;
+    margin: 0 auto;
 }
 
-.settings-tabs__link {
-    display: inline-flex;
+/* The menu and the panel are always the same height: the shell's, which
+   the script sets from the room left under it (down to a little below the
+   popover's bottom edge), so neither grows with its content; what does not
+   fit scrolls inside its own box. */
+.settings-layout {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+    height: var(--settings-layout-height, auto);
+    margin-top: 16px;
+}
+
+/* The section menu: a card with one link per section, stacked. */
+.settings-nav {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    min-height: 0;
+    padding: 10px;
+    overflow: auto;
+}
+
+.settings-nav__link {
+    display: flex;
     align-items: center;
     min-height: 38px;
     padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: 10px;
     color: var(--text);
     text-decoration: none;
+    font-weight: 600;
 }
 
-.settings-tabs__link:hover,
-.settings-tabs__link.is-active {
+.settings-nav__link:hover {
+    background: var(--accent);
+    color: var(--link-hover);
+}
+
+.settings-nav__link.is-active {
     border-color: var(--link);
     background: var(--accent);
     color: var(--link-hover);
 }
 
-/* The settings page is a centred column narrower than the content shell:
-   no lists live here, and the header, the tabs and the cards share it. */
-.settings-page {
-    max-width: 800px;
-    margin: 0 auto;
+.settings-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+}
+
+.settings-subheading {
+    margin: 0 0 12px;
+    font-size: 1rem;
+    text-align: center;
+}
+
+/* The rows: one boxed line per setting, the label on the left and the
+   control (an info badge, then a switch, a drop-down or a button) on the
+   right. A form may be the row itself, so the row is a flex box whatever
+   element carries it. */
+.settings-rows {
+    display: grid;
+    gap: 10px;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 52px;
+    padding: 8px 12px 8px 16px;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.settings-row__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+}
+
+.settings-row__label .settings-row__status {
+    display: block;
+    margin-top: 2px;
+    font-weight: 400;
+    font-size: 0.85rem;
+}
+
+.settings-row__control {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.settings-row__control .info-badge {
+    flex: none;
+}
+
+/* The switch is a label with the real checkbox lying over the omp-switch
+   unseen, so a click and the keyboard both reach the checkbox and the form
+   posts it like any other; the omp-switch draws the state. */
+.settings-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.settings-switch input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.settings-switch:has(input:checked) > .omp-switch {
+    background: var(--omp-link);
+}
+
+.settings-switch:has(input:checked) > .omp-switch .omp-switch__knob {
+    transform: translateX(14px);
+}
+
+.settings-switch:has(input:focus-visible) {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+.settings-select {
+    min-width: 10rem;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: center;
+    text-align-last: center;
+}
+
+/* A section with a settings form and action rows after it. */
+.settings-sections {
+    display: grid;
+    gap: 10px;
+}
+
+/* The rules above and below give these elements a display of their own,
+   which would beat the hidden attribute; the attribute wins here. */
+.settings-row__label .settings-row__status[hidden],
+.settings-profile-image__preview img[hidden],
+.settings-profile-image__preview span[hidden],
+.admin-icon-button.settings-reset-image[hidden],
+.settings-unsaved[popover][hidden] {
+    display: none;
+}
+
+/* The user section: the card with the avatar, the name and the id above
+   the rows; a text field and the file controls on the right of their rows;
+   validation on its own line under the row. */
+.settings-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-muted);
+}
+
+.settings-profile-card .settings-profile-image__preview {
+    width: 72px;
+    height: 72px;
+    flex: none;
+}
+
+.settings-profile-card__text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.settings-profile-card__text strong {
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+}
+
+.settings-input {
+    min-width: 16rem;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.settings-row__validation {
+    flex-basis: 100%;
+}
+
+.settings-row__validation:empty {
+    display: none;
+}
+
+/* "Choose file" is the file input's label; the input lies over it unseen,
+   so a click and the keyboard both reach the input itself. */
+.settings-file-label {
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.settings-file-label input[type="file"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.settings-file-label:has(input:focus-visible) {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+/* Two classes: the shared stylesheet that sets the pencil loads after this
+   one, so a single class would lose. The path is absolute like the shared
+   icons' paths: a relative one resolves against the using rule's sheet. */
+.admin-icon-button.settings-reset-image {
+    --admin-action-icon: url("/icons/restart-alt.svg");
+}
+
+/* "Unsaved changes": a non-modal popover floating a little above the bottom
+   of the screen, centred, with Discard and Save. It is in the top layer so
+   nothing covers it, and the shadow says it lies above the page; it blocks
+   nothing, the page stays usable behind it. It rises from the bottom edge
+   when it appears, quickly. */
+.settings-unsaved[popover] {
+    position: fixed;
+    inset: auto auto 32px 50%;
+    transform: translate(-50%, 0);
+    opacity: 1;
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 140ms ease-out, display 140ms allow-discrete, overlay 140ms allow-discrete;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: min(640px, calc(100vw - 32px));
+    max-width: none;
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--link);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28), 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.settings-unsaved[popover]:not(:popover-open) {
+    display: none;
+}
+
+@starting-style {
+    .settings-unsaved[popover]:popover-open {
+        transform: translate(-50%, 24px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-unsaved[popover] {
+        transition: none;
+    }
+}
+
+/* While something is unsaved the form keeps room at the bottom of its
+   scrolling box, where the popover floats, so the last row can be scrolled
+   above it; the box itself keeps its height. */
+.settings-form.is-dirty {
+    padding-bottom: 88px;
+}
+
+.settings-unsaved__text {
+    font-weight: 600;
+}
+
+.settings-unsaved__actions {
+    display: flex;
+    gap: 8px;
+    flex: none;
+}
+
+.settings-unsaved__save {
+    border-color: var(--omp-success-border);
+    background: var(--omp-success-bg);
+    color: var(--omp-success-text);
+}
+
+.settings-unsaved__save:hover,
+.settings-unsaved__save:focus-visible {
+    border-color: var(--omp-success-border);
+    background: var(--omp-success-bg-hover, var(--omp-success-bg));
+    color: var(--omp-success-text);
+}
+
+@media (max-width: 720px) {
+    .settings-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .settings-nav {
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        overflow-x: auto;
+    }
+
+    .settings-nav__link {
+        justify-content: center;
+    }
+
+    .settings-row {
+        flex-wrap: wrap;
+    }
+}
+
+.settings-profile-image__preview {
+    width: 72px;
+    height: 72px;
+    flex: none;
+}
+
+.settings-profile-card__text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.settings-profile-card__text strong {
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+}
+
+.settings-input {
+    min-width: 16rem;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.settings-row__validation {
+    flex-basis: 100%;
+}
+
+.settings-row__validation:empty {
+    display: none;
+}
+
+/* "Choose file" is the file input's label; the input lies over it unseen,
+   so a click and the keyboard both reach the input itself. */
+.settings-file-label {
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.settings-file-label input[type="file"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.settings-file-label:has(input:focus-visible) {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+/* Two classes: the shared stylesheet that sets the pencil loads after this
+   one, so a single class would lose. The path is absolute like the shared
+   icons' paths: a relative one resolves against the using rule's sheet. */
+.admin-icon-button.settings-reset-image {
+    --admin-action-icon: url("/icons/restart-alt.svg");
+}
+
+/* "Unsaved changes": a non-modal popover floating a little above the bottom
+   of the screen, centred, with Discard and Save. It is in the top layer so
+   nothing covers it, and the shadow says it lies above the page; it blocks
+   nothing, the page stays usable behind it. It rises from the bottom edge
+   when it appears, quickly. */
+.settings-unsaved[popover] {
+    position: fixed;
+    inset: auto auto 32px 50%;
+    transform: translate(-50%, 0);
+    opacity: 1;
+    transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 140ms ease-out, display 140ms allow-discrete, overlay 140ms allow-discrete;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: min(640px, calc(100vw - 32px));
+    max-width: none;
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--link);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28), 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.settings-unsaved[popover]:not(:popover-open) {
+    display: none;
+}
+
+@starting-style {
+    .settings-unsaved[popover]:popover-open {
+        transform: translate(-50%, 24px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-unsaved[popover] {
+        transition: none;
+    }
+}
+
+/* While something is unsaved the form keeps room at the bottom of its
+   scrolling box, where the popover floats, so the last row can be scrolled
+   above it; the box itself keeps its height. */
+.settings-form.is-dirty {
+    padding-bottom: 88px;
+}
+
+.settings-unsaved__text {
+    font-weight: 600;
+}
+
+.settings-unsaved__actions {
+    display: flex;
+    gap: 8px;
+    flex: none;
+}
+
+.settings-unsaved__save {
+    border-color: var(--omp-success-border);
+    background: var(--omp-success-bg);
+    color: var(--omp-success-text);
+}
+
+.settings-unsaved__save:hover,
+.settings-unsaved__save:focus-visible {
+    border-color: var(--omp-success-border);
+    background: var(--omp-success-bg-hover, var(--omp-success-bg));
+    color: var(--omp-success-text);
+}
+
+@media (max-width: 720px) {
+    .settings-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .settings-nav {
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        overflow-x: auto;
+    }
+
+    .settings-nav__link {
+        justify-content: center;
+    }
+
+    .settings-row {
+        flex-wrap: wrap;
+    }
 }
 
 /* Rows of settings actions inside one card: the explanation left, the
@@ -2468,11 +2938,6 @@ textarea {
     width: 100%;
     height: 100%;
     object-fit: cover;
-}
-
-.settings-profile-image__form {
-    display: grid;
-    gap: 12px;
 }
 
 code {

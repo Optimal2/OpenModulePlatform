@@ -2,44 +2,53 @@
 @model OpenModulePlatform.Portal.Pages.Account.SettingsModel
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+    var headerInfo = ompBranding.ApplyPlatformName(L["Manage your OMP user profile and portal defaults."].Value);
 }
 
-@* The page has no lists, so it is a narrower centred column than the
-   1400 px content shell; the header and the tabs follow the column. *@
+@* A settings shell: the sections in a menu on the left, the chosen section's
+   rows in a panel on the right. Each row is a boxed line with its label on
+   the left and its control on the right. Every section with settings is one
+   form that saves on request: as soon as something differs from what is
+   stored, a non-modal "Unsaved changes" popover offers Discard and Save, and
+   leaving with changes pending asks first. Red buttons are actions that run
+   at once, after a confirmation. *@
 <div class="settings-page">
 <section class="page-header">
     <div>
-        <div class="eyebrow">@L["Settings"]</div>
-        <h2>@L["Settings"]</h2>
-        <p class="lede">@ompBranding.ApplyPlatformName(L["Manage your OMP user profile and portal defaults."].Value)</p>
+        <h2>@L["Settings"] <span class="info-badge" tabindex="0" role="img" title="@headerInfo" aria-label="@headerInfo">i</span></h2>
     </div>
 </section>
 
 @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 
-<nav class="settings-tabs" aria-label="@L["Settings"]">
-    <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.UserTab) ? " is-active" : string.Empty)"
+<div class="settings-layout">
+<nav class="settings-nav card" aria-label="@L["Settings"]">
+    <a class="settings-nav__link@(Model.IsActiveTab(SettingsModel.UserTab) ? " is-active" : string.Empty)"
        asp-page="/Account/Settings"
        asp-route-tab="@SettingsModel.UserTab">@L["User"]</a>
     @if (Model.HasOmpUser)
     {
-        <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.PortalTab) ? " is-active" : string.Empty)"
+        <a class="settings-nav__link@(Model.IsActiveTab(SettingsModel.SystemTab) ? " is-active" : string.Empty)"
            asp-page="/Account/Settings"
-           asp-route-tab="@SettingsModel.PortalTab">@ompBranding.PortalName</a>
+           asp-route-tab="@SettingsModel.SystemTab">@L["System"]</a>
+        <a class="settings-nav__link@(Model.IsActiveTab(SettingsModel.DashboardTab) ? " is-active" : string.Empty)"
+           asp-page="/Account/Settings"
+           asp-route-tab="@SettingsModel.DashboardTab">@L["Dashboard"]</a>
         @if (Model.IsPortalAdmin)
         {
-            <a class="settings-tabs__link@(Model.IsActiveTab(SettingsModel.AdminTab) ? " is-active" : string.Empty)"
+            <a class="settings-nav__link@(Model.IsActiveTab(SettingsModel.AdminTab) ? " is-active" : string.Empty)"
                asp-page="/Account/Settings"
                asp-route-tab="@SettingsModel.AdminTab">@L["Admin"]</a>
         }
     }
 </nav>
 
+<div class="settings-panel card" data-settings-panel>
 @if (Model.IsActiveTab(SettingsModel.UserTab))
 {
     @if (Model.CanCreateOmpUser)
     {
-        <form method="post" asp-page-handler="CreateAccount" class="card form-grid">
+        <form method="post" asp-page-handler="CreateAccount" class="form-grid">
             <h3>@ompBranding.ApplyPlatformName(L["Create your OMP account"].Value)</h3>
             <p class="lede">@ompBranding.ApplyPlatformName(L["You are signed in with Windows/AD, but this sign-in is not linked to an OMP user account yet."].Value)</p>
             <p>@ompBranding.ApplyPlatformName(L["Create an OMP account to save profile settings and link this AD sign-in to your account."].Value)</p>
@@ -57,7 +66,7 @@
     }
     else if (!Model.HasOmpUser)
     {
-        <section class="card form-grid">
+        <section class="form-grid">
             <h3>@ompBranding.ApplyPlatformName(L["OMP account creation is disabled."].Value)</h3>
             <p class="lede">
                 @(string.IsNullOrWhiteSpace(Model.OmpUserCreationUnavailableMessage)
@@ -68,157 +77,245 @@
     }
     else
     {
-        <form method="post" asp-page-handler="User" class="card form-grid">
-            <div class="form-field">
-                <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
-                <input asp-for="UserInput.DisplayName" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" />
-                <span asp-validation-for="UserInput.DisplayName" class="field-validation-error"></span>
-            </div>
+        @* What other people see: the display name and the profile image. The
+           avatar card previews the chosen image; the reset arrow drops the
+           stored one. *@
+        <form method="post"
+              asp-page-handler="User"
+              enctype="multipart/form-data"
+              class="settings-form settings-user"
+              data-settings-form
+              data-settings-user
+              data-original-name="@Model.SavedDisplayName"
+              data-has-image="@(string.IsNullOrWhiteSpace(Model.ProfileImageUrl) ? "false" : "true")"
+              data-unsaved-message="@L["You have unsaved changes."]"
+              data-unsaved-save="@L["Save"]"
+              data-unsaved-keep="@L["Keep editing"]">
+            <input type="hidden" asp-for="ReturnTab" data-settings-return-tab />
+            <input type="hidden" asp-for="RemoveProfileImage" value="false" data-settings-remove-image />
 
-            <div class="toolbar">
-                <button type="submit">@L["Save"]</button>
-            </div>
-        </form>
-
-        <section class="card form-grid settings-profile-image">
-            <h3>@L["Profile image"]</h3>
-            <div class="settings-profile-image__preview">
-                @if (!string.IsNullOrWhiteSpace(Model.ProfileImageUrl))
-                {
-                    <img src="@Model.ProfileImageUrl" alt="" />
-                }
-                else
-                {
-                    <span aria-hidden="true">@Model.ProfileImageInitials</span>
-                }
-            </div>
-            @if (!string.IsNullOrWhiteSpace(Model.ProfileImageFileName))
-            {
-                <p class="muted">@Model.ProfileImageFileName</p>
-            }
-            <p class="muted">@L["Use a PNG, JPEG, or WebP image up to 2 MB."]</p>
-
-            <form method="post" asp-page-handler="ProfileImage" enctype="multipart/form-data" class="settings-profile-image__form">
-                <input type="hidden" asp-for="UserInput.DisplayName" />
-                <div class="form-field">
-                    <label asp-for="ProfileImageUpload">@L["Upload profile image"]</label>
-                    <input asp-for="ProfileImageUpload" type="file" accept="image/png,image/jpeg,image/webp" />
-                    <span asp-validation-for="ProfileImageUpload" class="field-validation-error"></span>
+            <div class="settings-profile-card">
+                <div class="settings-profile-image__preview" data-settings-avatar>
+                    <img src="@Model.ProfileImageUrl" alt="" hidden="@string.IsNullOrWhiteSpace(Model.ProfileImageUrl)" data-settings-avatar-image />
+                    <span aria-hidden="true" hidden="@(!string.IsNullOrWhiteSpace(Model.ProfileImageUrl))" data-settings-avatar-initials>@Model.ProfileImageInitials</span>
                 </div>
-                <div class="toolbar">
-                    <button type="submit">@L["Save"]</button>
+                <div class="settings-profile-card__text">
+                    <strong data-settings-card-name>@Model.SavedDisplayName</strong>
+                    <span class="muted">@L["User ID"]: @Model.CurrentUserId</span>
                 </div>
-            </form>
+            </div>
 
-            @if (!string.IsNullOrWhiteSpace(Model.ProfileImageUrl))
-            {
-                <form method="post" asp-page-handler="RemoveProfileImage">
-                    <div class="toolbar">
-                        <button type="submit" class="btn btn-danger">@L["Remove profile image"]</button>
+            <div class="settings-rows">
+                <div class="settings-row">
+                    <label class="settings-row__label" asp-for="UserInput.DisplayName">@L["Display name"]</label>
+                    <div class="settings-row__control">
+                        <input asp-for="UserInput.DisplayName" class="settings-input" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" data-settings-name />
                     </div>
-                </form>
-            }
-        </section>
+                    <span asp-validation-for="UserInput.DisplayName" class="field-validation-error settings-row__validation"></span>
+                </div>
+                <div class="settings-row">
+                    <span class="settings-row__label" id="settings-profile-image-label">
+                        @L["Profile image"]
+                        <span class="muted settings-row__status" data-settings-file-name hidden="@string.IsNullOrWhiteSpace(Model.ProfileImageFileName)">@Model.ProfileImageFileName</span>
+                    </span>
+                    <div class="settings-row__control">
+                        <span class="info-badge" tabindex="0" role="img" title="@L["Use a PNG, JPEG, or WebP image up to 2 MB."]" aria-label="@L["Use a PNG, JPEG, or WebP image up to 2 MB."]">i</span>
+                        <button type="button"
+                                class="admin-icon-button settings-reset-image"
+                                data-settings-reset-image
+                                hidden="@string.IsNullOrWhiteSpace(Model.ProfileImageUrl)"
+                                title="@L["Reset profile image"]"
+                                aria-label="@L["Reset profile image"]">
+                            <span class="visually-hidden">@L["Reset profile image"]</span>
+                        </button>
+                        <label class="btn btn-secondary settings-file-label">
+                            @L["Choose file"]
+                            <input asp-for="ProfileImageUpload" type="file" accept="image/png,image/jpeg,image/webp" aria-labelledby="settings-profile-image-label" data-settings-file />
+                        </label>
+                    </div>
+                    <span asp-validation-for="ProfileImageUpload" class="field-validation-error settings-row__validation"></span>
+                </div>
+            </div>
+
+            <partial name="_SettingsUnsaved" />
+        </form>
     }
 }
-else if (Model.IsActiveTab(SettingsModel.PortalTab))
+else if (Model.IsActiveTab(SettingsModel.SystemTab))
 {
-    <form method="post" asp-page-handler="Portal" class="card form-grid">
-        <h3>@ompBranding.PortalName</h3>
-        <div class="form-field checkbox-row checkbox-row--boxed">
-            <input asp-for="PortalInput.TopbarDropdownsOpenOnHover" type="checkbox" />
-            <label for="PortalInput_TopbarDropdownsOpenOnHover">@L["Open topbar menus on hover"]</label>
-        </div>
-        <p class="muted">@L["When this is turned off, menus open only by click or keyboard shortcut."]</p>
-
-        <div class="form-field checkbox-row checkbox-row--boxed">
-            <input asp-for="PortalInput.ShowPortalNavbar" type="checkbox" />
-            <label for="PortalInput_ShowPortalNavbar">@L["Show dashboard navbar"]</label>
-        </div>
-        <p class="muted">@L["When this is turned off, the dashboard navbar below the topbar is hidden."]</p>
-
-        @if (Model.NotificationToastsGloballyEnabled)
-        {
-            <div class="form-field checkbox-row checkbox-row--boxed">
-                <input asp-for="PortalInput.NotificationToastsMuted" type="checkbox" />
-                <label for="PortalInput_NotificationToastsMuted">@L["Mute toast notifications"]</label>
-            </div>
-            <p class="muted">@L["When this is turned on, notification and message toasts are not shown."]</p>
-
-            <div class="form-field checkbox-row checkbox-row--boxed">
-                <input asp-for="PortalInput.NotificationSoundsEnabled" type="checkbox" />
-                <label for="PortalInput_NotificationSoundsEnabled">@L["Play notification sounds"]</label>
-            </div>
-            <p class="muted">@L["When this is turned off, notification and message toasts are shown silently."]</p>
-        }
-
-        <div class="form-field checkbox-row checkbox-row--boxed">
-            <input asp-for="PortalInput.PageSearchOverridesCtrlF" type="checkbox" />
-            <label for="PortalInput_PageSearchOverridesCtrlF">@L["Let Ctrl+F open the page search"]</label>
-        </div>
-        <p class="muted">@L["When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it."]</p>
-
-        <div class="toolbar">
-            <button type="submit">@L["Save"]</button>
-        </div>
-    </form>
-
-    @* One card for the dashboard: a row per action, its explanation left and
-       its button right. "Put the menu back" clears browser-side state, so it
-       is a button rather than a post; the two destructive actions post from
-       their own forms and keep their confirmations. *@
-    <section class="card form-grid" data-dashboard-menu-settings data-dashboard-draft-key="@Model.DashboardDraftKey">
-        <h3>@L["Dashboard"]</h3>
-        <div class="settings-actions">
-            <div class="settings-actions__row">
-                <div class="settings-actions__text">
-                    <p class="muted">@L["The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner."]</p>
-                    <p class="muted settings-actions__status" data-dashboard-menu-reset-status hidden>@L["The menu will be back in its corner the next time the dashboard opens."]</p>
+    <form method="post"
+          asp-page-handler="System"
+          class="settings-form"
+          data-settings-form
+          data-unsaved-message="@L["You have unsaved changes."]"
+          data-unsaved-save="@L["Save"]"
+          data-unsaved-keep="@L["Keep editing"]">
+        <input type="hidden" asp-for="ReturnTab" data-settings-return-tab />
+        <div class="settings-rows">
+            <div class="settings-row">
+                <label class="settings-row__label" for="settings-theme">@L["Theme"]</label>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["The theme is stored in this browser."]" aria-label="@L["The theme is stored in this browser."]">i</span>
+                    <select id="settings-theme" name="Theme" class="settings-select" data-settings-theme>
+                        <option value="system">@L["System"]</option>
+                        <option value="light">@L["Light"]</option>
+                        <option value="dark">@L["Dark"]</option>
+                    </select>
                 </div>
-                <button type="button" class="btn btn-secondary" data-dashboard-menu-reset-position-button>@L["Put the menu back"]</button>
+            </div>
+            <div class="settings-row">
+                <label class="settings-row__label" asp-for="PortalInput.Culture">@L["Language"]</label>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["The language is stored in this browser."]" aria-label="@L["The language is stored in this browser."]">i</span>
+                    <select asp-for="PortalInput.Culture" class="settings-select">
+                        @foreach (var language in Model.LanguageOptions)
+                        {
+                            <option value="@language.Culture">@language.DisplayText</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="settings-row">
+                <label class="settings-row__label" asp-for="PortalInput.TopbarDropdownsOpenOnHover">@L["Open topbar menus on hover"]</label>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["When this is turned off, menus open only by click or keyboard shortcut."]" aria-label="@L["When this is turned off, menus open only by click or keyboard shortcut."]">i</span>
+                    <label class="settings-switch">
+                        <input asp-for="PortalInput.TopbarDropdownsOpenOnHover" type="checkbox" />
+                        <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                    </label>
+                </div>
+            </div>
+            @if (Model.NotificationToastsGloballyEnabled)
+            {
+                <div class="settings-row">
+                    <label class="settings-row__label" asp-for="PortalInput.NotificationToastsShown">@L["Toasts"]</label>
+                    <div class="settings-row__control">
+                        <span class="info-badge" tabindex="0" role="img" title="@L["When this is turned off, notification and message toasts are not shown."]" aria-label="@L["When this is turned off, notification and message toasts are not shown."]">i</span>
+                        <label class="settings-switch">
+                            <input asp-for="PortalInput.NotificationToastsShown" type="checkbox" />
+                            <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-row">
+                    <label class="settings-row__label" asp-for="PortalInput.NotificationSoundsEnabled">@L["Notification sounds"]</label>
+                    <div class="settings-row__control">
+                        <span class="info-badge" tabindex="0" role="img" title="@L["When this is turned off, notification and message toasts are shown silently."]" aria-label="@L["When this is turned off, notification and message toasts are shown silently."]">i</span>
+                        <label class="settings-switch">
+                            <input asp-for="PortalInput.NotificationSoundsEnabled" type="checkbox" />
+                            <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                        </label>
+                    </div>
+                </div>
+            }
+            <div class="settings-row">
+                <label class="settings-row__label" asp-for="PortalInput.PageSearchOverridesCtrlF">@L["Let Ctrl+F open the page search"]</label>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it."]" aria-label="@L["When this is turned on, Ctrl+F (Cmd+F on a Mac) opens the page search instead of the browser's find, on pages that have it. Ctrl+Shift+F always opens it."]">i</span>
+                    <label class="settings-switch">
+                        <input asp-for="PortalInput.PageSearchOverridesCtrlF" type="checkbox" />
+                        <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <partial name="_SettingsUnsaved" />
+    </form>
+}
+else if (Model.IsActiveTab(SettingsModel.DashboardTab))
+{
+    <div class="settings-sections" data-dashboard-menu-settings data-dashboard-draft-key="@Model.DashboardDraftKey">
+        <form method="post"
+              asp-page-handler="Dashboard"
+              class="settings-form"
+              data-settings-form
+              data-unsaved-message="@L["You have unsaved changes."]"
+              data-unsaved-save="@L["Save"]"
+              data-unsaved-keep="@L["Keep editing"]">
+            <input type="hidden" asp-for="ReturnTab" data-settings-return-tab />
+            <div class="settings-rows">
+                <div class="settings-row">
+                    <label class="settings-row__label" asp-for="PortalInput.ShowPortalNavbar">@L["Show dashboard navbar"]</label>
+                    <div class="settings-row__control">
+                        <span class="info-badge" tabindex="0" role="img" title="@L["When this is turned off, the dashboard navbar below the topbar is hidden."]" aria-label="@L["When this is turned off, the dashboard navbar below the topbar is hidden."]">i</span>
+                        <label class="settings-switch">
+                            <input asp-for="PortalInput.ShowPortalNavbar" type="checkbox" />
+                            <span class="omp-switch" aria-hidden="true"><span class="omp-switch__knob"></span></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <partial name="_SettingsUnsaved" />
+        </form>
+
+        <div class="settings-rows">
+            <div class="settings-row">
+                <span class="settings-row__label">
+                    @L["Put the menu back"]
+                    <span class="muted settings-row__status" data-dashboard-menu-reset-status hidden>@L["The menu will be back in its corner the next time the dashboard opens."]</span>
+                </span>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner."]" aria-label="@L["The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner."]">i</span>
+                    <button type="button"
+                            class="btn btn-danger"
+                            data-dashboard-menu-reset-position-button
+                            data-settings-confirm="@L["This puts the dashboard menu back in its corner. Continue?"]"
+                            data-settings-confirm-ok="@L["Continue"]"
+                            data-settings-confirm-cancel="@L["Cancel"]">@L["Put the menu back"]</button>
+                </div>
             </div>
             <form method="post"
                   asp-page-handler="ResetDashboard"
-                  class="settings-actions__row"
+                  class="settings-row"
                   data-omp-confirm="@L["This resets your dashboard to the shared default layout. Continue?"]"
                   data-omp-confirm-ok="@L["Continue"]"
                   data-omp-confirm-cancel="@L["Cancel"]">
-                <p class="muted settings-actions__text">@L["Reset to the shared default dashboard layout."]</p>
-                <button type="submit" class="btn btn-danger">@L["Reset to default"]</button>
+                <span class="settings-row__label">@L["Reset to default"]</span>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["Reset to the shared default dashboard layout."]" aria-label="@L["Reset to the shared default dashboard layout."]">i</span>
+                    <button type="submit" class="btn btn-danger">@L["Reset to default"]</button>
+                </div>
             </form>
             <form method="post"
                   asp-page-handler="ClearDashboard"
-                  class="settings-actions__row"
+                  class="settings-row"
                   data-omp-confirm="@L["This removes all widgets from your dashboard. Continue?"]"
                   data-omp-confirm-ok="@L["Continue"]"
                   data-omp-confirm-cancel="@L["Cancel"]">
-                <p class="muted settings-actions__text">@L["Clear your dashboard and keep it empty until you add widgets again."]</p>
-                <button type="submit" class="btn btn-danger">@L["Clear dashboard"]</button>
+                <span class="settings-row__label">@L["Clear dashboard"]</span>
+                <div class="settings-row__control">
+                    <span class="info-badge" tabindex="0" role="img" title="@L["Clear your dashboard and keep it empty until you add widgets again."]" aria-label="@L["Clear your dashboard and keep it empty until you add widgets again."]">i</span>
+                    <button type="submit" class="btn btn-danger">@L["Clear dashboard"]</button>
+                </div>
             </form>
         </div>
-    </section>
+    </div>
 }
 else if (Model.IsPortalAdmin)
 {
-    <section class="card form-grid">
-        <h3>@L["Dashboard"]</h3>
-        <p class="muted">@L["Default dashboard layout"]</p>
-
+    <h3 class="settings-subheading">@L["Dashboard"]</h3>
+    <div class="settings-rows">
         <form method="post"
               asp-page-handler="SaveDefaultDashboard"
+              class="settings-row"
               data-omp-confirm="@L["This replaces the shared default dashboard layout with your current dashboard layout. Continue?"]"
               data-omp-confirm-ok="@L["Continue"]"
               data-omp-confirm-cancel="@L["Cancel"]">
-            <p>@L["Users without a personal dashboard layout use the shared default layout."]</p>
-            <div class="toolbar">
-                <button type="submit" class="btn btn-danger">@L["Save current layout as default"]</button>
+            <span class="settings-row__label">@L["Save current layout as default"]</span>
+            <div class="settings-row__control">
+                <span class="info-badge" tabindex="0" role="img" title="@L["Users without a personal dashboard layout use the shared default layout."]" aria-label="@L["Users without a personal dashboard layout use the shared default layout."]">i</span>
+                <button type="submit" class="btn btn-danger">@L["Save"]</button>
             </div>
         </form>
-    </section>
+    </div>
 }
+</div>
+</div>
 </div>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    <script src="~/js/portal-settings-dashboard-menu.js"></script>
+    <script src="~/js/portal-settings.js"></script>
 }

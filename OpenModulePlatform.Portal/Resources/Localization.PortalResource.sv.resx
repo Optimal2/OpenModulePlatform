@@ -1792,7 +1792,6 @@
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna toppmenyer vid hovring</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>När detta är avstängt öppnas menyer bara med klick eller kortkommando.</value></data>
   <data name="Mute toast notifications" xml:space="preserve"><value>Tysta toastnotiser</value></data>
-  <data name="When this is turned on, notification and message toasts are not shown." xml:space="preserve"><value>När detta är påslaget visas inte toastnotiser för notifikationer och meddelanden.</value></data>
   <data name="Definition versions" xml:space="preserve"><value>Definitionsversioner</value></data>
   <data name="Module definition versions" xml:space="preserve"><value>Moduldefinitionsversioner</value></data>
   <data name="Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review." xml:space="preserve"><value>Moduldefinitioner beskriver databas- och metadatakontraktet som artefaktversioner valideras mot. Äldre definitionsversioner finns kvar för granskning.</value></data>
@@ -3305,4 +3304,17 @@
   <data name="The uploaded file was not read. It must be a single UTF-8 text file of at most 1 MB, or a .zip containing one such file." xml:space="preserve"><value>Den uppladdade filen kunde inte läsas. Den måste vara en enda UTF-8-textfil på högst 1 MB, eller en .zip med en sådan fil.</value></data>
   <data name="Preview the removal impact before disabling or deleting this overlay." xml:space="preserve"><value>Förhandsgranska borttagningspåverkan innan du inaktiverar eller tar bort denna overlay.</value></data>
   <data name="Configuration overlays" xml:space="preserve"><value>Konfigurationsöverlägg</value></data>
+  <data name="Theme" xml:space="preserve"><value>Tema</value></data>
+  <data name="Light" xml:space="preserve"><value>Ljust</value></data>
+  <data name="Dark" xml:space="preserve"><value>Mörkt</value></data>
+  <data name="Toasts" xml:space="preserve"><value>Toasts</value></data>
+  <data name="Notification sounds" xml:space="preserve"><value>Aviseringsljud</value></data>
+  <data name="The theme is stored in this browser." xml:space="preserve"><value>Temat sparas i den här webbläsaren.</value></data>
+  <data name="The language is stored in this browser." xml:space="preserve"><value>Språket sparas i den här webbläsaren.</value></data>
+  <data name="This puts the dashboard menu back in its corner. Continue?" xml:space="preserve"><value>Det här lägger tillbaka dashboardens meny i sitt hörn. Fortsätta?</value></data>
+  <data name="Discard" xml:space="preserve"><value>Kasta</value></data>
+  <data name="Choose file" xml:space="preserve"><value>Välj fil</value></data>
+  <data name="Reset profile image" xml:space="preserve"><value>Återställ profilbilden</value></data>
+  <data name="You have unsaved changes." xml:space="preserve"><value>Du har osparade ändringar.</value></data>
+  <data name="When this is turned off, notification and message toasts are not shown." xml:space="preserve"><value>När den är avstängd visas inga notis- och meddelandetoasts.</value></data>
 </root>

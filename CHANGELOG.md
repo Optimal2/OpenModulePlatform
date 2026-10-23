@@ -87,6 +87,31 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The settings page is a shell: sections in a menu on the left, rows in a
+  panel on the right.** User, System, Dashboard and Admin replace the three
+  tabs (Dashboard was a card under Portal; "Portal" is now "System"). The
+  header's explanation sits in an info badge by the title. Each setting is
+  a boxed row with its label left and its control right, an info badge
+  explaining it; drop-downs centre their text. Every section with settings
+  is one form that saves on request: as soon as something differs from what
+  is stored, a non-modal "Unsaved changes" popover floats above the bottom
+  of the screen with Discard and Save, and leaving for another section (or
+  the page) with changes pending asks Save / Keep editing, Enter being
+  Save. System holds Theme and Language (the theme is applied through the
+  theme script on Save, the language is written to the same cookies the top
+  bar's switcher uses) and switches for hover menus, Toasts, Notification
+  sounds and Ctrl+F; Dashboard holds the navbar switch, then the actions
+  "Put the menu back" and the two resets; Admin holds "Save current layout
+  as default" under a Dashboard subheading. Red buttons are actions that
+  ask first and run at once. The user section is a card with the avatar,
+  the name and the user id, then a Display name row and a Profile image
+  row (Choose file, and a reset arrow, Material Symbols restart_alt, that
+  drops the stored image); the chosen image previews in the card. The page
+  is as wide as the content shell; the menu and the panel are always the
+  same height, the room under them down to just below the popover's bottom
+  edge, and scroll inside themselves when their content is taller. The
+  popover rises from the bottom edge when it appears.
+
 - **The Instances, Hosts, Module instances and App instances admin lists use
   the shared list component.** The four pages render the same rows and
   actions as before but through `omp-lists` (sortable columns, row search, a

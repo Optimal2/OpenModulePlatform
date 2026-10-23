@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Localization;
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
@@ -18,8 +19,10 @@ namespace OpenModulePlatform.Portal.Pages.Account;
 public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 {
     public const string UserTab = "user";
-    public const string PortalTab = "portal";
+    public const string SystemTab = "system";
+    private const string LegacyPortalTab = "portal";
     public const string AdminTab = "admin";
+    public const string DashboardTab = "dashboard";
 
     private enum ExternalUserProvisioningMode
     {
@@ -34,6 +37,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     private readonly UserProfileImageService _profileImages;
     private readonly OmpConfigurationService _configuration;
     private readonly ILogger<SettingsModel> _logger;
+    private readonly WebAppOptions _webAppOptions;
+    private readonly CultureSelectionService _cultures;
 
     public SettingsModel(
         IOptions<WebAppOptions> options,
@@ -42,15 +47,18 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         PortalDashboardService dashboard,
         UserProfileImageService profileImages,
         OmpConfigurationService configuration,
+        CultureSelectionService cultures,
         ILogger<SettingsModel> logger)
         : base(options, rbac)
     {
+        _cultures = cultures;
         _settings = settings;
         _dashboard = dashboard;
         _rbac = rbac;
         _profileImages = profileImages;
         _configuration = configuration;
         _logger = logger;
+        _webAppOptions = options.Value;
     }
 
     [BindProperty]
@@ -61,6 +69,23 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     [BindProperty]
     public IFormFile? ProfileImageUpload { get; set; }
+
+    /// <summary>Set by the user section's reset arrow: the stored image goes when no new
+    /// file is chosen.</summary>
+    [BindProperty]
+    public bool RemoveProfileImage { get; set; }
+
+    /// <summary>The section to open after a save that was triggered by leaving the user
+    /// section for another one.</summary>
+    [BindProperty]
+    public string? ReturnTab { get; set; }
+
+    /// <summary>The user's id, shown on the profile card.</summary>
+    public int CurrentUserId { get; private set; }
+
+    /// <summary>The display name as stored, which the page's script measures the
+    /// field against to know whether anything is unsaved.</summary>
+    public string SavedDisplayName { get; private set; } = string.Empty;
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -91,6 +116,10 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     /// back" button clears the menu's place with it.
     /// </summary>
     public string DashboardDraftKey { get; private set; } = string.Empty;
+
+    /// <summary>The languages the installation offers, the effective one selected; the
+    /// settings page's drop-down hands the choice to the same endpoint as the top bar.</summary>
+    public IReadOnlyList<SettingsLanguageOption> LanguageOptions { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
     {
@@ -144,78 +173,55 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return Page();
         }
 
-        var updated = await _settings.UpdateDisplayNameAsync(userId, UserInput.DisplayName, ct);
-        if (!updated)
+        if (ProfileImageUpload is not null && ProfileImageUpload.Length > 0)
         {
-            return Forbid();
+            var result = await _profileImages.SaveProfileImageAsync(userId, ProfileImageUpload, ct);
+            if (result != ProfileImageSaveResult.Saved)
+            {
+                var message = ProfileImageErrorMessage(result);
+                if (message is null)
+                {
+                    return Forbid();
+                }
+
+                ModelState.AddModelError(nameof(ProfileImageUpload), message);
+                return Page();
+            }
         }
-
-        await RefreshDisplayNameClaimAsync(UserInput.DisplayName);
-        StatusMessage = T("Settings saved.");
-        return RedirectToSettings(UserTab);
-    }
-
-    public async Task<IActionResult> OnPostProfileImage(CancellationToken ct)
-    {
-        if (!TryGetCurrentUserId(out var userId))
+        else if (RemoveProfileImage)
         {
-            return Forbid();
-        }
-
-        var guard = await LoadAsync(userId, UserTab, loadUserInput: true, loadPortalInput: true, ct);
-        if (guard is not null)
-        {
-            return guard;
-        }
-
-        var result = await _profileImages.SaveProfileImageAsync(userId, ProfileImageUpload, ct);
-        switch (result)
-        {
-            case ProfileImageSaveResult.Saved:
-                StatusMessage = T("Profile image saved.");
-                return RedirectToSettings(UserTab);
-
-            case ProfileImageSaveResult.TooLarge:
-                ModelState.AddModelError(nameof(ProfileImageUpload), T("Image is too large."));
-                return Page();
-
-            case ProfileImageSaveResult.InvalidType:
-                ModelState.AddModelError(nameof(ProfileImageUpload), T("Invalid image type."));
-                return Page();
-
-            case ProfileImageSaveResult.MissingFile:
-                ModelState.AddModelError(nameof(ProfileImageUpload), T("Select a profile image file."));
-                return Page();
-
-            case ProfileImageSaveResult.StorageUnavailable:
-                ModelState.AddModelError(nameof(ProfileImageUpload), T("Profile image storage is unavailable. Contact an administrator."));
-                return Page();
-
-            case ProfileImageSaveResult.SchemaUnavailable:
-                ModelState.AddModelError(nameof(ProfileImageUpload), T("Profile image storage is not installed. Run core module SQL repair and try again."));
-                return Page();
-
-            default:
+            var removed = await _profileImages.RemoveProfileImageAsync(userId, ct);
+            if (!removed)
+            {
                 return Forbid();
+            }
         }
+
+        if (!string.Equals(UserInput.DisplayName, SavedDisplayName, StringComparison.Ordinal))
+        {
+            var updated = await _settings.UpdateDisplayNameAsync(userId, UserInput.DisplayName, ct);
+            if (!updated)
+            {
+                return Forbid();
+            }
+
+            await RefreshDisplayNameClaimAsync(UserInput.DisplayName);
+        }
+
+        StatusMessage = T("Settings saved.");
+        return RedirectToSettings(ReturnTabOr(UserTab));
     }
 
-    public async Task<IActionResult> OnPostRemoveProfileImage(CancellationToken ct)
-    {
-        if (!TryGetCurrentUserId(out var userId))
+    private string? ProfileImageErrorMessage(ProfileImageSaveResult result)
+        => result switch
         {
-            return Forbid();
-        }
-
-        var removed = await _profileImages.RemoveProfileImageAsync(userId, ct);
-        if (!removed)
-        {
-            return Forbid();
-        }
-
-        StatusMessage = T("Profile image removed.");
-        return RedirectToSettings(UserTab);
-    }
+            ProfileImageSaveResult.TooLarge => T("Image is too large."),
+            ProfileImageSaveResult.InvalidType => T("Invalid image type."),
+            ProfileImageSaveResult.MissingFile => T("Select a profile image file."),
+            ProfileImageSaveResult.StorageUnavailable => T("Profile image storage is unavailable. Contact an administrator."),
+            ProfileImageSaveResult.SchemaUnavailable => T("Profile image storage is not installed. Run core module SQL repair and try again."),
+            _ => null
+        };
 
     public async Task<IActionResult> OnPostCreateAccount(CancellationToken ct)
     {
@@ -297,32 +303,62 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         }
     }
 
-    public async Task<IActionResult> OnPostPortal(CancellationToken ct)
+    public async Task<IActionResult> OnPostSystem(CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return Forbid();
         }
 
-        var guard = await LoadAsync(userId, PortalTab, loadUserInput: true, loadPortalInput: false, ct);
+        var guard = await LoadAsync(userId, SystemTab, loadUserInput: true, loadPortalInput: false, ct);
         if (guard is not null)
         {
             return guard;
         }
 
         await _settings.UpsertTopbarDropdownsOpenOnHoverAsync(userId, PortalInput.TopbarDropdownsOpenOnHover, ct);
-        await _settings.UpsertShowPortalNavbarAsync(userId, PortalInput.ShowPortalNavbar, ct);
         if (NotificationToastsGloballyEnabled)
         {
-            await _settings.UpsertNotificationToastsMutedAsync(userId, PortalInput.NotificationToastsMuted, ct);
+            await _settings.UpsertNotificationToastsMutedAsync(userId, !PortalInput.NotificationToastsShown, ct);
             await _settings.UpsertNotificationSoundsEnabledAsync(userId, PortalInput.NotificationSoundsEnabled, ct);
         }
 
         await _settings.UpsertPageSearchOverridesCtrlFAsync(userId, PortalInput.PageSearchOverridesCtrlF, ct);
 
+        // The language lives in the same cookies the top bar's switcher writes.
+        if (!string.IsNullOrWhiteSpace(PortalInput.Culture))
+        {
+            var preferred = _cultures.NormalizePreferredCulture(PortalInput.Culture, _webAppOptions);
+            var effective = _cultures.ResolveEffectiveCulture(preferred, _webAppOptions);
+            _cultures.ApplyCookies(Response, preferred, effective);
+        }
+
         StatusMessage = T("Settings saved.");
-        return RedirectToSettings(PortalTab);
+        return RedirectToSettings(ReturnTabOr(SystemTab));
     }
+
+    public async Task<IActionResult> OnPostDashboard(CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        var guard = await LoadAsync(userId, DashboardTab, loadUserInput: true, loadPortalInput: false, ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        await _settings.UpsertShowPortalNavbarAsync(userId, PortalInput.ShowPortalNavbar, ct);
+        StatusMessage = T("Settings saved.");
+        return RedirectToSettings(ReturnTabOr(DashboardTab));
+    }
+
+    /// <summary>The section a save returns to: the one the user was leaving for, or the
+    /// form's own.</summary>
+    private string ReturnTabOr(string own)
+        => string.IsNullOrWhiteSpace(ReturnTab) ? own : NormalizeTab(ReturnTab);
 
     public async Task<IActionResult> OnPostResetDashboard(CancellationToken ct)
     {
@@ -333,7 +369,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
         await _dashboard.ResetDashboardToDefaultAsync(userId, ct);
         StatusMessage = T("Dashboard layout reset to default.");
-        return RedirectToSettings(PortalTab);
+        return RedirectToSettings(DashboardTab);
     }
 
     public async Task<IActionResult> OnPostClearDashboard(CancellationToken ct)
@@ -345,7 +381,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
         await _dashboard.ClearDashboardAsync(userId, ct);
         StatusMessage = T("Dashboard cleared.");
-        return RedirectToSettings(PortalTab);
+        return RedirectToSettings(DashboardTab);
     }
 
     public async Task<IActionResult> OnPostSaveDefaultDashboard(CancellationToken ct)
@@ -402,6 +438,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return Forbid();
         }
 
+        CurrentUserId = userId;
+        SavedDisplayName = settings.DisplayName;
         if (loadUserInput)
         {
             UserInput.DisplayName = settings.DisplayName;
@@ -416,6 +454,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             PortalInput.TopbarDropdownsOpenOnHover = settings.TopbarDropdownsOpenOnHover;
             PortalInput.ShowPortalNavbar = settings.ShowPortalNavbar;
             PortalInput.NotificationToastsMuted = settings.NotificationToastsMuted;
+            PortalInput.NotificationToastsShown = !settings.NotificationToastsMuted;
+            PortalInput.Culture = CultureInfo.CurrentUICulture.Name;
             PortalInput.NotificationSoundsEnabled = settings.NotificationSoundsEnabled;
             PortalInput.PageSearchOverridesCtrlF = settings.PageSearchOverridesCtrlF;
         }
@@ -425,10 +465,44 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         ViewData["IsPortalAdmin"] = IsPortalAdmin;
         if (!IsPortalAdmin && string.Equals(ActiveTab, AdminTab, StringComparison.OrdinalIgnoreCase))
         {
-            ActiveTab = PortalTab;
+            ActiveTab = SystemTab;
         }
 
+        LanguageOptions = BuildLanguageOptions();
+
         return null;
+    }
+
+    private IReadOnlyList<SettingsLanguageOption> BuildLanguageOptions()
+    {
+        var effective = CultureInfo.CurrentUICulture.Name;
+        var cultures = (_webAppOptions.SupportedCultures ?? Array.Empty<string>())
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (cultures.Length == 0)
+        {
+            cultures = [effective];
+        }
+
+        return cultures
+            .Select(c => new SettingsLanguageOption(c, ToCultureDisplayText(c)))
+            .ToArray();
+    }
+
+    private static string ToCultureDisplayText(string culture)
+    {
+        try
+        {
+            var info = CultureInfo.GetCultureInfo(culture);
+            var name = (info.IsNeutralCulture || info.Parent.Equals(CultureInfo.InvariantCulture) ? info : info.Parent).NativeName;
+            return string.IsNullOrEmpty(name) ? culture : char.ToUpper(name[0], info) + name[1..];
+        }
+        catch (CultureNotFoundException)
+        {
+            return culture;
+        }
     }
 
     private async Task LoadSelfServiceAccountStateAsync(CancellationToken ct)
@@ -576,9 +650,12 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     private static string NormalizeTab(string? tab)
         => string.Equals(tab, AdminTab, StringComparison.OrdinalIgnoreCase)
             ? AdminTab
-            : string.Equals(tab, PortalTab, StringComparison.OrdinalIgnoreCase)
-                ? PortalTab
-                : UserTab;
+            : string.Equals(tab, DashboardTab, StringComparison.OrdinalIgnoreCase)
+                ? DashboardTab
+                : string.Equals(tab, SystemTab, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(tab, LegacyPortalTab, StringComparison.OrdinalIgnoreCase)
+                    ? SystemTab
+                    : UserTab;
 
     private LocalRedirectResult RedirectToSettings(string tab)
         => LocalRedirect($"/account/settings?tab={Uri.EscapeDataString(tab)}");
@@ -798,5 +875,15 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         public bool NotificationSoundsEnabled { get; set; } = true;
 
         public bool PageSearchOverridesCtrlF { get; set; }
+
+        /// <summary>The toasts switch as the page shows it: on means shown, the inverse
+        /// of the stored NotificationToastsMuted.</summary>
+        public bool NotificationToastsShown { get; set; } = true;
+
+        /// <summary>The UI culture to keep in the language cookies.</summary>
+        public string? Culture { get; set; }
     }
 }
+
+/// <summary>A language the settings page offers.</summary>
+public sealed record SettingsLanguageOption(string Culture, string DisplayText);

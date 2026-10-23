@@ -1,0 +1,12 @@
+@* The "Unsaved changes" popover of a settings form: non-modal, in the top
+   layer along the bottom of the screen, shown by portal-settings.js while
+   the form differs from what is stored. Discard puts the form back; Save
+   posts it. Without the script the form posts like any other, so the
+   popover simply stays hidden. *@
+<div class="settings-unsaved" popover="manual" data-settings-unsaved>
+    <span class="settings-unsaved__text">@L["Unsaved changes"]</span>
+    <div class="settings-unsaved__actions">
+        <button type="button" class="btn btn-danger-subtle" data-settings-discard>@L["Discard"]</button>
+        <button type="submit" class="btn settings-unsaved__save">@L["Save"]</button>
+    </div>
+</div>
