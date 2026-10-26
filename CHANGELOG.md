@@ -132,7 +132,8 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   is as wide as the content shell; the menu and the panel are always the
   same height, the room under them down to just below the popover's bottom
   edge, and scroll inside themselves when their content is taller. The
-  popover rises from the bottom edge when it appears.
+  popover rises from the bottom edge when it appears and sinks back when it
+  closes, both quickly.
 
 - **The Instances, Hosts, Module instances and App instances admin lists use
   the shared list component.** The four pages render the same rows and
