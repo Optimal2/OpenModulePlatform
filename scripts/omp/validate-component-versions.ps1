@@ -1426,6 +1426,23 @@ function Get-FunctionExtentText {
     return $functionAst.Extent.Text
 }
 
+# The module-definition validator (scripts/omp/validate-module-definitions.ps1) carries a
+# third copy so it compares against the same normalized SQL the embed tool embeds; it is
+# held to the shared core the same way, after the embed tool.
+$definitionValidatorPath = Join-Path $repositoryRoot 'scripts\omp\validate-module-definitions.ps1'
+if ((Test-Path -LiteralPath $definitionValidatorPath -PathType Leaf) -and (Test-Path -LiteralPath $helpersCorePath -PathType Leaf)) {
+    foreach ($copiedFunctionName in @('Get-GitDeclaredLineEnding', 'ConvertTo-DeclaredLineEndings')) {
+        $embedHelperCopyCount++
+        $coreFunctionText = Get-FunctionExtentText -Path $helpersCorePath -FunctionName $copiedFunctionName
+        $validatorFunctionText = Get-FunctionExtentText -Path $definitionValidatorPath -FunctionName $copiedFunctionName
+        if ($null -eq $coreFunctionText -or $null -eq $validatorFunctionText -or
+            -not [string]::Equals($coreFunctionText, $validatorFunctionText, [StringComparison]::Ordinal)) {
+            Add-ValidationError -Errors $errors -Message "Check 22: function '$copiedFunctionName' in scripts/omp/validate-module-definitions.ps1 is missing or differs from the shared-core copy in scripts/omp/validate-component-versions.helpers.ps1. The two must stay byte-identical: edit the shared core and copy the function into the validator in the same change."
+            $embedHelperCopyErrorCount++
+        }
+    }
+}
+
 if ((Test-Path -LiteralPath $embedToolPath -PathType Leaf) -and (Test-Path -LiteralPath $helpersCorePath -PathType Leaf)) {
     foreach ($copiedFunctionName in @('Get-GitDeclaredLineEnding', 'ConvertTo-DeclaredLineEndings')) {
         $embedHelperCopyCount++
