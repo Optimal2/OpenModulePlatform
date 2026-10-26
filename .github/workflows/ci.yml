@@ -273,12 +273,25 @@ jobs:
 
       - name: Install floor runtime (${{ matrix.runtimeFloor }})
         # Scheduled legs pin the test hosts to the oldest runtime patch of the
-        # supported major. Installing that SDK band brings its bundled runtime
-        # along; global.json keeps dotnet itself on the pinned SDK.
+        # supported major. runtimeFloor is a RUNTIME version (10.0.0); there is
+        # no SDK 10.0.0, so setup-dotnet (SDK installs only) failed with 404 on
+        # every scheduled run since 2026-09-28. The official dotnet-install
+        # script installs the three runtimes the test hosts load (base,
+        # ASP.NET Core, Windows Desktop for the net10.0-windows test projects)
+        # into the same root as the pinned SDK; global.json keeps dotnet itself
+        # on the pinned SDK.
         if: ${{ matrix.runtimeFloor != '' }}
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: ${{ matrix.runtimeFloor }}
+        shell: pwsh
+        run: |
+          $root = $env:DOTNET_ROOT
+          if (-not $root) { Write-Host '::error::DOTNET_ROOT is not set after setup-dotnet'; exit 1 }
+          $script = Join-Path $env:RUNNER_TEMP 'dotnet-install.ps1'
+          Invoke-WebRequest -Uri 'https://dot.net/v1/dotnet-install.ps1' -OutFile $script -UseBasicParsing
+          foreach ($runtime in 'dotnet', 'aspnetcore', 'windowsdesktop') {
+            & $script -Runtime $runtime -Version '${{ matrix.runtimeFloor }}' -InstallDir $root -NoPath
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          & (Join-Path $root 'dotnet') --list-runtimes
 
       - name: Pin SDK resolution to exactly ${{ matrix.sdk }}
         # Measured 2026-08-28 on windows-latest: the hosted image carries newer
