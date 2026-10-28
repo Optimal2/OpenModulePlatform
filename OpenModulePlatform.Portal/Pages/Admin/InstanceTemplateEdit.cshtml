@@ -2,10 +2,6 @@
 @using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.InstanceTemplateEditModel
 
-<div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/configoverlays">@L["Configuration overlays"]</a>
-</div>
-
 @if (Model.Template is null)
 {
     <div class="empty-state">@L["Installation topology was not found."]</div>

@@ -109,6 +109,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Two small admin tidy-ups.** The Installation page no longer carries its
+  own "Configuration overlays" button above the pane: the admin quick links
+  in the pane already hold that link. The Dashboard widgets list shows a
+  widget's payload on one line, truncated, with the shared click-to-show
+  popover for the whole value, so a long payload no longer stretches the
+  row.
+
 - **The settings page is a shell: sections in a menu on the left, rows in a
   panel on the right.** User, System, Dashboard and Admin replace the three
   tabs (Dashboard was a card under Portal; "Portal" is now "System"). The

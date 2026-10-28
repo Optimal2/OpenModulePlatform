@@ -82,7 +82,7 @@
             <span class="list-count" data-list-count="dashboard-widgets-list" data-template="@L["Showing {0} of {1} rows."]"></span>
         </div>
         <div class="empty-state" data-list-empty="dashboard-widgets-list" hidden>@L["No rows match the current filters."]</div>
-        <div class="table-scroll dashboard-widgets-admin-scroll">
+        <div class="table-scroll dashboard-widgets-admin-scroll" data-list-message-hint="@L["Click to show the full message"]">
             <table id="dashboard-widgets-list" class="grid dashboard-widgets-admin-grid sortable-list" data-sortable-list data-page-size="50">
                 <colgroup>
                     <col class="dashboard-widgets-admin-grid__module" />
@@ -124,7 +124,15 @@
                             @(string.IsNullOrWhiteSpace(row.Description) ? L["No description available"] : L[row.Description].Value)
                         </td>
                         <td>@row.WidgetType</td>
-                        <td><code>@row.Payload</code></td>
+                        @* The FULL payload goes into the DOM: the list-message
+                           truncates it to one line visually, and the click
+                           popover then shows everything. *@
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.Payload))
+                            {
+                                <button type="button" class="list-message"><code>@row.Payload</code></button>
+                            }
+                        </td>
                         <td><code>@row.WidgetVersion</code></td>
                         <td data-sort-value="@(row.IsEnabled ? "1" : "0")">
                             <span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span>

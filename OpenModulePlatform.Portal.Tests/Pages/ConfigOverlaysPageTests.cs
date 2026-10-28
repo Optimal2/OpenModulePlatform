@@ -545,7 +545,8 @@ public sealed class ConfigOverlaysPageTests
         Assert.Contains("<form method=\"get\">", markup);
         Assert.Contains("asp-for=\"Draft.Json\"", markup);
         Assert.DoesNotContain("Html.Raw", markup);
-        foreach (var page in new[] { "Hosts", "InstanceTemplateEdit", "ModulePackageImport" })
+        // The Installation page reaches the overlays through the admin quick links in its pane, not a link of its own.
+        foreach (var page in new[] { "Hosts", "ModulePackageImport" })
             Assert.Contains("~/admin/configoverlays", OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Admin", page + ".cshtml"));
     }
 
