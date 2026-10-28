@@ -1760,6 +1760,13 @@ a:hover {
     min-height: 100%;
 }
 
+/* Section cards stacked in the navigator layout's content column stand
+   apart by the layout's own gap; without this they sit edge to edge (the
+   column is a plain block, and the cards carry no margin of their own). */
+.section-navigator-layout__content > .section-card + .section-card {
+    margin-top: var(--section-navigator-gap, 16px);
+}
+
 .section-heading-row {
     display: flex;
     align-items: flex-start;

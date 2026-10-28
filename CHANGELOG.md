@@ -109,6 +109,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Section cards keep their distance.** On Operations and Installation the
+  section cards stacked in the navigator layout's content column touched
+  each other; sibling section cards now stand apart by the layout's own
+  gap (`--section-navigator-gap`, 16px).
+
 - **Two small admin tidy-ups.** The Installation page no longer carries its
   own "Configuration overlays" button above the pane: the admin quick links
   in the pane already hold that link. The Dashboard widgets list shows a
