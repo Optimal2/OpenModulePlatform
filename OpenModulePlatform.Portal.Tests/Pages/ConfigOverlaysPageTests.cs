@@ -41,11 +41,12 @@ public sealed class ConfigOverlaysPageTests
         var store = new OverlayAdminFakeStore();
         using var server = Server(store);
         using var client = server.CreateClient();
-        var response = await client.GetAsync("/admin/configoverlays");
+        using var response = await client.GetAsync("/admin/configoverlays");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(1, store.Reads);
         Assert.Contains("no-store", response.Headers.CacheControl!.ToString());
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/admin/configoverlays?id=999")).StatusCode);
+        using var missing = await client.GetAsync("/admin/configoverlays?id=999");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
     [Theory]
@@ -153,7 +154,7 @@ public sealed class ConfigOverlaysPageTests
         var store = new OverlayAdminFakeStore();
         using var server = Server(store);
         using var client = server.CreateClient();
-        var response = await client.PostAsync($"/admin/configoverlays?handler={handler}", new FormUrlEncodedContent([]));
+        using var response = await PostForm(client, $"/admin/configoverlays?handler={handler}", []);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(0, store.Reads);
         Assert.Empty(store.Changes);
@@ -176,11 +177,14 @@ public sealed class ConfigOverlaysPageTests
         else
         {
             var form = await TokenForm(client);
-            response = await client.PostAsync($"/admin/configoverlays?handler={handler}", new FormUrlEncodedContent(form));
+            response = await PostForm(client, $"/admin/configoverlays?handler={handler}", form);
         }
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal(0, store.Reads);
-        Assert.Empty(store.DetailReads);
+        using (response)
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal(0, store.Reads);
+            Assert.Empty(store.DetailReads);
+        }
     }
 
     [Fact]
@@ -192,7 +196,7 @@ public sealed class ConfigOverlaysPageTests
         var form = await TokenForm(client);
         form["Draft.Scope"] = "AllHosts";
         form["Draft.Json"] = """{"overlayKey":"settings","overlayVersion":"1","moduleDefinitionVersion":"3.4.5","configurationFiles":[]}""";
-        var response = await client.PostAsync("/admin/configoverlays?handler=Save", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Save", form);
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Contains("id=1", response.Headers.Location!.ToString());
         Assert.Equal("*", store.Saved!.HostKey);
@@ -209,7 +213,7 @@ public sealed class ConfigOverlaysPageTests
         using var client = server.CreateClient();
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(row);
-        var response = await client.PostAsync("/admin/configoverlays?handler=Enable", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Enable", form);
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal((1, ConfigOverlaysModel.Token(row), true), Assert.Single(store.Changes));
         Assert.Equal("overlay-admin-test", Assert.Single(store.ChangeActors));
@@ -226,7 +230,7 @@ public sealed class ConfigOverlaysPageTests
         using var client = server.CreateClient();
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(row);
-        var response = await client.PostAsync($"/admin/configoverlays?handler={handler}", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, $"/admin/configoverlays?handler={handler}", form);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(store.Changes);
     }
@@ -240,9 +244,11 @@ public sealed class ConfigOverlaysPageTests
         using var client = server.CreateClient();
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = "token";
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/admin/configoverlays?handler=Enable", new FormUrlEncodedContent(form))).StatusCode);
+        using var schemaNotReady = await PostForm(client, "/admin/configoverlays?handler=Enable", form);
+        Assert.Equal(HttpStatusCode.OK, schemaNotReady.StatusCode);
         form["id"] = "999";
-        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync("/admin/configoverlays?handler=Delete", new FormUrlEncodedContent(form))).StatusCode);
+        using var foreign = await PostForm(client, "/admin/configoverlays?handler=Delete", form);
+        Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
         Assert.Empty(store.Changes);
     }
 
@@ -255,7 +261,7 @@ public sealed class ConfigOverlaysPageTests
         var form = await TokenForm(client);
         form["Draft.Scope"] = "Host"; form["Draft.HostKey"] = "host-a";
         form["Draft.Json"] = """{"overlayKey":"draft-marker","overlayVersion":"1"}""";
-        var response = await client.PostAsync("/admin/configoverlays?handler=Save", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Save", form);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("draft-marker", body);
@@ -270,7 +276,7 @@ public sealed class ConfigOverlaysPageTests
         { Snapshot = ConfigOverlayAdministrationTests.Snapshot(ConfigOverlayAdministrationTests.Overlay(1)) };
         using var server = Server(store, admin: false);
         using var client = server.CreateClient();
-        var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
+        using var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(0, store.Reads);
         Assert.Empty(store.DetailReads);
@@ -313,11 +319,12 @@ public sealed class ConfigOverlaysPageTests
     {
         var (store, server, client, html) = await PreviewPage();
         using var _ = server;
+        using var clientOwner = client;
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
         form["hostKey"] = "host-a"; form["artifactId"] = "42";
         form["previewToken"] = ExtractPreviewToken(html, "Disable");
-        var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Disable", form);
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal((1, ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1)), false), Assert.Single(store.Changes));
     }
@@ -327,6 +334,7 @@ public sealed class ConfigOverlaysPageTests
     {
         var (store, server, client, html) = await PreviewPage();
         using var _ = server;
+        using var clientOwner = client;
         // Sibling fallback content changes after the preview; the selected
         // row token is untouched, so only a real preview fingerprint rejects.
         store.Details[2] = new(ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0"), "",
@@ -335,7 +343,7 @@ public sealed class ConfigOverlaysPageTests
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
         form["hostKey"] = "host-a"; form["artifactId"] = "42";
         form["previewToken"] = ExtractPreviewToken(html, "Disable");
-        var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Disable", form);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(store.Changes);
     }
@@ -345,13 +353,14 @@ public sealed class ConfigOverlaysPageTests
     {
         var (store, server, client, html) = await PreviewPage();
         using var _ = server;
+        using var clientOwner = client;
         store.Snapshot = store.Snapshot with
         { Artifacts = [new() { ArtifactId = 42, ModuleKey = "module", AppKey = "app", Version = "2.0.0", PackageType = "web-app" }] };
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
         form["hostKey"] = "host-a"; form["artifactId"] = "42";
         form["previewToken"] = ExtractPreviewToken(html, "Delete");
-        var response = await client.PostAsync("/admin/configoverlays?handler=Delete", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Delete", form);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(store.Changes);
     }
@@ -361,18 +370,19 @@ public sealed class ConfigOverlaysPageTests
     {
         var (store, server, client, html) = await PreviewPage();
         using var _ = server;
+        using var clientOwner = client;
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
         form["hostKey"] = "host-a"; form["artifactId"] = "42";
         // A Disable token must not authorize Delete.
         form["previewToken"] = ExtractPreviewToken(html, "Disable");
-        var wrongAction = await client.PostAsync("/admin/configoverlays?handler=Delete", new FormUrlEncodedContent(form));
+        using var wrongAction = await PostForm(client, "/admin/configoverlays?handler=Delete", form);
         Assert.Equal(HttpStatusCode.OK, wrongAction.StatusCode);
         Assert.Empty(store.Changes);
         // An artifact-owned file appearing after the preview also rejects.
         store.ArtifactFiles.Add(ConfigOverlayAdministrationTests.File(7, null, """{"base":true}"""));
         form["previewToken"] = ExtractPreviewToken(html, "Disable");
-        var stale = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        using var stale = await PostForm(client, "/admin/configoverlays?handler=Disable", form);
         Assert.Equal(HttpStatusCode.OK, stale.StatusCode);
         Assert.Empty(store.Changes);
     }
@@ -382,11 +392,12 @@ public sealed class ConfigOverlaysPageTests
     {
         var (store, server, client, _) = await PreviewPage();
         using var _ = server;
+        using var clientOwner = client;
         store.Details[2] = new(ConfigOverlayAdministrationTests.Overlay(2, "AllHosts", version: "9.0.0"), "",
             [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":"changed"}""")]);
         var form = await TokenForm(client);
         form["id"] = "1"; form["token"] = ConfigOverlaysModel.Token(ConfigOverlayAdministrationTests.Overlay(1));
-        var response = await client.PostAsync("/admin/configoverlays?handler=Disable", new FormUrlEncodedContent(form));
+        using var response = await PostForm(client, "/admin/configoverlays?handler=Disable", form);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Empty(store.Changes);
     }
@@ -515,6 +526,56 @@ public sealed class ConfigOverlaysPageTests
         Assert.True(body.RootElement.GetProperty("errors").EnumerateArray().Any());
     }
 
+    [Theory]
+    [InlineData("success")]
+    [InlineData("failure")]
+    [InlineData("cancellation")]
+    public async Task PostFormDisposesContentForEverySendOutcome(string outcome)
+    {
+        var handler = new CapturingSendHandler(outcome);
+        using var client = new HttpClient(handler);
+        var send = PostForm(client, "http://localhost/admin/configoverlays", [new("key", "value")]);
+        if (outcome == "success")
+        {
+            using var response = await send;
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+        else if (outcome == "failure")
+        {
+            await Assert.ThrowsAsync<HttpRequestException>(() => send);
+        }
+        else
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
+        }
+
+        var content = Assert.IsType<FormUrlEncodedContent>(handler.Content);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => content.ReadAsStringAsync());
+    }
+
+    private static async Task<HttpResponseMessage> PostForm(HttpClient client, string requestUri,
+        IEnumerable<KeyValuePair<string, string>> form)
+    {
+        using var content = new FormUrlEncodedContent(form);
+        return await client.PostAsync(requestUri, content);
+    }
+
+    private sealed class CapturingSendHandler(string outcome) : HttpMessageHandler
+    {
+        public HttpContent? Content { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Content = request.Content;
+            return outcome switch
+            {
+                "success" => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)),
+                "failure" => Task.FromException<HttpResponseMessage>(new HttpRequestException("Injected send failure.")),
+                _ => Task.FromException<HttpResponseMessage>(new OperationCanceledException(cancellationToken))
+            };
+        }
+    }
+
     private static string ExtractPreviewToken(string html, string action)
     {
         var match = Regex.Match(html, $"name=\"previewToken\" value=\"([^\"]+)\"[^>]*data-preview-action=\"{action}\"|data-preview-action=\"{action}\"[^>]*name=\"previewToken\" value=\"([^\"]+)\"");
@@ -530,10 +591,20 @@ public sealed class ConfigOverlaysPageTests
         store.Details[1] = new(host, "", [ConfigOverlayAdministrationTests.File(1, 1, """{"host":true}""")]);
         store.Details[2] = new(allHosts, "", [ConfigOverlayAdministrationTests.File(2, 2, """{"shared":true}""")]);
         var server = Server(store, renderPage: true);
-        var client = server.CreateClient();
-        using var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return (store, server, client, await response.Content.ReadAsStringAsync());
+        HttpClient? client = null;
+        try
+        {
+            client = server.CreateClient();
+            using var response = await client.GetAsync("/admin/configoverlays?id=1&HostKey=host-a&ArtifactId=42");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return (store, server, client, await response.Content.ReadAsStringAsync());
+        }
+        catch
+        {
+            client?.Dispose();
+            server.Dispose();
+            throw;
+        }
     }
 
     [Fact]
@@ -552,7 +623,7 @@ public sealed class ConfigOverlaysPageTests
 
     private static async Task<Dictionary<string, string>> TokenForm(HttpClient client)
     {
-        var response = await client.GetAsync("/test-token");
+        using var response = await client.GetAsync("/test-token");
         client.DefaultRequestHeaders.Remove("Cookie");
         client.DefaultRequestHeaders.Add("Cookie", response.Headers.GetValues("Set-Cookie").First().Split(';')[0]);
         return new() { ["__RequestVerificationToken"] = await response.Content.ReadAsStringAsync() };

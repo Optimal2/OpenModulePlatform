@@ -32,7 +32,8 @@ public sealed class ConfigOverlayAdministrationTests
     [InlineData(OmpAdminRepository.PreviewOverlayFilesNoMergeSql)]
     public void AdministrationSqlParsesWithoutDatabaseAccess(string sql)
     {
-        new TSql160Parser(true).Parse(new StringReader(sql), out var errors);
+        using var reader = new StringReader(sql);
+        new TSql160Parser(true).Parse(reader, out var errors);
         Assert.Empty(errors);
     }
 

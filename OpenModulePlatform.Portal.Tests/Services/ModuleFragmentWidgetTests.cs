@@ -19,8 +19,22 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// module-served HTML, and the server-side fetch (permission gate, timeout, cache and
 /// identity forwarding).
 /// </summary>
-public sealed class ModuleFragmentWidgetTests
+public sealed class ModuleFragmentWidgetTests : IDisposable
 {
+    private readonly List<StubHttpClientFactory> _factories = [];
+    private readonly List<StubHandler> _handlers = [];
+    private readonly List<MemoryCache> _ownedCaches = [];
+
+    public void Dispose()
+    {
+        foreach (var factory in _factories)
+            factory.Dispose();
+        foreach (var handler in _handlers)
+            handler.Dispose();
+        foreach (var cache in _ownedCaches)
+            cache.Dispose();
+    }
+
     [Fact]
     public void UnknownWidgetType_IsRejectedBeforePersistence()
     {
@@ -902,6 +916,80 @@ public sealed class ModuleFragmentWidgetTests
         Assert.DoesNotContain("�", result.Html, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("success")]
+    [InlineData("non-success")]
+    [InlineData("read-failure")]
+    [InlineData("caller-cancellation")]
+    [InlineData("timeout")]
+    public async Task FetchDisposesFactoryClientWithoutDisposingSharedHandler(string outcome)
+    {
+        using var callerCancellation = new CancellationTokenSource();
+        var calls = 0;
+        var handler = new StubHandler(async (_, ct) =>
+        {
+            if (++calls > 1)
+                return Html("<p>handler alive</p>");
+            switch (outcome)
+            {
+                case "non-success":
+                    return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+                case "read-failure":
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StreamContent(new ThrowingReadStream())
+                        {
+                            Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/html") }
+                        }
+                    };
+                case "caller-cancellation":
+                    callerCancellation.Cancel();
+                    throw new OperationCanceledException(callerCancellation.Token);
+                case "timeout":
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    return Html("<p>late</p>");
+                default:
+                    return Html("<p>loaded</p>");
+            }
+        });
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions
+        {
+            TimeoutMilliseconds = outcome == "timeout" ? 100 : 5000
+        });
+        var fetch = service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()],
+            outcome == "caller-cancellation" ? callerCancellation.Token : CancellationToken.None);
+        if (outcome == "read-failure")
+        {
+            await Assert.ThrowsAsync<IOException>(() => fetch);
+        }
+        else if (outcome == "caller-cancellation")
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fetch);
+        }
+        else
+        {
+            var result = await fetch;
+            Assert.Equal(outcome == "success", result.IsLoaded);
+            if (outcome == "timeout")
+                Assert.Equal(ModuleFragmentFailureReason.Timeout, result.FailureReason);
+        }
+
+        var client = Assert.Single(Assert.Single(_factories).Clients);
+        using var disposedRequest = new HttpRequestMessage(HttpMethod.Get, "http://localhost/disposed");
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => client.SendAsync(disposedRequest));
+
+        using var handlerClient = new HttpClient(handler, disposeHandler: false);
+        using var liveRequest = new HttpRequestMessage(HttpMethod.Get, "http://localhost/live");
+        using var liveResponse = await handlerClient.SendAsync(liveRequest);
+        Assert.Equal(HttpStatusCode.OK, liveResponse.StatusCode);
+    }
+
+    private sealed class ThrowingReadStream : MemoryStream
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => ValueTask.FromException<int>(new IOException("Injected response body read failure."));
+    }
+
     // ----- helpers ---------------------------------------------------------------------
 
     private static string BuildDocument(string fragmentFields, string widgetType = ModuleFragmentWidget.WidgetType)
@@ -1057,18 +1145,30 @@ public sealed class ModuleFragmentWidgetTests
         }
     }
 
-    private static PortalModuleFragmentService CreateService(StubHandler handler, ModuleFragmentWidgetOptions options,
+    private PortalModuleFragmentService CreateService(StubHandler handler, ModuleFragmentWidgetOptions options,
         Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>? logger = null,
         ModuleFragmentEndpointDiagnostics? endpointDiagnostics = null,
         IMemoryCache? cache = null)
-        => new(
-            new StubHttpClientFactory(handler),
-            cache ?? new MemoryCache(new MemoryCacheOptions()),
+    {
+        var factory = new StubHttpClientFactory(handler);
+        _factories.Add(factory);
+        if (!_handlers.Contains(handler))
+            _handlers.Add(handler);
+        if (cache is null)
+        {
+            var ownedCache = new MemoryCache(new MemoryCacheOptions());
+            _ownedCaches.Add(ownedCache);
+            cache = ownedCache;
+        }
+        return new(
+            factory,
+            cache,
             new StaticOptionsMonitor<ModuleFragmentWidgetOptions>(options),
             Microsoft.Extensions.Options.Options.Create(new OmpAuthOptions()),
             Microsoft.Extensions.Options.Options.Create(new WebAppOptions()),
             endpointDiagnostics ?? new ModuleFragmentEndpointDiagnostics(NullLogger<ModuleFragmentEndpointDiagnostics>.Instance),
             logger ?? NullLogger<PortalModuleFragmentService>.Instance);
+    }
 
     private sealed record CapturedRequest(string Uri, string? Host, string? Cookie, string? FragmentHeader);
 
@@ -1097,9 +1197,23 @@ public sealed class ModuleFragmentWidgetTests
         }
     }
 
-    private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory, IDisposable
     {
-        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+        private readonly List<HttpClient> _clients = [];
+        public IReadOnlyList<HttpClient> Clients => _clients;
+
+        public HttpClient CreateClient(string name)
+        {
+            var client = new HttpClient(handler, disposeHandler: false);
+            _clients.Add(client);
+            return client;
+        }
+
+        public void Dispose()
+        {
+            foreach (var client in _clients)
+                client.Dispose();
+        }
     }
 
     private sealed class StaticOptionsMonitor<T>(T value) : IOptionsMonitor<T>

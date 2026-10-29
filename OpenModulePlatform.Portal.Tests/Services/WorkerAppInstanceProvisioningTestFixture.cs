@@ -366,8 +366,7 @@ FROM omp.WorkerInstances WHERE AppInstanceId = @id ORDER BY WorkerInstanceKey", 
     private async Task<SqlConnection> OpenAsync()
     {
         var conn = new SqlConnection(ConnectionString);
-        await conn.OpenAsync();
-        return conn;
+        return await OwnedConnectionOpening.OpenAsync(conn);
     }
 
     private static async Task ExecuteAsync(SqlConnection conn, string sql, params (string Name, object Value)[] parameters)

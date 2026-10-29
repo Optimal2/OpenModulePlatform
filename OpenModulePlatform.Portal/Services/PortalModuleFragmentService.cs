@@ -253,7 +253,7 @@ public sealed class PortalModuleFragmentService
                 request.Headers.TryAddWithoutValidation("Cookie", fetch.CookieHeader);
             }
 
-            var client = _httpClientFactory.CreateClient(HttpClientName);
+            using var client = _httpClientFactory.CreateClient(HttpClientName);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {

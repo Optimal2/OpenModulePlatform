@@ -55,7 +55,8 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         var anna = await _fixture.InsertUserAsync("Anna");
         var bertil = await _fixture.InsertUserAsync("Bertil");
         var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Delete test", CancellationToken.None);
-        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 }), 0, 6, "Attachments", "note.txt")
+        using var backing = new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 });
+        var file = new Microsoft.AspNetCore.Http.FormFile(backing, 0, 6, "Attachments", "note.txt")
         {
             Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
             ContentType = "text/plain"
@@ -163,7 +164,8 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         var anna = await _fixture.InsertUserAsync("Anna");
         var bertil = await _fixture.InsertUserAsync("Bertil");
         var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Attachment test", CancellationToken.None);
-        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 }), 0, 6, "Attachments", "note.txt")
+        using var backing = new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 });
+        var file = new Microsoft.AspNetCore.Http.FormFile(backing, 0, 6, "Attachments", "note.txt")
         {
             Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
             ContentType = "text/plain"

@@ -30,7 +30,8 @@ internal static class PlatformConfigurationImportContract
         var schema = (string)migration.GetField("SchemaMigrationSql", BindingFlags.Static | BindingFlags.NonPublic)!.GetRawConstantValue()!;
         var scope = (string)migration.GetField("HostScopeMigrationSql", BindingFlags.Static | BindingFlags.NonPublic)!.GetRawConstantValue()!;
         Assert.Contains(scope, schema);
-        new TSql170Parser(true).Parse(new StringReader(schema), out var errors);
+        using var reader = new StringReader(schema);
+        new TSql170Parser(true).Parse(reader, out var errors);
         Assert.Empty(errors);
         Assert.Contains("COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NULL", scope);
         Assert.Contains("DEFAULT(N'Host')", scope);

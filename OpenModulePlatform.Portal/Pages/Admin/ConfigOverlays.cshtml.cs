@@ -228,7 +228,7 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         // Bound the ACTUAL decompressed bytes, not the archive's declared entry length:
         // a forged header must not let a small upload inflate into an unbounded string.
         await using var entryStream = entries[0].Open();
-        var bounded = new MemoryStream();
+        await using var bounded = new MemoryStream();
         var buffer = new byte[81920];
         int read;
         while ((read = await entryStream.ReadAsync(buffer, ct)) > 0)

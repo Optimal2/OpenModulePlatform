@@ -422,8 +422,7 @@ public sealed class UserSettingBitMigrationFixture : IAsyncLifetime
     private async Task<SqlConnection> OpenAsync()
     {
         var conn = new SqlConnection(ConnectionString);
-        await conn.OpenAsync();
-        return conn;
+        return await OwnedConnectionOpening.OpenAsync(conn);
     }
 
     private async Task RunScriptAsync(string script)
