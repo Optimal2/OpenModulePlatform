@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.1097",
+  "repositoryVersion": "0.3.1098",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.286",
+      "definitionVersion": "0.3.287",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -155,7 +155,7 @@
       "registrationMode": "bootstrap",
       "packageType": "service-app",
       "targetName": "omp-hostagent-sentinel",
-      "version": "1.0.12",
+      "version": "1.0.13",
       "projectPath": "OpenModulePlatform.HostAgent.Sentinel",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.Sentinel.zip"
     },
@@ -166,7 +166,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.73",
+      "version": "0.3.74",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
