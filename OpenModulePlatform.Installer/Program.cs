@@ -275,7 +275,8 @@ internal static class ConsoleErrorAttach
         }
     }
 
-    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    // CodeQL cs/unmanaged-code: kept - opening standard streams cannot attach a WinExe to its parent console.
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "AttachConsole", ExactSpelling = true, CharSet = System.Runtime.InteropServices.CharSet.None, SetLastError = true)]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool AttachConsole(uint processId);
 }

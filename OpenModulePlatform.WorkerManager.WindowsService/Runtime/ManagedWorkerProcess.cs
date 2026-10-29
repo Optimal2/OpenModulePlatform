@@ -488,7 +488,7 @@ internal sealed class WorkerProcessJobObject : IDisposable
 
         try
         {
-            return NativeMethods.AssignProcessToJobObject(_handle, process.Handle);
+            return NativeMethods.AssignProcessToJobObject(_handle, process.SafeHandle);
         }
         catch (InvalidOperationException)
         {
@@ -540,21 +540,26 @@ internal sealed class WorkerProcessJobObject : IDisposable
             internal UIntPtr PeakJobMemoryUsed;
         }
 
-        [DllImport("kernel32.dll", EntryPoint = "CreateJobObjectW", CharSet = CharSet.Unicode, SetLastError = true)]
-        internal static extern SafeFileHandle CreateJobObject(IntPtr lpJobAttributes, string? lpName);
+        // CodeQL cs/unmanaged-code: kept - kernel job ownership kills contained workers when the manager exits.
+        [DllImport("kernel32.dll", EntryPoint = "CreateJobObjectW", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern SafeFileHandle CreateJobObject(
+            IntPtr lpJobAttributes,
+            [MarshalAs(UnmanagedType.LPWStr)] string? lpName);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
+        // CodeQL cs/unmanaged-code: kept - KILL_ON_JOB_CLOSE requires the native job-information contract.
+        [DllImport("kernel32.dll", EntryPoint = "SetInformationJobObject", ExactSpelling = true, CharSet = CharSet.None, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool SetInformationJobObject(
             SafeFileHandle hJob,
             int jobObjectInfoClass,
-            ref JobObjectExtendedLimitInformation lpJobObjectInfo,
+            [In] ref JobObjectExtendedLimitInformation lpJobObjectInfo,
             uint cbJobObjectInfoLength);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
+        // CodeQL cs/unmanaged-code: kept - assigning an owned worker to its kernel job has no managed equivalent.
+        [DllImport("kernel32.dll", EntryPoint = "AssignProcessToJobObject", ExactSpelling = true, CharSet = CharSet.None, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool AssignProcessToJobObject(
             SafeFileHandle hJob,
-            IntPtr hProcess);
+            Microsoft.Win32.SafeHandles.SafeProcessHandle hProcess);
     }
 }

@@ -313,7 +313,8 @@ internal static class NoOverwriteFile
             internal uint FileIndexLow;
         }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
+        // CodeQL cs/unmanaged-code: kept - volume and file identity detect replacement of the reserved file.
+        [DllImport("kernel32.dll", EntryPoint = "GetFileInformationByHandle", ExactSpelling = true, CharSet = CharSet.None, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GetFileInformationByHandle(
             SafeFileHandle hFile,

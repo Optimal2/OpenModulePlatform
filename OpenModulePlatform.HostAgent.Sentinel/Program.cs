@@ -174,24 +174,35 @@ namespace OpenModulePlatform.HostAgent.Sentinel
             // EventLog.WriteEntry can implicitly CREATE a missing source. The native writer
             // only opens a logging handle and never modifies source registration, even if
             // an operator removes the source after OnStart has checked it.
-            var handle = RegisterEventSource(null, Identity);
-            if (handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
-            try
+            using (var handle = RegisterEventSource(null, Identity))
             {
+                if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
                 var type = eventId >= 100 ? EventLogEntryType.Error : EventLogEntryType.Information;
                 if (!ReportEvent(handle, (ushort)type, 0, (uint)eventId, IntPtr.Zero, 1, 0,
                     new[] { message }, IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error());
             }
-            finally { DeregisterEventSource(handle); }
         }
 
-        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern IntPtr RegisterEventSource(string server, string source);
-        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private sealed class SafeEventSourceHandle : Microsoft.Win32.SafeHandles.SafeHandleZeroOrMinusOneIsInvalid
+        {
+            private SafeEventSourceHandle() : base(true) { }
+            protected override bool ReleaseHandle() { return DeregisterEventSource(handle); }
+        }
+
+        // CodeQL cs/unmanaged-code: kept - opening an existing event source must not create registration.
+        [DllImport("advapi32.dll", EntryPoint = "RegisterEventSourceW", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern SafeEventSourceHandle RegisterEventSource(
+            [MarshalAs(UnmanagedType.LPWStr)] string server,
+            [MarshalAs(UnmanagedType.LPWStr)] string source);
+        // CodeQL cs/unmanaged-code: kept - native reporting preserves existing-source-only event logging behavior.
+        [DllImport("advapi32.dll", EntryPoint = "ReportEventW", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool ReportEvent(IntPtr handle, ushort type, ushort category, uint eventId,
-            IntPtr userSid, ushort stringCount, uint dataSize, string[] strings, IntPtr rawData);
-        [DllImport("advapi32.dll")]
+        private static extern bool ReportEvent(SafeEventSourceHandle handle, ushort type, ushort category, uint eventId,
+            IntPtr userSid, ushort stringCount, uint dataSize,
+            [In, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr, SizeParamIndex = 5)] string[] strings,
+            IntPtr rawData);
+        // CodeQL cs/unmanaged-code: kept - an event-source handle requires its matching deregistration API.
+        [DllImport("advapi32.dll", EntryPoint = "DeregisterEventSource", ExactSpelling = true, CharSet = CharSet.None)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool DeregisterEventSource(IntPtr handle);
     }
