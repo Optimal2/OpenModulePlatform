@@ -795,24 +795,22 @@ public sealed class ServiceAppDeploymentService
         // skips the repair this cycle WITHOUT degrading the row out of the
         // already-applied fast path -- a Warning here would trigger a full redeploy
         // (see the comment below); the wait is surfaced as a diagnostic warning.
-        if (IdentityRepairWouldApply(settings, deployment, serviceName, serviceIdentity))
+        if (IdentityRepairWouldApply(settings, deployment, serviceName, serviceIdentity)
+            && !enteredDeployment)
         {
-            if (!enteredDeployment)
+            if (!await deploymentCycle.EnterAsync(deployment.HostId,
+                string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
             {
-                if (!await deploymentCycle.EnterAsync(deployment.HostId,
-                    string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
-                {
-                    await _repository.PublishAppDeploymentResultAsync(
-                        deployment,
-                        finalize(
-                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false)
-                                .WithDiagnosticWarning(deploymentCycle.WaitingMessage)),
-                        cancellationToken);
-                    return new ConvergedDeploymentOutcome(false, false, null);
-                }
-
-                enteredDeployment = true;
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    finalize(
+                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false)
+                            .WithDiagnosticWarning(deploymentCycle.WaitingMessage)),
+                    cancellationToken);
+                return new ConvergedDeploymentOutcome(false, false, null);
             }
+
+            enteredDeployment = true;
         }
 
         var identityCheck = EnsureServiceIdentity(

@@ -1907,21 +1907,19 @@ public sealed class ArtifactZipImportService
             {
                 configurationCarryForwardMessage = registration.CarryForward.BuildImportMessage();
             }
-            else if (registration.ContinuityCopy is { } continuityCopy)
+            else if (registration.ContinuityCopy is { } continuityCopy
+                && continuityCopy.CopiedCount > 0)
             {
                 // The source is the artifact the slot's pointers referenced
                 // before this import -- not whichever sibling was created most
                 // recently -- with a per-path operator-delta fallback when no
                 // pointer names a source.
-                if (continuityCopy.CopiedCount > 0)
-                {
-                    _logger.LogInformation(
-                        "Copied {Count} configuration file row(s) onto the new artifact from its continuity source. ArtifactId={ArtifactId}, SourceArtifactId={SourceArtifactId}, SourceVersion={SourceVersion}",
-                        continuityCopy.CopiedCount,
-                        artifactId,
-                        continuityCopy.SourceArtifactId,
-                        continuityCopy.SourceVersion ?? "(per-path fallback)");
-                }
+                _logger.LogInformation(
+                    "Copied {Count} configuration file row(s) onto the new artifact from its continuity source. ArtifactId={ArtifactId}, SourceArtifactId={SourceArtifactId}, SourceVersion={SourceVersion}",
+                    continuityCopy.CopiedCount,
+                    artifactId,
+                    continuityCopy.SourceArtifactId,
+                    continuityCopy.SourceVersion ?? "(per-path fallback)");
             }
 
             var application = applyToMatchingApplications
