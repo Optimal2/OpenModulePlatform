@@ -258,12 +258,9 @@ internal sealed class HostAgentEnsureArtifactCache
     public void RetainOnly(IEnumerable<(int ArtifactId, string? ArtifactVersion)> liveKeys)
     {
         var live = liveKeys.ToHashSet();
-        foreach (var key in _entries.Keys)
+        foreach (var key in _entries.Keys.Where(key => !live.Contains(key)))
         {
-            if (!live.Contains(key))
-            {
-                _entries.TryRemove(key, out _);
-            }
+            _entries.TryRemove(key, out _);
         }
     }
 
