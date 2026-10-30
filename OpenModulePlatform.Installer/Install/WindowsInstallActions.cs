@@ -182,14 +182,9 @@ WHERE h.HostKey = @hostKey
                     return (true, $"Portal answers at {healthUrl}.");
                 }
 
-                if ((int)response.StatusCode < 500)
-                {
-                    lastDetail = $"HTTP {(int)response.StatusCode} from {healthUrl}; waiting for the portal to become ready";
-                }
-                else
-                {
-                    lastDetail = $"HTTP {(int)response.StatusCode} from {healthUrl}";
-                }
+                lastDetail = (int)response.StatusCode < 500
+                    ? $"HTTP {(int)response.StatusCode} from {healthUrl}; waiting for the portal to become ready"
+                    : $"HTTP {(int)response.StatusCode} from {healthUrl}";
             }
             catch (HttpRequestException ex)
             {
