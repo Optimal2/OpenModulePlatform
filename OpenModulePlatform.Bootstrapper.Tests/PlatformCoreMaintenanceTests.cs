@@ -308,8 +308,8 @@ public sealed class PlatformCoreMaintenanceTests : IDisposable
         internal bool FailSetup;
         internal bool HasHostScope;
         internal int Stores, Starts, Executions;
-        internal List<string> Events = [];
-        internal List<string> Statuses = [];
+        internal readonly List<string> Events = [];
+        internal readonly List<string> Statuses = [];
         private readonly HashSet<string> succeeded = [];
         private PortableModuleDefinitionSqlScript? active;
 
