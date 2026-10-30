@@ -134,17 +134,34 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
-    public async Task ConcurrentWritersProduceExactlyOneFile()
+    public async Task ConcurrentWritersNeverProduceTwoFiles()
     {
+        // The invariant is "never two", not "exactly one": under contention the
+        // single claim owner can still fail to publish (for example when another
+        // handle on its claim makes the final rename report access denied), and
+        // then nobody wins. That a lone writer succeeds is
+        // WriteCreatesTheFileAndLeavesNoTemporaryFile. What may never happen is
+        // a second writer getting the name, and every writer that was refused
+        // the name must say why with OutputFileExistsException.
         var path = Path.Join(_testRoot, "package.zip");
         const int writers = 8;
+        var owned = new bool[writers];
+        var warnings = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var start = new Barrier(writers);
         var writes = Enumerable.Range(0, writers)
             .Select(index => Task.Factory.StartNew(
                 () =>
                 {
                     start.SignalAndWait();
-                    NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("writer-" + index)));
+                    NoOverwriteFile.Write(
+                        path,
+                        stream =>
+                        {
+                            // Only the writer that holds the claim gets to write content.
+                            Volatile.Write(ref owned[index], true);
+                            stream.Write(Encoding.UTF8.GetBytes("writer-" + index));
+                        },
+                        warnings.Enqueue);
                 },
                 CancellationToken.None,
                 TaskCreationOptions.LongRunning,
@@ -157,13 +174,37 @@ public sealed class NoOverwriteFileTests : IDisposable
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default)));
 
+        var outcomes = string.Join(
+            Environment.NewLine,
+            writes.Select((write, index) => $"writer-{index}: owned={owned[index]} "
+                + (write.Exception is null
+                    ? "published"
+                    : $"{write.Exception.GetBaseException().GetType().Name}: {write.Exception.GetBaseException().Message}"))
+                .Concat(warnings.Select(static warning => "warning: " + warning)));
+        var owners = Enumerable.Range(0, writers).Where(index => owned[index]).ToArray();
         var winners = Enumerable.Range(0, writers).Where(index => writes[index].Exception is null).ToArray();
-        var winner = Assert.Single(winners);
+
+        Assert.True(owners.Length <= 1, "More than one writer held the name:" + Environment.NewLine + outcomes);
+        Assert.True(winners.Length <= 1, "More than one writer published:" + Environment.NewLine + outcomes);
+        Assert.True(winners.All(index => owned[index]), "A writer published without holding the name:" + Environment.NewLine + outcomes);
         Assert.All(
-            writes.Where(static write => write.Exception is not null),
-            write => Assert.IsType<OutputFileExistsException>(write.Exception!.GetBaseException()));
-        Assert.Equal("writer-" + winner, File.ReadAllText(path));
-        Assert.Equal([path], Directory.GetFiles(_testRoot));
+            Enumerable.Range(0, writers).Where(index => !owned[index]),
+            index => Assert.True(
+                writes[index].Exception?.GetBaseException() is OutputFileExistsException,
+                $"writer-{index} was refused the name without OutputFileExistsException:" + Environment.NewLine + outcomes));
+
+        if (winners.Length == 1)
+        {
+            Assert.Equal("writer-" + winners[0], File.ReadAllText(path));
+            Assert.Equal([path], Directory.GetFiles(_testRoot));
+        }
+        else
+        {
+            // A failed owner releases its claim and its temporary file.
+            Assert.True(Directory.GetFiles(_testRoot).Length == 0, "Nobody published but files were left behind:"
+                + Environment.NewLine + string.Join(Environment.NewLine, Directory.GetFiles(_testRoot))
+                + Environment.NewLine + outcomes);
+        }
     }
 
     [Fact]
