@@ -978,6 +978,7 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
         using var disposedRequest = new HttpRequestMessage(HttpMethod.Get, "http://localhost/disposed");
         await Assert.ThrowsAsync<ObjectDisposedException>(() => client.SendAsync(disposedRequest));
 
+        Assert.False(handler.IsDisposed);
         using var handlerClient = new HttpClient(handler, disposeHandler: false);
         using var liveRequest = new HttpRequestMessage(HttpMethod.Get, "http://localhost/live");
         using var liveResponse = await handlerClient.SendAsync(liveRequest);
@@ -1182,8 +1183,21 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
     {
         public List<CapturedRequest> Requests { get; } = [];
 
+        // Observable disposal: without it the base Dispose(bool) is a no-op, so a
+        // disposed stub keeps answering and an assertion that "the shared handler
+        // is still alive" passes even when the handler was in fact disposed.
+        public bool IsDisposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                IsDisposed = true;
+            base.Dispose(disposing);
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
             lock (Requests)
             {
                 Requests.Add(new CapturedRequest(
