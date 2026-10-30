@@ -62,7 +62,7 @@ public sealed class ConfigOverlayRemovalPreviewTests
     {
         var store = StoreWith(ConfigOverlayAdministrationTests.Overlay(3, enabled: false));
         var preview = await new ConfigOverlayAdministration(store).PreviewRemovalAsync(store.Snapshot, 3, "host-a", 42, default);
-        Assert.True(preview.DocumentWasEnabled == false);
+        Assert.False(preview.DocumentWasEnabled);
         var file = Assert.Single(preview.Files);
         Assert.Equal("Unchanged", file.Outcome);
         Assert.Contains(file.Notes, n => n.Contains("already disabled", StringComparison.Ordinal));

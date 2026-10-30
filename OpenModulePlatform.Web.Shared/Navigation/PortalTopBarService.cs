@@ -307,7 +307,7 @@ public sealed class PortalTopBarService
             if (userId is int resolvedUserId)
             {
                 var bitSettings = await GetPortalBitSettingsAsync(resolvedUserId, ct);
-                dropdownsOpenOnHover = bitSettings.TryGetValue(TopbarDropdownsOpenOnHoverSetting, out var openOnHover) ? openOnHover : true;
+                dropdownsOpenOnHover = bitSettings.GetValueOrDefault(TopbarDropdownsOpenOnHoverSetting, true);
                 notificationsMuted = bitSettings.TryGetValue(NotificationToastsMutedSetting, out var muted) && muted;
                 notificationSoundsMuted = bitSettings.TryGetValue(NotificationSoundsEnabledSetting, out var soundsEnabled) && !soundsEnabled;
                 favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
