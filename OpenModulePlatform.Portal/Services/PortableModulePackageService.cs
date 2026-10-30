@@ -1312,7 +1312,7 @@ public sealed class PortableModulePackageService
                     // probe, and re-run only the idempotent scripts whose objects are missing. This
                     // heals stale schema even when the installed definition version is newer than or
                     // equal to the package (R12-G3).
-                    if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
+                    if (!RequiresPreApplySqlRepairs(definition))
                     {
                         var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
                             definition.DefinitionJson,
