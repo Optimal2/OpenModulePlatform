@@ -80,14 +80,12 @@ namespace OpenModulePlatform.HostAgent.Sentinel
             }
             catch (Exception ex)
             {
-                // Remember configuration faults too, when the state directory is usable.
-                try { if (!File.Exists(stateFile)) File.WriteAllText(stateFile, "200"); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
-                // Never include exception messages or connection strings: these may contain secrets.
-                try { WriteEvent(200, "Sentinel configuration or monitoring failure (" + ex.GetType().Name
-                    + "). Check app.config, event source, WMI access and state-directory permissions. Exit code 200."); }
-                finally { ExitCode = 200; Stop(); }
+                SentinelFaultHandler.Handle(
+                    ex,
+                    () => { if (!File.Exists(stateFile)) File.WriteAllText(stateFile, "200"); },
+                    WriteEvent,
+                    () => { ExitCode = 200; },
+                    Stop);
             }
         }
 

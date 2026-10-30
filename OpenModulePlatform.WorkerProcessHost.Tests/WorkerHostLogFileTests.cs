@@ -34,6 +34,7 @@ public sealed class WorkerHostLogFileTests : IDisposable
         }
         catch (IOException)
         {
+            // Best-effort temporary-directory cleanup must not mask the test result.
         }
     }
 
@@ -220,6 +221,7 @@ public sealed class WorkerHostLogFileTests : IDisposable
         }
         catch (InvalidOperationException)
         {
+            // The probe may have exited or become unavailable; shutdown is best effort.
         }
         finally
         {
@@ -240,6 +242,7 @@ public sealed class WorkerHostLogFileTests : IDisposable
             }
             catch (IOException)
             {
+                // Probe logs may be locked or rotating; treat this read as no match so polling can retry.
             }
         }
 

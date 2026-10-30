@@ -223,6 +223,59 @@ public sealed class HostAgentSentinelTests
     }
 
     [Theory]
+    [InlineData(typeof(IOException), typeof(IOException))]
+    [InlineData(typeof(IOException), typeof(UnauthorizedAccessException))]
+    [InlineData(typeof(UnauthorizedAccessException), typeof(IOException))]
+    [InlineData(typeof(UnauthorizedAccessException), typeof(UnauthorizedAccessException))]
+    public void FaultHandlerReportsOriginalAndPersistenceFailureTypesWithoutSecrets(
+        Type monitoringFailureType,
+        Type persistenceFailureType)
+    {
+        var monitoringFailure = (Exception)Activator.CreateInstance(monitoringFailureType, "monitoring-private-detail")!;
+        var persistenceFailure = (Exception)Activator.CreateInstance(persistenceFailureType, "persistence-private-detail")!;
+        string? message = null;
+        var eventId = 0;
+        var exitCode = 0;
+        var stopCalls = 0;
+
+        SentinelFaultHandler.Handle(
+            monitoringFailure,
+            () => throw persistenceFailure,
+            (id, text) => { eventId = id; message = text; },
+            () => { exitCode = 200; },
+            () => { stopCalls++; });
+
+        Assert.Equal(200, eventId);
+        Assert.Equal(200, exitCode);
+        Assert.Equal(1, stopCalls);
+        Assert.NotNull(message);
+        Assert.Contains(monitoringFailureType.Name, message, StringComparison.Ordinal);
+        Assert.Contains(persistenceFailureType.Name, message, StringComparison.Ordinal);
+        Assert.Contains("restart fault restoration is unavailable", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("monitoring-private-detail", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("persistence-private-detail", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FaultHandlerStopsWithExitCode200WhenEventReportingFails()
+    {
+        var reportingFailure = new InvalidOperationException("event-source-private-detail");
+        var exitCode = 0;
+        var stopCalls = 0;
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => SentinelFaultHandler.Handle(
+            new IOException("monitoring-private-detail"),
+            () => { },
+            (_, _) => throw reportingFailure,
+            () => { exitCode = 200; },
+            () => { stopCalls++; }));
+
+        Assert.Same(reportingFailure, thrown);
+        Assert.Equal(200, exitCode);
+        Assert.Equal(1, stopCalls);
+    }
+
+    [Theory]
     [InlineData("OMP.HostAgent.Sentinel", false)]
     [InlineData("omp.hostagent.sentinel", false)]
     [InlineData("OMP.HostAgent.0.3.262", true)]

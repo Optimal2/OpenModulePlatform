@@ -44,7 +44,10 @@ public sealed class DashboardWidgetImportSkippedWidgetTests : IDisposable
     {
         _database.Dispose();
         try { Directory.Delete(_tempDirectory, recursive: true); }
-        catch (IOException) { }
+        catch (IOException)
+        {
+            // Best-effort temporary-directory cleanup must not mask the test result.
+        }
     }
 
     [Fact]
