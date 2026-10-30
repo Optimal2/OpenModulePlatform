@@ -38,9 +38,8 @@ public static class OperatorCredentialApplier
             hostAgent.IisAppPoolPassword = effectivePassword;
         }
 
-        foreach (var pair in hostAgent.IisAppPoolOverrides)
+        foreach (var identity in hostAgent.IisAppPoolOverrides.Values)
         {
-            var identity = pair.Value;
             if (identity is null)
             {
                 continue;

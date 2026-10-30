@@ -907,9 +907,8 @@ END;
 
         // A runtime root may live UNDER these folders (C:\ProgramData\OMP is common); it
         // must never be one of them or a parent of one.
-        foreach (var folder in ProtectedRuntimeDeleteFolders)
+        foreach (var protectedPath in ProtectedRuntimeDeleteFolders.Select(Environment.GetFolderPath))
         {
-            var protectedPath = Environment.GetFolderPath(folder);
             if (!string.IsNullOrWhiteSpace(protectedPath) && IsSameOrChildPath(path, protectedPath))
             {
                 throw new InvalidOperationException($"Refusing to remove runtime directory path '{path}' because it contains '{protectedPath}'.");

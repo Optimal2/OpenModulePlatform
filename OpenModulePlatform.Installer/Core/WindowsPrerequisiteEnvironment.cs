@@ -72,9 +72,10 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
                 return null;
             }
 
-            foreach (var line in dism.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            foreach (var trimmed in dism.StdOut
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim()))
             {
-                var trimmed = line.Trim();
                 if (trimmed.StartsWith("State", StringComparison.OrdinalIgnoreCase)
                     && trimmed.Contains(':', StringComparison.Ordinal))
                 {
