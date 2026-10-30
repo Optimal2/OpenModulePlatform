@@ -140,7 +140,7 @@ public sealed class WorkerManagerRuntimeRobustnessTests
             return;
         }
 
-        var job = WorkerProcessJobObject.TryCreate();
+        using var job = WorkerProcessJobObject.TryCreate();
         Assert.NotNull(job);
 
         using var worker = CreateLongRunningChild();

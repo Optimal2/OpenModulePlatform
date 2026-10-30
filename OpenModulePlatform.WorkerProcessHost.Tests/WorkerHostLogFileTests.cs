@@ -211,21 +211,20 @@ public sealed class WorkerHostLogFileTests : IDisposable
 
     private static void Stop(Process process)
     {
-        try
+        using (process)
         {
-            if (!process.HasExited)
+            try
             {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit(10_000);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(10_000);
+                }
             }
-        }
-        catch (InvalidOperationException)
-        {
-            // The probe may have exited or become unavailable; shutdown is best effort.
-        }
-        finally
-        {
-            process.Dispose();
+            catch (InvalidOperationException)
+            {
+                // The probe may have exited or become unavailable; shutdown is best effort.
+            }
         }
     }
 
