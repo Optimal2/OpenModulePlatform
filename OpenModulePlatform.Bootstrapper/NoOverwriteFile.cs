@@ -61,6 +61,14 @@ internal sealed class OutputFileExistsException : IOException
 /// </remarks>
 internal static class NoOverwriteFile
 {
+    // Bounded contention windows. A delete-pending name becomes visible or
+    // claimable once the competing rename/delete completes, and a
+    // scanner-like handle on the claim is released when the scan moves on,
+    // both on a millisecond scale. A denial that persists across the whole
+    // window without ever resolving is treated as permanent.
+    private static readonly TimeSpan ClaimRetryWindow = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan PublishRetryWindow = TimeSpan.FromSeconds(2);
+
     /// <summary>
     /// Writes a new file at <paramref name="path"/> through <paramref name="write"/>.
     /// Throws <see cref="OutputFileExistsException"/> when the path already
@@ -103,7 +111,26 @@ internal static class NoOverwriteFile
                         + "An existing package is never overwritten; build again to get a new version.");
             }
 
-            File.Move(tempPath, fullPath, overwrite: true);
+            // A scanner-like handle on the claim (without FILE_SHARE_DELETE)
+            // denies the rename while it is held. Such handles are transient,
+            // so retry the rename for a bounded window; a handle that persists
+            // across the whole window still fails with the original error and
+            // the cleanup below warns about the leftover reservation.
+            var publishUntil = DateTime.UtcNow.Add(PublishRetryWindow);
+            for (;;)
+            {
+                try
+                {
+                    File.Move(tempPath, fullPath, overwrite: true);
+                    break;
+                }
+                catch (Exception ex)
+                    when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < publishUntil)
+                {
+                    Thread.Sleep(20);
+                }
+            }
+
             published = true;
         }
         finally
@@ -119,8 +146,17 @@ internal static class NoOverwriteFile
 
     private static FileIdentity ClaimName(string fullPath, Func<string, FileStream>? createClaim)
     {
+        // A delete-pending name becomes visible or claimable again once the
+        // competing rename/delete completes, while a permanent denial never
+        // does. Retry the atomic claim for a bounded window: a denial that
+        // resolves, or that ever lets the name become visible, is contention
+        // and ends in success or OutputFileExistsException. A denial that
+        // persists across the whole window without the name ever becoming
+        // visible or claimable is a permanent permission error and still
+        // propagates raw; the content callback has not run.
+        var retryUntil = DateTime.UtcNow.Add(ClaimRetryWindow);
         FileStream claim;
-        for (var attempt = 0; ; attempt++)
+        for (;;)
         {
             try
             {
@@ -135,13 +171,12 @@ internal static class NoOverwriteFile
             {
                 throw ExistingFile(fullPath, ex);
             }
-            catch (UnauthorizedAccessException) when (attempt < 4)
+            catch (UnauthorizedAccessException) when (DateTime.UtcNow < retryUntil)
             {
                 // CREATE_NEW can report access denied while another writer's
                 // rename/delete keeps the name in a delete-pending state.
                 // It may be invisible to File.Exists in that window. Retry
-                // only the atomic claim; persistent permission errors still
-                // propagate and the content callback has not run.
+                // only the atomic claim.
                 Thread.Sleep(10);
             }
         }

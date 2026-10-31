@@ -121,6 +121,61 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
+    public void ContentionOutlivingTheOldRetryWindowStillClaimsTheName()
+    {
+        // Delete-pending contention can outlive a short fixed retry budget
+        // while the name stays invisible to File.Exists. Denials that resolve
+        // inside the bounded window must still claim the name instead of
+        // escaping as a raw UnauthorizedAccessException.
+        var path = Path.Join(_testRoot, "package.zip");
+        var attempts = 0;
+        NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("winner")), createClaim: name =>
+        {
+            if (++attempts <= 8)
+            {
+                throw new UnauthorizedAccessException("Simulated delete-pending name");
+            }
+
+            return new FileStream(name, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        });
+        Assert.Equal(9, attempts);
+        Assert.Equal("winner", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void ATransientHandleOnTheClaimStillPublishes()
+    {
+        // A scanner-like handle on the claim (no FILE_SHARE_DELETE) denies
+        // the final rename while it is held. A handle that goes away inside
+        // the bounded window must not fail the build or leave a reservation
+        // behind; only a handle that persists across the whole window warns.
+        var path = Path.Join(_testRoot, "package.zip");
+        var warnings = new List<string>();
+        FileStream? blocker = null;
+        using var timer = new Timer(_ => blocker?.Dispose(), null, 150, Timeout.Infinite);
+        try
+        {
+            NoOverwriteFile.Write(
+                path,
+                stream =>
+                {
+                    blocker = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    stream.Write(Encoding.UTF8.GetBytes("content"));
+                },
+                warnings.Add);
+        }
+        finally
+        {
+            blocker?.Dispose();
+        }
+
+        Assert.Equal("content", File.ReadAllText(path));
+        Assert.Empty(warnings);
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
     public void PermanentAccessDeniedRemainsAnAccessErrorWithoutCallingWriter()
     {
         var path = Path.Join(_testRoot, "package.zip");
