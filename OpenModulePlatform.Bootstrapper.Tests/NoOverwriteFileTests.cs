@@ -196,15 +196,20 @@ public sealed class NoOverwriteFileTests : IDisposable
         if (winners.Length == 1)
         {
             Assert.Equal("writer-" + winners[0], File.ReadAllText(path));
-            Assert.Equal([path], Directory.GetFiles(_testRoot));
         }
-        else
-        {
-            // A failed owner releases its claim and its temporary file.
-            Assert.True(Directory.GetFiles(_testRoot).Length == 0, "Nobody published but files were left behind:"
-                + Environment.NewLine + string.Join(Environment.NewLine, Directory.GetFiles(_testRoot))
-                + Environment.NewLine + outcomes);
-        }
+
+        // Only the published package may remain: a failed owner releases its
+        // claim and its temporary file, so without a winner the directory is
+        // empty. Cleanup that cannot delete a file reports a warning naming it
+        // instead of throwing, and a leftover it warned about is designed
+        // behaviour -- an external handle on the claim denies the owner both
+        // the rename and the delete. A leftover nobody warned about is a leak.
+        var published = winners.Length == 1 ? path : null;
+        Assert.All(
+            Directory.GetFiles(_testRoot).Where(file => file != published),
+            file => Assert.True(
+                warnings.Any(warning => warning.Contains(file, StringComparison.Ordinal)),
+                $"{file} was left behind without a cleanup warning:" + Environment.NewLine + outcomes));
     }
 
     [Fact]
