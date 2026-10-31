@@ -176,6 +176,77 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
+    public async Task PublishRetryNeverReplacesAFileThatIsNoLongerItsOwnClaim()
+    {
+        // Force the first rename to fail. A second handle on the temporary file
+        // keeps every rename denied while another writer atomically takes the
+        // name, so the next retry cannot race the foreign publish itself.
+        var path = Path.Join(_testRoot, "package.zip");
+        var foreignPath = Path.Join(_testRoot, "foreign.tmp");
+        File.WriteAllText(foreignPath, "foreign");
+        FileStream? claimBlocker = null;
+        Task? replaceClaim = null;
+        string? temporaryPackage = null;
+        Exception? publishException;
+        try
+        {
+            publishException = Record.Exception(() => NoOverwriteFile.Write(path, stream =>
+            {
+                var targetBlocker = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                claimBlocker = targetBlocker;
+                replaceClaim = Task.Run(() =>
+                {
+                    var tempPath = Directory.GetFiles(
+                        _testRoot, $".{Path.GetFileName(path)}.*.tmp").Single();
+                    temporaryPackage = tempPath;
+                    var openUntil = DateTime.UtcNow.AddSeconds(1);
+                    FileStream tempBlocker;
+                    for (;;)
+                    {
+                        try
+                        {
+                            tempBlocker = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                            break;
+                        }
+                        catch (Exception ex)
+                            when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < openUntil)
+                        {
+                            Thread.Sleep(1);
+                        }
+                    }
+
+                    using (tempBlocker)
+                    {
+                        Thread.Sleep(30);
+                        targetBlocker.Dispose();
+                        File.Move(foreignPath, path, overwrite: true);
+                        Thread.Sleep(50);
+                    }
+                });
+                stream.Write(Encoding.UTF8.GetBytes("mine"));
+            }));
+        }
+        finally
+        {
+            if (replaceClaim is not null)
+            {
+                await replaceClaim;
+            }
+            claimBlocker?.Dispose();
+            if (temporaryPackage is not null)
+            {
+                // The injected handle can outlive the write's own cleanup attempt.
+                File.Delete(temporaryPackage);
+            }
+        }
+
+        Assert.Equal("foreign", File.ReadAllText(path));
+        var ex = Assert.IsType<OutputFileExistsException>(publishException);
+        Assert.Contains("was replaced by another file", ex.Message, StringComparison.Ordinal);
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
     public void PermanentAccessDeniedRemainsAnAccessErrorWithoutCallingWriter()
     {
         var path = Path.Join(_testRoot, "package.zip");

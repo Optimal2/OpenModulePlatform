@@ -55,8 +55,9 @@ internal sealed class OutputFileExistsException : IOException
 /// target is verified to still be this writer's claim: empty and the same file
 /// (volume serial number and file index) that was created. A claim deleted and
 /// recreated by someone else while the content was written is refused instead
-/// of replaced. A process killed between claim and rename leaves the empty
-/// claim behind; the next build recognises an empty file and explains it
+/// of replaced. Every bounded publish retry repeats that verification before
+/// another overwrite attempt. A process killed between claim and rename leaves
+/// the empty claim behind; the next build recognises an empty file and explains it
 /// instead of reporting a package that does not exist.
 /// </remarks>
 internal static class NoOverwriteFile
@@ -117,8 +118,19 @@ internal static class NoOverwriteFile
             // across the whole window still fails with the original error and
             // the cleanup below warns about the leftover reservation.
             var publishUntil = DateTime.UtcNow.Add(PublishRetryWindow);
+            var reverifyClaim = false;
             for (;;)
             {
+                // The first attempt uses the proof above. Every retry must prove
+                // again that the name still belongs to this writer before replacing it.
+                if (reverifyClaim && !IsOwnClaim(fullPath, claim))
+                {
+                    throw new OutputFileExistsException(
+                        fullPath,
+                        $"{fullPath} was replaced by another file while this package was written, and was not overwritten. "
+                            + "An existing package is never overwritten; build again to get a new version.");
+                }
+
                 try
                 {
                     File.Move(tempPath, fullPath, overwrite: true);
@@ -127,6 +139,7 @@ internal static class NoOverwriteFile
                 catch (Exception ex)
                     when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < publishUntil)
                 {
+                    reverifyClaim = true;
                     Thread.Sleep(20);
                 }
             }
