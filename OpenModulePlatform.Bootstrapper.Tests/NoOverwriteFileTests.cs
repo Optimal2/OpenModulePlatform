@@ -194,12 +194,12 @@ public sealed class NoOverwriteFileTests : IDisposable
             {
                 var targetBlocker = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 claimBlocker = targetBlocker;
+                var publishThread = Thread.CurrentThread;
                 replaceClaim = Task.Run(() =>
                 {
                     var tempPath = Directory.GetFiles(
                         _testRoot, $".{Path.GetFileName(path)}.*.tmp").Single();
                     temporaryPackage = tempPath;
-                    var openUntil = DateTime.UtcNow.AddSeconds(1);
                     FileStream tempBlocker;
                     for (;;)
                     {
@@ -208,19 +208,44 @@ public sealed class NoOverwriteFileTests : IDisposable
                             tempBlocker = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read);
                             break;
                         }
-                        catch (Exception ex)
-                            when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < openUntil)
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                         {
+                            // The writer still owns the stream. Wait for its close,
+                            // not for a deadline that can expire on a loaded machine.
                             Thread.Sleep(1);
                         }
                     }
 
                     using (tempBlocker)
                     {
-                        Thread.Sleep(30);
+                        // After the temporary stream closes, the publish retry is
+                        // the only managed wait in Write. Observing it proves that
+                        // the first rename was denied before the foreign publish;
+                        // a fixed delay cannot provide that ordering guarantee.
+                        SpinWait.SpinUntil(
+                            () => (publishThread.ThreadState & ThreadState.WaitSleepJoin) != 0);
                         targetBlocker.Dispose();
-                        File.Move(foreignPath, path, overwrite: true);
-                        Thread.Sleep(50);
+
+                        // Closing the target blocker can leave its name transiently
+                        // delete-pending on Windows. The foreign publish must tolerate
+                        // that contention instead of turning it into a test failure.
+                        // The temporary-file blocker prevents our package from publishing
+                        // until the foreign file has atomically taken the target name.
+                        var foreignPublishUntil = DateTime.UtcNow.AddSeconds(2);
+                        for (;;)
+                        {
+                            try
+                            {
+                                File.Move(foreignPath, path, overwrite: true);
+                                break;
+                            }
+                            catch (Exception ex)
+                                when ((ex is IOException or UnauthorizedAccessException)
+                                    && DateTime.UtcNow < foreignPublishUntil)
+                            {
+                                Thread.Sleep(1);
+                            }
+                        }
                     }
                 });
                 stream.Write(Encoding.UTF8.GetBytes("mine"));
