@@ -153,7 +153,7 @@ public sealed class NoOverwriteFileTests : IDisposable
         var path = Path.Join(_testRoot, "package.zip");
         var warnings = new List<string>();
         FileStream? blocker = null;
-        using var timer = new Timer(_ => blocker?.Dispose(), null, 150, Timeout.Infinite);
+        using var timer = new Timer(_ => blocker?.Dispose(), null, Timeout.Infinite, Timeout.Infinite);
         try
         {
             NoOverwriteFile.Write(
@@ -161,6 +161,12 @@ public sealed class NoOverwriteFileTests : IDisposable
                 stream =>
                 {
                     blocker = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                    // Arm the release only once the handle exists. A timer armed
+                    // before the write starts can expire while the claim is still
+                    // being created, which would leave the handle held for the
+                    // whole publish window instead of releasing inside it.
+                    timer.Change(150, Timeout.Infinite);
                     stream.Write(Encoding.UTF8.GetBytes("content"));
                 },
                 warnings.Add);
@@ -201,6 +207,12 @@ public sealed class NoOverwriteFileTests : IDisposable
                         _testRoot, $".{Path.GetFileName(path)}.*.tmp").Single();
                     temporaryPackage = tempPath;
                     FileStream tempBlocker;
+
+                    // Generous enough that no realistic load reaches it, so the
+                    // handshake stays load-independent, but bounded: if the
+                    // temporary file is gone the open can never succeed, and an
+                    // unbounded loop would hang the suite instead of naming it.
+                    var tempOpenUntil = DateTime.UtcNow.AddSeconds(30);
                     for (;;)
                     {
                         try
@@ -210,8 +222,16 @@ public sealed class NoOverwriteFileTests : IDisposable
                         }
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                         {
+                            if (DateTime.UtcNow >= tempOpenUntil)
+                            {
+                                throw new IOException(
+                                    $"The temporary package {tempPath} never became readable, so the publish "
+                                        + "retry under test was never reached.",
+                                    ex);
+                            }
+
                             // The writer still owns the stream. Wait for its close,
-                            // not for a deadline that can expire on a loaded machine.
+                            // not for a tight deadline that a loaded machine can miss.
                             Thread.Sleep(1);
                         }
                     }
@@ -222,8 +242,14 @@ public sealed class NoOverwriteFileTests : IDisposable
                         // the only managed wait in Write. Observing it proves that
                         // the first rename was denied before the foreign publish;
                         // a fixed delay cannot provide that ordering guarantee.
-                        SpinWait.SpinUntil(
-                            () => (publishThread.ThreadState & ThreadState.WaitSleepJoin) != 0);
+                        // Bounded: with the publish retry removed the thread never
+                        // waits, and an unbounded spin would hang the suite instead
+                        // of naming the regression.
+                        Assert.True(
+                            SpinWait.SpinUntil(
+                                () => (publishThread.ThreadState & ThreadState.WaitSleepJoin) != 0,
+                                TimeSpan.FromSeconds(30)),
+                            "The publish never waited to retry, so the first rename was not denied.");
                         targetBlocker.Dispose();
 
                         // Closing the target blocker can leave its name transiently

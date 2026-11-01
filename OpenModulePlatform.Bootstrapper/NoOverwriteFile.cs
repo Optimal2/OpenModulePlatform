@@ -161,12 +161,15 @@ internal static class NoOverwriteFile
     {
         // A delete-pending name becomes visible or claimable again once the
         // competing rename/delete completes, while a permanent denial never
-        // does. Retry the atomic claim for a bounded window: a denial that
-        // resolves, or that ever lets the name become visible, is contention
-        // and ends in success or OutputFileExistsException. A denial that
-        // persists across the whole window without the name ever becoming
-        // visible or claimable is a permanent permission error and still
-        // propagates raw; the content callback has not run.
+        // does. Retry the atomic claim for a bounded window: an access denial
+        // that resolves, or that ever lets the name become visible, is
+        // contention and ends in success or OutputFileExistsException. An
+        // access denial that persists across the whole window without the name
+        // ever becoming visible or claimable is a permanent permission error
+        // and still propagates raw; the content callback has not run. Only
+        // UnauthorizedAccessException is retried: delete-pending contention
+        // reports access denied, so an IOException on an invisible name is a
+        // different, non-transient problem and propagates at once.
         var retryUntil = DateTime.UtcNow.Add(ClaimRetryWindow);
         FileStream claim;
         for (;;)
