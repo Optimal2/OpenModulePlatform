@@ -10,6 +10,10 @@ observed state.
 ![Version](https://img.shields.io/badge/version-0.3.x-lightgrey.svg)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4.svg)
 
+**Watch the two-minute introduction:** OMP explained as an amusement park.
+
+[![OpenModulePlatform: One Park, Many Attractions](https://img.youtube.com/vi/l6ATHxOYWTo/maxresdefault.jpg)](https://youtu.be/l6ATHxOYWTo)
+
 ![OMP Portal start page](docs/img/portal-start-page.png)
 
 ## What it is
