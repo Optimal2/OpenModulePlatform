@@ -1,3 +1,7 @@
+using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -24,7 +28,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
         const string moduleKey = "completionconcurrent";
         const string schemaName = "omp_completionconcurrent";
         var workRoot = CreateWorkRoot();
-        using var importCts = new CancellationTokenSource();
+        var importCts = new CancellationTokenSource();
+        Task? allImports = null;
         try
         {
             var service = CreatePortalService(Path.Join(workRoot, "store"));
@@ -45,6 +50,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
                 EntrySyncScalarAsync($"SELECT DefinitionJson FROM omp.ModuleDefinitionDocuments WHERE ModuleKey = N'{moduleKey}';"),
                 DatabaseOperationBound,
                 "Reading the imported definition JSON"))!;
+            var expectedExecutions = GetExpectedDefinitionSqlExecutions(json);
+            Assert.Equal(2, expectedExecutions.Count);
             var hash = (string)(await WithinBound(
                 EntrySyncScalarAsync($"SELECT DefinitionSha256 FROM omp.ModuleDefinitionDocuments WHERE ModuleKey = N'{moduleKey}';"),
                 DatabaseOperationBound,
@@ -53,24 +60,18 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
             var host = new ArtifactZipImportService(new StaticOptionsMonitor<HostAgentSettings>(new()),
                 _fixture.CreateHostAgentRepository(), NullLogger<ArtifactZipImportService>.Instance);
 
-            Task<UniversalPackageImportResult> portalImport;
-            Task<ModuleDefinitionImportResult> hostImport;
-            Task? allImports = null;
+            Task<UniversalPackageImportResult> portalImport = null!;
+            Task<ModuleDefinitionImportResult> hostImport = null!;
             var waiters = 0;
-            var contentionObserved = false;
-            // Hold the real repair lock until both imports are observed waiting on it.
-            // The imports still execute the production lock and recheck-under-lock paths.
+            // Hold the real repair lock until both imports are observed waiting on its
+            // measured resource identity. The production lock and recheck paths stay intact.
             var repairScope = await WithinBound(
                 _fixture.CreatePortalRepository().BeginModuleDefinitionSqlRepairAsync(importCts.Token),
                 RepairLockAcquisitionBound,
                 "Acquiring the test-held module-definition SQL repair lock");
+            Exception? handshakeFailure = null;
             try
             {
-                portalImport = ImportPortalPackageAsync(
-                    service, package, quickImport: true, cancellationToken: importCts.Token);
-                hostImport = host.ImportModuleDefinitionAsync(document, importCts.Token);
-                allImports = Task.WhenAll(portalImport, hostImport);
-
                 // Keep one dedicated observer session instead of creating a fresh pooled
                 // session for every poll. Its open and every DMV command have their own bounds.
                 using var observer = new SqlConnection(_fixture.ConnectionString);
@@ -78,19 +79,28 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
                     observer.OpenAsync(importCts.Token),
                     ObserverOpenBound,
                     "Opening the repair-lock observer connection");
-                using var command = new SqlCommand(
-                    """
-                    SELECT COUNT(*)
-                    FROM sys.dm_tran_locks
-                    WHERE resource_database_id = DB_ID()
-                      AND resource_type = 'APPLICATION'
-                      AND request_status = 'WAIT'
-                      AND request_owner_type = 'SESSION';
-                    """,
-                    observer)
+                await using var holderSpidCommand = new SqlCommand("SELECT @@SPID;", repairScope.Connection)
                 {
                     CommandTimeout = (int)ObserverCommandBound.TotalSeconds
                 };
+                var holderSpid = Convert.ToInt32(await WithinBound(
+                    holderSpidCommand.ExecuteScalarAsync(importCts.Token),
+                    ObserverCommandBound,
+                    "Reading the held repair-lock session id"));
+                var repairLock = await ReadHeldRepairLockAsync(observer, holderSpid, importCts.Token);
+
+                // Two deterministic waiters on an unrelated resource make the old database-wide
+                // observation reach two before either importer starts. The scoped observation
+                // must remain at zero, then observe the two genuine importer contenders below.
+                await ProveUnrelatedApplicationLockExclusionAsync(observer, repairLock, importCts);
+
+                portalImport = ImportPortalPackageAsync(
+                    service, package, quickImport: true, cancellationToken: importCts.Token);
+                allImports = portalImport;
+                hostImport = host.ImportModuleDefinitionAsync(document, importCts.Token);
+                allImports = Task.WhenAll(portalImport, hostImport);
+
+                using var command = CreateRepairLockWaiterCommand(observer, repairLock);
                 var contentionDeadline = DateTime.UtcNow.Add(ContentionObservationBound);
                 while (waiters < 2)
                 {
@@ -112,43 +122,37 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
                     waiters = Convert.ToInt32(await WithinBound(
                         command.ExecuteScalarAsync(importCts.Token),
                         ObserverCommandBound,
-                        "Observing repair-lock waiters in sys.dm_tran_locks"));
+                        "Observing waiters on the held repair-lock resource in sys.dm_tran_locks"));
                     if (waiters < 2)
-                        await Task.Delay(ObservationPollInterval);
+                        await Task.Delay(ObservationPollInterval, importCts.Token);
                 }
+            }
+            catch (Exception ex)
+            {
+                handshakeFailure = ex;
+            }
 
-                contentionObserved = true;
-            }
-            catch
-            {
-                importCts.Cancel();
-                throw;
-            }
-            finally
-            {
-                try
-                {
-                    await WithinBound(
-                        repairScope.DisposeAsync().AsTask(),
-                        RepairLockReleaseBound,
-                        "Releasing the test-held module-definition SQL repair lock");
-                }
-                finally
-                {
-                    if (!contentionObserved && allImports is not null)
-                        await ObserveImportCleanupAsync(allImports);
-                }
-            }
+            await CompleteConcurrentImportCleanupAsync(
+                handshakeFailure,
+                importCts,
+                () => WithinBound(
+                    repairScope.DisposeAsync().AsTask(),
+                    RepairLockReleaseBound,
+                    "Releasing the test-held module-definition SQL repair lock"),
+                () => allImports is null ? Task.CompletedTask : ObserveImportCleanupAsync(allImports));
 
             var imports = allImports ?? throw new InvalidOperationException("The concurrent imports were never started.");
             try
             {
                 await WithinBound(imports, ImportCompletionBound, "The concurrent Portal and HostAgent imports");
             }
-            catch
+            catch (Exception ex)
             {
-                importCts.Cancel();
-                await ObserveImportCleanupAsync(imports);
+                await CompleteConcurrentImportCleanupAsync(
+                    ex,
+                    importCts,
+                    () => Task.CompletedTask,
+                    () => ObserveImportCleanupAsync(imports));
                 throw;
             }
 
@@ -157,10 +161,11 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
             var hostResult = await WithinBound(hostImport, ImportCompletionBound, "Reading the completed HostAgent import");
             Assert.DoesNotContain(portalResult.Items, item => item.Status == "Failed");
             Assert.True(hostResult.Applied);
-            Assert.Equal(2, await WithinBound(
-                _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, "1.0.1"),
+            var actualExecutions = await WithinBound(
+                _fixture.GetSucceededDefinitionSqlExecutionCountsAsync(moduleKey, "1.0.1"),
                 DatabaseOperationBound,
-                "Counting successful definition SQL executions"));
+                "Reading successful definition SQL executions grouped by script key and hash");
+            AssertExactlyOneSuccessfulExecutionPerExpectedScript(expectedExecutions, actualExecutions);
             Assert.Contains(PackageArtifactVersion, await WithinBound(
                 _fixture.GetSeededVersionsAsync(schemaName),
                 DatabaseOperationBound,
@@ -168,7 +173,466 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
         }
         finally
         {
+            // If bounded cleanup expired, this continuation keeps the CTS alive and observes
+            // late task failures. Completed imports are disposed synchronously here.
+            var cancellationObservation = ObserveTasksAndDisposeCancellationSourceAsync(importCts, allImports);
+            if (cancellationObservation.IsCompleted)
+                await cancellationObservation;
             TryDeleteDirectory(workRoot);
+        }
+    }
+
+    [Fact]
+    public void SuccessfulDefinitionSqlExecutionAssertion_WhenWrongDistributionKeepsTotal_Fails()
+    {
+        var expected = new (string ScriptKey, string ScriptSha256, int ExecutionCount)[]
+        {
+            ("setup-seedorder-schema", new string('a', 64), 1),
+            ("initialize-seedorder-rows", new string('b', 64), 1)
+        };
+        var wrongDistribution = new (string ScriptKey, string ScriptSha256, int ExecutionCount)[]
+        {
+            ("setup-seedorder-schema", new string('a', 64), 2)
+        };
+
+        Assert.Equal(2, wrongDistribution.Sum(row => row.ExecutionCount));
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(
+            () => AssertExactlyOneSuccessfulExecutionPerExpectedScript(expected, wrongDistribution));
+    }
+
+    [Fact]
+    public async Task ConcurrentImportCleanup_WhenPrimaryReleaseAndCleanupFail_PreservesEveryFailure()
+    {
+        var primary = new InvalidOperationException("Injected primary handshake failure.");
+        var release = new TimeoutException("Injected repair-lock release failure.");
+        var cleanup = new InvalidOperationException("Injected import cleanup failure.");
+        using var cts = new CancellationTokenSource();
+
+        var failure = await Assert.ThrowsAsync<AggregateException>(() => CompleteConcurrentImportCleanupAsync(
+            primary,
+            cts,
+            () => Task.FromException(release),
+            () => Task.FromException(cleanup)));
+
+        Assert.Equal(3, failure.InnerExceptions.Count);
+        Assert.Same(primary, failure.InnerExceptions[0]);
+        Assert.Same(release, failure.InnerExceptions[1]);
+        Assert.Same(cleanup, failure.InnerExceptions[2]);
+        Assert.True(cts.IsCancellationRequested);
+    }
+
+    [Fact]
+    public async Task ImportCancellationSource_WhenCleanupObservationTimesOut_StaysAliveAndObservesLateFailures()
+    {
+        var cts = new CancellationTokenSource();
+        var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var imports = Task.WhenAll(first.Task, second.Task);
+        var lateFailure = new InvalidOperationException("Injected late import failure.");
+        var disposal = ObserveTasksAndDisposeCancellationSourceAsync(cts, imports);
+        try
+        {
+            await Assert.ThrowsAsync<TimeoutException>(() => ObserveImportCleanupAsync(
+                imports,
+                TimeSpan.FromMilliseconds(25)));
+            Assert.False(disposal.IsCompleted);
+            using (var registration = cts.Token.Register(static () => { }))
+            {
+                // Registration succeeding proves the bounded observation did not dispose the CTS.
+            }
+
+            first.SetException(lateFailure);
+            Assert.False(disposal.IsCompleted);
+            second.SetResult();
+            var observed = await WithinBound(
+                disposal,
+                TimeSpan.FromSeconds(5),
+                "Observing the controlled late import failure and disposing its CTS");
+            Assert.NotNull(observed);
+            Assert.Contains(observed.Flatten().InnerExceptions, ex => ReferenceEquals(ex, lateFailure));
+            Assert.Throws<ObjectDisposedException>(() =>
+            {
+                using var registration = cts.Token.Register(static () => { });
+            });
+        }
+        finally
+        {
+            first.TrySetException(lateFailure);
+            second.TrySetResult();
+        }
+    }
+
+    private static IReadOnlyList<(string ScriptKey, string ScriptSha256, int ExecutionCount)>
+        GetExpectedDefinitionSqlExecutions(string definitionJson)
+    {
+        var definition = JsonNode.Parse(definitionJson)?.AsObject()
+            ?? throw new InvalidOperationException("The imported definition JSON is not an object.");
+        var scripts = definition["sqlScripts"]?.AsArray()
+            ?? throw new InvalidOperationException("The imported definition has no SQL script array.");
+        var expected = new List<(string ScriptKey, string ScriptSha256, int ExecutionCount)>();
+        foreach (var scriptNode in scripts)
+        {
+            var script = scriptNode?.AsObject()
+                ?? throw new InvalidOperationException("The imported definition contains an invalid SQL script.");
+            var text = (string?)script["inlineSql"];
+            var execution = (string?)script["execution"];
+            if (string.IsNullOrWhiteSpace(text)
+                || string.Equals(execution, "validation", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var key = (string?)script["key"]
+                ?? throw new InvalidOperationException("An executable SQL script has no key.");
+            var scriptHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+            expected.Add((key, scriptHash, 1));
+        }
+
+        return expected;
+    }
+
+    private static void AssertExactlyOneSuccessfulExecutionPerExpectedScript(
+        IReadOnlyCollection<(string ScriptKey, string ScriptSha256, int ExecutionCount)> expected,
+        IReadOnlyCollection<(string ScriptKey, string ScriptSha256, int ExecutionCount)> actual)
+    {
+        Assert.Equal(expected.Sum(row => row.ExecutionCount), actual.Sum(row => row.ExecutionCount));
+        Assert.Equal(expected.Count, actual.Count);
+        foreach (var expectedScript in expected)
+        {
+            var actualScript = Assert.Single(actual, row =>
+                string.Equals(row.ScriptKey, expectedScript.ScriptKey, StringComparison.Ordinal)
+                && string.Equals(row.ScriptSha256, expectedScript.ScriptSha256, StringComparison.Ordinal));
+            Assert.Equal(1, actualScript.ExecutionCount);
+        }
+    }
+
+    private sealed record HeldRepairLock(
+        int HolderSessionId,
+        string ResourceDescription,
+        string ResourceSubtype,
+        long ResourceAssociatedEntityId);
+
+    private static async Task<HeldRepairLock> ReadHeldRepairLockAsync(
+        SqlConnection observer,
+        int holderSpid,
+        CancellationToken cancellationToken)
+    {
+        using var command = new SqlCommand(
+            """
+            SELECT request_session_id, resource_description, resource_subtype, resource_associated_entity_id
+            FROM sys.dm_tran_locks
+            WHERE request_session_id = @holderSpid
+              AND resource_database_id = DB_ID()
+              AND resource_type = 'APPLICATION'
+              AND request_mode = 'X'
+              AND request_status = 'GRANT'
+              AND request_owner_type = 'SESSION';
+            """,
+            observer)
+        {
+            CommandTimeout = (int)ObserverCommandBound.TotalSeconds
+        };
+        command.Parameters.AddWithValue("@holderSpid", holderSpid);
+        await using var reader = await WithinBound(
+            command.ExecuteReaderAsync(cancellationToken),
+            ObserverCommandBound,
+            "Reading the held repair-lock resource identity");
+        Assert.True(
+            await WithinBound(
+                reader.ReadAsync(cancellationToken),
+                ObserverCommandBound,
+                "Reading the held repair-lock row"),
+            "The held repair lock was not visible in sys.dm_tran_locks.");
+        var held = new HeldRepairLock(
+            Convert.ToInt32(reader.GetValue(0)),
+            reader.GetString(1),
+            reader.GetString(2),
+            Convert.ToInt64(reader.GetValue(3)));
+        Assert.False(
+            await WithinBound(
+                reader.ReadAsync(cancellationToken),
+                ObserverCommandBound,
+                "Checking for additional held repair-lock rows"),
+            "The repair-lock holder had more than one exclusive session application lock.");
+        return held;
+    }
+
+    private static SqlCommand CreateRepairLockWaiterCommand(SqlConnection observer, HeldRepairLock held)
+    {
+        var command = new SqlCommand(
+            """
+            SELECT COUNT(*)
+            FROM sys.dm_tran_locks
+            WHERE request_session_id <> @holderSpid
+              AND resource_database_id = DB_ID()
+              AND resource_type = 'APPLICATION'
+              AND resource_description = @resourceDescription
+              AND resource_subtype = @resourceSubtype
+              AND resource_associated_entity_id = @resourceAssociatedEntityId
+              AND request_mode = 'X'
+              AND request_status = 'WAIT'
+              AND request_owner_type = 'SESSION';
+            """,
+            observer)
+        {
+            CommandTimeout = (int)ObserverCommandBound.TotalSeconds
+        };
+        command.Parameters.AddWithValue("@holderSpid", held.HolderSessionId);
+        command.Parameters.AddWithValue("@resourceDescription", held.ResourceDescription);
+        command.Parameters.AddWithValue("@resourceSubtype", held.ResourceSubtype);
+        command.Parameters.AddWithValue("@resourceAssociatedEntityId", held.ResourceAssociatedEntityId);
+        return command;
+    }
+
+    private static SqlCommand CreateUnscopedApplicationLockWaiterCommand(SqlConnection observer)
+        => new(
+            """
+            SELECT COUNT(*)
+            FROM sys.dm_tran_locks
+            WHERE resource_database_id = DB_ID()
+              AND resource_type = 'APPLICATION'
+              AND request_status = 'WAIT'
+              AND request_owner_type = 'SESSION';
+            """,
+            observer)
+        {
+            CommandTimeout = (int)ObserverCommandBound.TotalSeconds
+        };
+
+    private async Task ProveUnrelatedApplicationLockExclusionAsync(
+        SqlConnection observer,
+        HeldRepairLock repairLock,
+        CancellationTokenSource importCts)
+    {
+        var unrelatedResource = $"omp.test.unrelated.{Guid.NewGuid():N}";
+        await using var holder = new SqlConnection(CreateNonPoolingConnectionString());
+        await WithinBound(
+            holder.OpenAsync(importCts.Token),
+            ObserverOpenBound,
+            "Opening the unrelated application-lock holder");
+        await AcquireSessionApplicationLockAsync(
+            holder,
+            unrelatedResource,
+            lockTimeoutMilliseconds: 0,
+            importCts.Token,
+            "Acquiring the unrelated application lock");
+
+        Task? allWaiters = null;
+        Exception? observationFailure = null;
+        try
+        {
+            allWaiters = Task.WhenAll(
+                WaitForUnrelatedApplicationLockAsync(unrelatedResource, importCts.Token),
+                WaitForUnrelatedApplicationLockAsync(unrelatedResource, importCts.Token));
+            using var unscoped = CreateUnscopedApplicationLockWaiterCommand(observer);
+            using var scoped = CreateRepairLockWaiterCommand(observer, repairLock);
+            var unrelatedWaiters = 0;
+            var deadline = DateTime.UtcNow.Add(ContentionObservationBound);
+            while (unrelatedWaiters < 2)
+            {
+                if (allWaiters.IsCompleted)
+                {
+                    Assert.Fail(
+                        "An unrelated application-lock waiter completed before its holder was released: "
+                        + DescribeImport(allWaiters));
+                }
+
+                if (DateTime.UtcNow >= deadline)
+                {
+                    Assert.Fail(
+                        $"Only {unrelatedWaiters} of 2 unrelated application-lock waiters were visible after "
+                        + $"{ContentionObservationBound.TotalSeconds:0} seconds.");
+                }
+
+                unrelatedWaiters = Convert.ToInt32(await WithinBound(
+                    unscoped.ExecuteScalarAsync(importCts.Token),
+                    ObserverCommandBound,
+                    "Proving that the old observation counts unrelated application-lock waiters"));
+                if (unrelatedWaiters < 2)
+                    await Task.Delay(ObservationPollInterval, importCts.Token);
+            }
+
+            Assert.Equal(2, unrelatedWaiters);
+            var repairWaiters = Convert.ToInt32(await WithinBound(
+                scoped.ExecuteScalarAsync(importCts.Token),
+                ObserverCommandBound,
+                "Proving that the scoped observation ignores unrelated application-lock waiters"));
+            Assert.Equal(0, repairWaiters);
+        }
+        catch (Exception ex)
+        {
+            observationFailure = ex;
+        }
+
+        await CompleteConcurrentImportCleanupAsync(
+            observationFailure,
+            importCts,
+            () => ReleaseSessionApplicationLockAsync(holder, unrelatedResource),
+            () => allWaiters is null ? Task.CompletedTask : ObserveImportCleanupAsync(allWaiters),
+            observeCleanupOnSuccess: true);
+    }
+
+    private string CreateNonPoolingConnectionString()
+        => new SqlConnectionStringBuilder(_fixture.ConnectionString) { Pooling = false }.ConnectionString;
+
+    private async Task WaitForUnrelatedApplicationLockAsync(string resource, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(CreateNonPoolingConnectionString());
+        await WithinBound(
+            connection.OpenAsync(cancellationToken),
+            ObserverOpenBound,
+            "Opening an unrelated application-lock waiter");
+        await AcquireSessionApplicationLockAsync(
+            connection,
+            resource,
+            lockTimeoutMilliseconds: 60000,
+            cancellationToken,
+            "Waiting on the unrelated application lock");
+        await ReleaseSessionApplicationLockAsync(connection, resource);
+    }
+
+    private static async Task AcquireSessionApplicationLockAsync(
+        SqlConnection connection,
+        string resource,
+        int lockTimeoutMilliseconds,
+        CancellationToken cancellationToken,
+        string description)
+    {
+        await using var command = new SqlCommand(
+            """
+            DECLARE @result int;
+            EXEC @result = sys.sp_getapplock
+                @Resource = @resource, @LockMode = N'Exclusive',
+                @LockOwner = N'Session', @LockTimeout = @lockTimeout;
+            SELECT @result;
+            """,
+            connection)
+        {
+            CommandTimeout = (int)DatabaseOperationBound.TotalSeconds + 5
+        };
+        command.Parameters.AddWithValue("@resource", resource);
+        command.Parameters.AddWithValue("@lockTimeout", lockTimeoutMilliseconds);
+        var result = Convert.ToInt32(await WithinBound(
+            command.ExecuteScalarAsync(cancellationToken),
+            DatabaseOperationBound,
+            description));
+        Assert.True(result >= 0, $"{description} was refused with sp_getapplock result {result}.");
+    }
+
+    private static Task ReleaseSessionApplicationLockAsync(SqlConnection connection, string resource)
+        => WithinBound(
+            new Func<Task>(async () =>
+            {
+                await using var command = new SqlCommand(
+                    "EXEC sys.sp_releaseapplock @Resource = @resource, @LockOwner = N'Session';",
+                    connection)
+                {
+                    CommandTimeout = (int)ObserverCommandBound.TotalSeconds
+                };
+                command.Parameters.AddWithValue("@resource", resource);
+                await command.ExecuteNonQueryAsync(CancellationToken.None);
+            })(),
+            RepairLockReleaseBound,
+            "Releasing an unrelated application lock");
+
+    private static async Task CompleteConcurrentImportCleanupAsync(
+        Exception? primaryFailure,
+        CancellationTokenSource importCts,
+        Func<Task> releaseRepairLock,
+        Func<Task> observeCancelledImports,
+        bool observeCleanupOnSuccess = false)
+    {
+        var secondaryFailures = new List<Exception>();
+        var cancellationAttempted = false;
+        void CancelImports()
+        {
+            if (cancellationAttempted)
+                return;
+            cancellationAttempted = true;
+            try
+            {
+                importCts.Cancel();
+            }
+            catch (Exception ex)
+            {
+                secondaryFailures.Add(ex);
+            }
+        }
+
+        if (primaryFailure is not null)
+            CancelImports();
+        try
+        {
+            await releaseRepairLock();
+        }
+        catch (Exception ex)
+        {
+            secondaryFailures.Add(ex);
+        }
+
+        if (secondaryFailures.Count > 0)
+            CancelImports();
+        if (observeCleanupOnSuccess || primaryFailure is not null || secondaryFailures.Count > 0)
+        {
+            try
+            {
+                await observeCancelledImports();
+            }
+            catch (Exception ex)
+            {
+                secondaryFailures.Add(ex);
+                CancelImports();
+            }
+        }
+
+        if (primaryFailure is not null)
+        {
+            if (secondaryFailures.Count == 0)
+            {
+                ExceptionDispatchInfo.Capture(primaryFailure).Throw();
+                throw primaryFailure;
+            }
+
+            throw new AggregateException(
+                "The concurrent import test failed and its bounded release/cleanup also failed.",
+                new[] { primaryFailure }.Concat(secondaryFailures));
+        }
+
+        if (secondaryFailures.Count == 0)
+            return;
+        if (secondaryFailures.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(secondaryFailures[0]).Throw();
+            throw secondaryFailures[0];
+        }
+
+        throw new AggregateException("Concurrent import release/cleanup failed.", secondaryFailures);
+    }
+
+    private static async Task<AggregateException?> ObserveTasksAndDisposeCancellationSourceAsync(
+        CancellationTokenSource cancellationSource,
+        Task? tasks)
+    {
+        if (tasks is null)
+        {
+            cancellationSource.Dispose();
+            return null;
+        }
+
+        try
+        {
+            await tasks.ConfigureAwait(false);
+            return null;
+        }
+        catch
+        {
+            // Awaiting observes every task through WhenAll. Returning the aggregate makes
+            // late-failure observation explicit and deterministically testable.
+            return tasks.Exception;
+        }
+        finally
+        {
+            cancellationSource.Dispose();
         }
     }
 
@@ -201,16 +665,6 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
             ? import.Status.ToString()
             : $"{import.Status}: {import.Exception.GetBaseException()}";
 
-    private static async Task ObserveImportCleanupAsync(Task imports)
-    {
-        try
-        {
-            await WithinBound(imports, ImportCleanupBound, "Cancelled import cleanup");
-        }
-        catch
-        {
-            // Preserve the handshake or import failure that triggered cancellation.
-            // The cleanup wait is still bounded, so failed cleanup cannot hang the suite.
-        }
-    }
+    private static Task ObserveImportCleanupAsync(Task imports, TimeSpan? bound = null)
+        => WithinBound(imports, bound ?? ImportCleanupBound, "Cancelled import cleanup");
 }

@@ -144,6 +144,32 @@ WHERE d.ModuleKey = @p0 AND d.DefinitionVersion = @p1 AND e.ExecutionStatus = N'
         return Convert.ToInt32(result);
     }
 
+    public async Task<IReadOnlyList<(string ScriptKey, string ScriptSha256, int ExecutionCount)>>
+        GetSucceededDefinitionSqlExecutionCountsAsync(string moduleKey, string definitionVersion)
+    {
+        var rows = new List<(string ScriptKey, string ScriptSha256, int ExecutionCount)>();
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            @"
+SELECT e.ScriptKey, e.ScriptSha256, COUNT(1)
+FROM omp.ModuleDefinitionSqlExecutions e
+INNER JOIN omp.ModuleDefinitionDocuments d ON d.ModuleDefinitionDocumentId = e.ModuleDefinitionDocumentId
+WHERE d.ModuleKey = @p0 AND d.DefinitionVersion = @p1 AND e.ExecutionStatus = N'Succeeded'
+GROUP BY e.ScriptKey, e.ScriptSha256
+ORDER BY e.ScriptKey, e.ScriptSha256;",
+            conn);
+        cmd.Parameters.AddWithValue("@p0", moduleKey);
+        cmd.Parameters.AddWithValue("@p1", definitionVersion);
+        await using var rdr = await cmd.ExecuteReaderAsync();
+        while (await rdr.ReadAsync())
+        {
+            rows.Add((rdr.GetString(0), rdr.GetString(1), Convert.ToInt32(rdr.GetValue(2))));
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<string>> GetSeededVersionsAsync(string schemaName)
     {
         var versions = new List<string>();
