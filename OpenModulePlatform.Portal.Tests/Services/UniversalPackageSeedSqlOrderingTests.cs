@@ -676,7 +676,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
         PortableModulePackageService service,
         string packagePath,
         bool executeSqlRepairs = true,
-        bool quickImport = false)
+        bool quickImport = false,
+        CancellationToken cancellationToken = default)
     {
         await using var stream = File.OpenRead(packagePath);
         var upload = new FormFile(stream, 0, stream.Length, "packageFile", Path.GetFileName(packagePath));
@@ -693,7 +694,7 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
                 UseArtifactsImmediately: true,
                 QuickImport: quickImport),
             replaceExistingConfigObjects: false,
-            CancellationToken.None);
+            cancellationToken);
     }
 
     private async Task<int> GetAppIdAsync(string moduleKey)
