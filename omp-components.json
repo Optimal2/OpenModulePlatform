@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.1106",
+  "repositoryVersion": "0.3.1107",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -40,7 +40,7 @@
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.258",
+      "definitionVersion": "0.3.259",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
@@ -263,7 +263,7 @@
       "appKey": "example_serviceapp_service",
       "packageType": "service-app",
       "targetName": "example-serviceapp-service",
-      "version": "0.3.376",
+      "version": "0.3.377",
       "projectPath": "examples/ServiceAppModule/ServiceApp",
       "relativePathTemplate": "example-serviceapp/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Service.ExampleServiceAppModule.zip",
