@@ -105,7 +105,7 @@ public sealed class SystemLogCalendarInputTests
         var time = new OmpTime("Europe/Stockholm");
         Assert.Equal(time.StartOfDayUtc(DateOnly.FromDateTime(model.From!.Value)), filter.FromUtc);
         Assert.Equal(time.StartOfDayUtc(DateOnly.FromDateTime(model.To!.Value).AddDays(1)), filter.ToUtc);
-        Assert.Equal(6, (model.To.Value.Date - model.From.Value.Date).Days);
+        Assert.Equal(6, (model.To!.Value.Date - model.From!.Value.Date).Days);
     }
 
     private static ServiceProvider CreateServices()

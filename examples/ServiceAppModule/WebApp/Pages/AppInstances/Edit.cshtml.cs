@@ -85,7 +85,7 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
                 {
                     ["isAllowed"] = Input.IsAllowed,
                     ["desiredState"] = Input.DesiredState,
-                    ["configId"] = Input.ConfigId?.Value,
+                    ["configId"] = (int?)Input.ConfigId,
                     ["artifactId"] = Input.ArtifactId
                 }
             }, User, CancellationToken.None);

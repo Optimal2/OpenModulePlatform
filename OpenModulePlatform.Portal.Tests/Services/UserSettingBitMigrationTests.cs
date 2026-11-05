@@ -47,24 +47,24 @@ public sealed class UserSettingBitMigrationTests : IClassFixture<UserSettingBitM
         {
             var definition = await _fixture.GetDefinitionAsync("Portal", name);
             Assert.NotNull(definition);
-            Assert.Equal(3, definition.Value.ValueKind);
-            Assert.Equal(defaultValue, definition.Value.DefaultBit);
-            Assert.Null(definition.Value.DefaultInt);
+            Assert.Equal(3, definition!.Value.ValueKind);
+            Assert.Equal(defaultValue, definition!.Value.DefaultBit);
+            Assert.Null(definition!.Value.DefaultInt);
         }
 
         var deep = await _fixture.GetDefinitionAsync("Search", "DeepByDefault");
         Assert.NotNull(deep);
-        Assert.Equal(3, deep.Value.ValueKind);
-        Assert.False(deep.Value.DefaultBit);
+        Assert.Equal(3, deep!.Value.ValueKind);
+        Assert.False(deep!.Value.DefaultBit);
 
         var theme = await _fixture.GetDefinitionAsync("Appearance", "Theme");
         Assert.NotNull(theme);
-        Assert.Equal(1, theme.Value.ValueKind);
-        Assert.Equal(0, theme.Value.DefaultInt);
+        Assert.Equal(1, theme!.Value.ValueKind);
+        Assert.Equal(0, theme!.Value.DefaultInt);
 
         var culture = await _fixture.GetDefinitionAsync("Appearance", "Culture");
         Assert.NotNull(culture);
-        Assert.Equal(2, culture.Value.ValueKind);
+        Assert.Equal(2, culture!.Value.ValueKind);
 
         Assert.True(await _fixture.MigrationAppliedAsync(MigrationKey));
     }
@@ -94,17 +94,17 @@ public sealed class UserSettingBitMigrationTests : IClassFixture<UserSettingBitM
         Assert.Equal(0, await _fixture.CountIntRowsAsync(userId));
         var ctrlF = await _fixture.GetBitValueAsync(userId, "PageSearchOverridesCtrlF");
         Assert.NotNull(ctrlF);
-        Assert.True(ctrlF.Value.Value);
-        Assert.Equal(stamp, ctrlF.Value.UpdatedAt);
+        Assert.True(ctrlF!.Value.Value);
+        Assert.Equal(stamp, ctrlF!.Value.UpdatedAt);
         var hover = await _fixture.GetBitValueAsync(userId, "TopbarDropdownsOpenOnHover");
         Assert.NotNull(hover);
-        Assert.False(hover.Value.Value);
-        Assert.Equal(stamp, hover.Value.UpdatedAt);
+        Assert.False(hover!.Value.Value);
+        Assert.Equal(stamp, hover!.Value.UpdatedAt);
         foreach (var (name, defaultValue) in BoolSettings)
         {
             var definition = await _fixture.GetDefinitionAsync("Portal", name);
             Assert.Equal(3, definition!.Value.ValueKind);
-            Assert.Equal(defaultValue, definition.Value.DefaultBit);
+            Assert.Equal(defaultValue, definition!.Value.DefaultBit);
         }
 
         // A second run must change nothing: the migration key stops the move

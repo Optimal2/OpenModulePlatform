@@ -58,10 +58,10 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         FilteredOverlays = FilterOverlays(Snapshot.Overlays, FilterHost, FilterModule, FilterApp, FilterPackage,
             FilterTarget, FilterEnabled, FilterScope);
         DeletedHistory = await store.DeletedHistoryAsync(ct);
-        if (id.HasValue)
+        if (id is int overlayId)
         {
-            if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == id.Value)) return NotFound();
-            Detail = await store.DetailAsync(id.Value, ct);
+            if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == overlayId)) return NotFound();
+            Detail = await store.DetailAsync(overlayId, ct);
             if (Detail is null) return NotFound();
             Draft = new() { Id = id, Scope = Detail.Summary.HostScope, HostKey = Detail.Summary.HostKey,
                 Json = Detail.Json, Token = Token(Detail.Summary) };
@@ -79,20 +79,21 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
             try { ContentComparison = await administration.CompareContentAsync(Snapshot, requestedHostKey, ArtifactId.Value, ct); }
             catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a registered host and artifact in this installation.")); }
         }
-        if (id.HasValue && ArtifactId.HasValue && !string.IsNullOrWhiteSpace(requestedHostKey)
-            && Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == id.Value))
+        if (id is int previewOverlayId && ArtifactId is int previewArtifactId && requestedHostKey is string previewHost
+            && !string.IsNullOrWhiteSpace(previewHost)
+            && Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == previewOverlayId))
         {
             // Read-only removal preview for the opened overlay on the selected
             // host and artifact. Disable/Delete still re-check the document
             // token, so a stale preview cannot silently mutate.
-            try { RemovalPreview = await administration.PreviewRemovalAsync(Snapshot, id.Value, requestedHostKey, ArtifactId.Value, ct); }
+            try { RemovalPreview = await administration.PreviewRemovalAsync(Snapshot, previewOverlayId, previewHost, previewArtifactId, ct); }
             catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a registered host and artifact in this installation.")); }
         }
-        if (id.HasValue && Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == id.Value))
+        if (id is int impactOverlayId && Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == impactOverlayId))
         {
             // Installation-wide read-only impact for the opened overlay. No
             // selection needed and no mutation is offered from this section.
-            try { InstallationImpact = await administration.PreviewInstallationImpactAsync(Snapshot, id.Value, ct); }
+            try { InstallationImpact = await administration.PreviewInstallationImpactAsync(Snapshot, impactOverlayId, ct); }
             catch (InvalidOperationException) { ModelState.AddModelError(string.Empty, T("Select a saved overlay in this installation.")); }
         }
         return Page();
@@ -103,10 +104,10 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null) return guard;
         await LoadAsync(ct);
-        if (Draft.Id.HasValue)
+        if (Draft.Id is int saveDraftId)
         {
-            if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == Draft.Id.Value)) return NotFound();
-            Detail = await store.DetailAsync(Draft.Id.Value, ct);
+            if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == saveDraftId)) return NotFound();
+            Detail = await store.DetailAsync(saveDraftId, ct);
             if (Detail is null) return NotFound();
         }
         if (!ModelState.IsValid) return Page();
@@ -175,10 +176,10 @@ public sealed class ConfigOverlaysModel(IOptions<WebAppOptions> options, RbacSer
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null) return guard;
         await LoadAsync(ct);
-        if (Draft.Id.HasValue)
+        if (Draft.Id is int uploadDraftId)
         {
-            if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == Draft.Id.Value)) return NotFound();
-            Detail = await store.DetailAsync(Draft.Id.Value, ct);
+            if (!Snapshot.Overlays.Any(o => o.ConfigOverlayDocumentId == uploadDraftId)) return NotFound();
+            Detail = await store.DetailAsync(uploadDraftId, ct);
             if (Detail is null) return NotFound();
         }
         var relativePath = NormalizeDraftRelativePath(DraftFileRelativePath);

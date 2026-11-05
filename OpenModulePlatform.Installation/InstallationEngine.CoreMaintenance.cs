@@ -94,7 +94,8 @@ WHERE LOWER(ModuleKey) = N'omp_core' AND DefinitionVersion = @version;
         var timeout = sql.CommandTimeoutSeconds;
         await AssertSingleAppliedCoreAsync(connection, timeout);
         var current = await QueryAppliedModuleDefinitionAsync(connection, "omp_core", timeout);
-        if (current?.DefinitionVersion != definition.DefinitionVersion
+        if (current is null
+            || current.DefinitionVersion != definition.DefinitionVersion
             || !string.Equals(current.DefinitionSha256, definition.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Core maintenance could not verify the applied version and hash. Do not stage artifacts.");
 

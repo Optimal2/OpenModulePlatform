@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.1105",
+  "repositoryVersion": "0.3.1106",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.535",
+      "definitionVersion": "0.3.536",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -40,12 +40,12 @@
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.257",
+      "definitionVersion": "0.3.258",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.254",
+      "definitionVersion": "0.3.255",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
@@ -104,7 +104,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.972",
+      "version": "0.3.973",
       "minModuleDefinitionVersion": "0.3.500",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -250,7 +250,7 @@
       "appKey": "example_serviceapp_webapp",
       "packageType": "web-app",
       "targetName": "example-serviceapp-web",
-      "version": "0.3.376",
+      "version": "0.3.377",
       "projectPath": "examples/ServiceAppModule/WebApp",
       "relativePathTemplate": "example-serviceapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleServiceAppModule.zip",
@@ -276,7 +276,7 @@
       "appKey": "example_workerapp_webapp",
       "packageType": "web-app",
       "targetName": "example-workerapp-web",
-      "version": "0.3.375",
+      "version": "0.3.376",
       "projectPath": "examples/WorkerAppModule/WebApp",
       "relativePathTemplate": "example-workerapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWorkerAppModule.zip",
