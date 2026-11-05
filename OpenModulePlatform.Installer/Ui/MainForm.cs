@@ -324,12 +324,13 @@ internal sealed class MainForm : Form
 
     private void OnVerifyPassword(object? sender, EventArgs e)
     {
-        var account = _evaluation?.ServiceAccount;
-        if (account is null || !account.RequiresPassword)
+        var evaluation = _evaluation;
+        if (evaluation is null || !evaluation.ServiceAccount.RequiresPassword)
         {
             return;
         }
 
+        var account = evaluation.ServiceAccount;
         var ok = AccountPasswordValidator.Validate(
             account.LogonUserName,
             account.LogonDomain,
@@ -339,12 +340,17 @@ internal sealed class MainForm : Form
         _passwordStatus.Text = ok
             ? UiText.Get("PasswordVerified")
             : UiText.Format("PasswordRejected", error);
+        _installButton.Enabled = CanInstallAfterPasswordValidation(ok, evaluation);
+    }
+
+    internal static bool CanInstallAfterPasswordValidation(bool passwordValidated, PrerequisiteEvaluation evaluation)
+    {
         // Mirrors PrerequisiteEvaluation.CanInstall: every red line except the
         // service-account line (which this verification satisfies) must be
         // something the installer fixes itself.
-        _installButton.Enabled = ok && _evaluation is not null
-            && _evaluation.Checks.Where(check => !check.IsSatisfied)
-                .All(check => check.CanAutoFix || check.Id == PrerequisiteCheckId.ServiceAccount);
+        return passwordValidated && evaluation.Checks
+            .Where(check => !check.IsSatisfied)
+            .All(check => check.CanAutoFix || check.Id == PrerequisiteCheckId.ServiceAccount);
     }
 
     private async Task RunInstallAsync()

@@ -578,12 +578,14 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     // false, the same spelling the value column shows, so what an admin reads
     // is what they can type back.
     private static string? BitText(bool? value)
-        => value switch
+    {
+        if (value is null)
         {
-            true => "true",
-            false => "false",
-            null => null
-        };
+            return null;
+        }
+
+        return value.Value ? "true" : "false";
+    }
 
     private static bool TryParseBit(string? text, out bool value)
     {
