@@ -18,13 +18,41 @@ public sealed class DeploymentHealthProbeTests
         Assert.Equal("/app/health/ready", handler.Path);
     }
 
+    [Fact]
+    public async Task Probe_DisposesProbeResponse()
+    {
+        using var handler = new Handler(200);
+        Assert.Empty(handler.Responses);
+
+        await WebAppHealthMonitor.ProbeDeploymentAsync(new Uri("http://localhost/app/health/ready"), 1, default, handler);
+
+        var response = Assert.Single(handler.Responses);
+        Assert.True(response.IsDisposed);
+    }
+
     private sealed class Handler(int code) : HttpMessageHandler
     {
         public string? Path { get; private set; }
+        public List<TrackedResponse> Responses { get; } = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Path = request.RequestUri!.AbsolutePath;
-            return Task.FromResult(new HttpResponseMessage((HttpStatusCode)code));
+            // CodeQL cs/local-not-disposed: kept - returned to the HttpClient caller, which
+            // owns and disposes the response (ProbeDeploymentAsync uses using var response).
+            var response = new TrackedResponse((HttpStatusCode)code);
+            Responses.Add(response);
+            return Task.FromResult<HttpResponseMessage>(response);
+        }
+    }
+
+    private sealed class TrackedResponse(HttpStatusCode code) : HttpResponseMessage(code)
+    {
+        public bool IsDisposed { get; private set; }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                IsDisposed = true;
+            base.Dispose(disposing);
         }
     }
 }

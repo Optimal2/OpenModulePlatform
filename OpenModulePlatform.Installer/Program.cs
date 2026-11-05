@@ -266,6 +266,8 @@ internal static class ConsoleErrorAttach
 
         try
         {
+            // CodeQL cs/local-not-disposed: kept - Console takes ownership of both writers for
+            // the rest of the process; disposing them would break console output.
             Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
             Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
         }

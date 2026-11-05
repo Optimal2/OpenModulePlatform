@@ -30,7 +30,9 @@ public class AccountPasswordValidatorTests
             out SafeAccessTokenHandle token)
         {
             calls++;
-            token = new SafeAccessTokenHandle(IntPtr.Zero);
+            // The NUL guard must reject before any native call, so this fake (which must
+            // never run) mints no token at all: there is nothing to dispose.
+            token = null!;
             return false;
         }
     }
@@ -68,6 +70,8 @@ public class AccountPasswordValidatorTests
             observedUserName = user;
             observedDomain = logonDomain;
             observedCredential = secret;
+            // CodeQL cs/local-not-disposed: kept - ownership passes to Validate through the
+            // out parameter, which disposes the token (see the IsClosed assertions below).
             token = new SafeAccessTokenHandle(IntPtr.Zero);
             returnedToken = token;
             return true;
@@ -94,6 +98,8 @@ public class AccountPasswordValidatorTests
             string user, string? logonDomain, string secret, int logonType, int logonProvider,
             out SafeAccessTokenHandle token)
         {
+            // CodeQL cs/local-not-disposed: kept - ownership passes to Validate through the
+            // out parameter, which disposes the token even on failure (see IsClosed below).
             token = new SafeAccessTokenHandle(IntPtr.Zero);
             returnedToken = token;
             return false;

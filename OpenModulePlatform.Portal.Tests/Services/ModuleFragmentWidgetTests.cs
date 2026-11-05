@@ -540,6 +540,8 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
     [Fact]
     public async Task Fetch_OtherFailures_DoNotReportEndpointIssue()
     {
+        // CodeQL cs/local-not-disposed: kept - the stub returns the response to the HttpClient
+        // pipeline; the service owns and disposes it (using var response).
         var handler = new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
         var service = CreateService(handler, new ModuleFragmentWidgetOptions());
 
@@ -547,6 +549,23 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
 
         Assert.False(result.IsLoaded);
         Assert.Equal(ModuleFragmentEndpointIssue.None, result.EndpointIssue);
+    }
+
+    [Fact]
+    public async Task Fetch_DisposesStubbedFragmentResponse()
+    {
+        var response = new DisposeTrackingResponse(HttpStatusCode.OK)
+        {
+            Content = new StringContent("<p>tracked</p>", Encoding.UTF8, "text/html")
+        };
+        Assert.False(response.IsDisposed);
+        var handler = new StubHandler((_, _) => Task.FromResult<HttpResponseMessage>(response));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions());
+
+        var result = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+        Assert.True(result.IsLoaded);
+        Assert.True(response.IsDisposed);
     }
 
     [Theory]
@@ -652,6 +671,8 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
     [InlineData(HttpStatusCode.InternalServerError)]
     public async Task Fetch_NonSuccessStatus_ReturnsPlaceholder(HttpStatusCode status)
     {
+        // CodeQL cs/local-not-disposed: kept - the stub returns the response to the HttpClient
+        // pipeline; the service owns and disposes it (using var response).
         var handler = new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(status)
         {
             Content = new StringContent("Stack trace at C:\\inetpub\\module\\Secret.cs", Encoding.UTF8, "text/html")
@@ -668,6 +689,8 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
     [Fact]
     public async Task Fetch_NonHtmlOrOversizedResponse_ReturnsPlaceholder()
     {
+        // CodeQL cs/local-not-disposed: kept - the stub returns the response to the HttpClient
+        // pipeline; the service owns and disposes it (using var response).
         var json = new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("{}", Encoding.UTF8, "application/json")
@@ -876,6 +899,8 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
     [Fact]
     public async Task Fetch_OtherFailures_RemainCached()
     {
+        // CodeQL cs/local-not-disposed: kept - the stub returns the response to the HttpClient
+        // pipeline; the service owns and disposes it (using var response).
         var handler = new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
         var service = CreateService(handler, new ModuleFragmentWidgetOptions { CacheSeconds = 60 });
 
@@ -1176,6 +1201,17 @@ public sealed class ModuleFragmentWidgetTests : IDisposable
     private sealed class CacheClock : Microsoft.Extensions.Internal.ISystemClock
     {
         public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
+    }
+
+    private sealed class DisposeTrackingResponse(HttpStatusCode status) : HttpResponseMessage(status)
+    {
+        public bool IsDisposed { get; private set; }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                IsDisposed = true;
+            base.Dispose(disposing);
+        }
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)

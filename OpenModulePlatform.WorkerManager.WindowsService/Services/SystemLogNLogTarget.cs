@@ -37,6 +37,8 @@ internal static class SystemLogNLogTarget
             return;
         }
 
+        // CodeQL cs/local-not-disposed: kept - owned by the NLog configuration for the life
+        // of the process (AsyncTargetWrapper -> rule -> LogManager.Configuration).
         var database = new DatabaseTarget(TargetName + "-db")
         {
             DBProvider = "Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient",
@@ -56,6 +58,8 @@ internal static class SystemLogNLogTarget
 
         // Async with discard on overflow: logging must never slow or stop
         // the service when the database is unreachable; the file keeps it.
+        // CodeQL cs/local-not-disposed: kept - owned by the NLog configuration for the life
+        // of the process (config.AddTarget + logging rule + LogManager.Configuration).
         var wrapper = new AsyncTargetWrapper(TargetName, database)
         {
             OverflowAction = AsyncTargetWrapperOverflowAction.Discard,

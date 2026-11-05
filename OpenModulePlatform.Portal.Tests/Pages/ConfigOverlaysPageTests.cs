@@ -569,6 +569,8 @@ public sealed class ConfigOverlaysPageTests
             Content = request.Content;
             return outcome switch
             {
+                // CodeQL cs/local-not-disposed: kept - created only on the success path and
+                // returned to the HttpClient caller, which disposes it (using var response).
                 "success" => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)),
                 "failure" => Task.FromException<HttpResponseMessage>(new HttpRequestException("Injected send failure.")),
                 _ => Task.FromException<HttpResponseMessage>(new OperationCanceledException(cancellationToken))
