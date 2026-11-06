@@ -102,26 +102,13 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
             $manifestBefore = [System.IO.File]::ReadAllText($manifestPath)
             $moduleDefinitionBefore = [System.IO.File]::ReadAllText($moduleDefinitionPath)
 
-            # bump-version.ps1 ends with 'exit 1' on failure, which would
-            # terminate the Pester host, so the failure path must run in a
-            # child process. The file-level $ErrorActionPreference = 'Stop'
-            # would turn the child's redirected stderr into a throwing
-            # ErrorRecord, so relax it locally for the capture.
-            $previousErrorActionPreference = $ErrorActionPreference
-            $ErrorActionPreference = 'Continue'
-            try {
-                # Keep only the raw stderr text of each record. Without a console
-                # (git hooks) every wrapped stderr line arrives as its own
-                # ErrorRecord, and Out-String would interleave "At ... char:" and
-                # CategoryInfo lines between the halves of a split word.
-                $output = & powershell.exe -NoProfile -File $bumpScriptPath -ComponentKey 'test_app' 2>&1 |
-                    ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ } } |
-                    Out-String
-                $exitCode = $LASTEXITCODE
-            }
-            finally {
-                $ErrorActionPreference = $previousErrorActionPreference
-            }
+            # The helper runs in its own runspace, so its 'exit 1' ends the
+            # script instead of the Pester host, and the exit code is read
+            # back from that runspace instead of from an ambient
+            # $LASTEXITCODE that leaks between Pester containers.
+            $result = Invoke-BumpVersionScript -BumpScriptPath $bumpScriptPath -Parameters @{ ComponentKey = @('test_app') }
+            $output = $result.Output
+            $exitCode = $result.ExitCode
 
             $exitCode | Should -Be 1
             # Windows PowerShell wraps the error record to the console width when
@@ -179,19 +166,12 @@ Describe 'Bump-Version: repository-only bump' {
         try {
             $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
 
-            # The refusal path ends in 'throw', so run it in a child process:
-            # in-process the ambient $LASTEXITCODE leaks between Pester
-            # containers (the engine updates it process-wide) and the
-            # assertion would measure whichever unrelated test ran last.
-            $previousErrorActionPreference = $ErrorActionPreference
-            $ErrorActionPreference = 'Continue'
-            try {
-                $output = & powershell.exe -NoProfile -File $bumpScriptPath -RepositoryOnly -ComponentKey 'test_app' 2>&1 | Out-String
-                $exitCode = $LASTEXITCODE
-            }
-            finally {
-                $ErrorActionPreference = $previousErrorActionPreference
-            }
+            # The refusal path ends in 'throw'. It runs in its own runspace,
+            # so the throw ends the helper instead of the Pester host and the
+            # exit code belongs to that runspace alone.
+            $result = Invoke-BumpVersionScript -BumpScriptPath $bumpScriptPath -Parameters @{ RepositoryOnly = $true; ComponentKey = @('test_app') }
+            $output = $result.Output
+            $exitCode = $result.ExitCode
 
             # Windows PowerShell wraps the error record to the console width when
             # no console is attached (git hooks), which can split the word; match
@@ -211,20 +191,13 @@ Describe 'Bump-Version: repository-only bump' {
         try {
             $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
 
-            $previousErrorActionPreference = $ErrorActionPreference
-            $ErrorActionPreference = 'Continue'
-            try {
-                $output = @(& powershell.exe -NoProfile -File $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1)
-                $exitCode = $LASTEXITCODE
-            }
-            finally {
-                $ErrorActionPreference = $previousErrorActionPreference
-            }
+            # The helper runs in its own runspace, so the refusal ends the
+            # helper instead of the Pester host, and the captured output is
+            # the runspace's own text without a console in between.
+            $result = Invoke-BumpVersionScript -BumpScriptPath $bumpScriptPath -Parameters @{ RepositoryOnly = $true; SkipRepositoryVersion = $true }
+            $output = $result.Output
+            $exitCode = $result.ExitCode
 
-            # Extract native stderr text before formatting: headless PS5.1 emits
-            # separate ErrorRecords for wrapped lines, and Out-String inserts
-            # category/stack metadata between the two halves of a wrapped word.
-            $output = ($output | ForEach-Object { $_.ToString() }) -join ''
             ($output -replace '\s', '') | Should -Match 'RepositoryOnly'
             $exitCode | Should -Be 1
         }
