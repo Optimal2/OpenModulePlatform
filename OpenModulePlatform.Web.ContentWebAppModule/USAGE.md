@@ -33,9 +33,15 @@ Choose the page content type before editing the body:
 - `html` opens on the HTML-source tab. A visual tab is offered only when the
   page survives a visual-editor round trip unchanged, compared as parsed DOM
   with whitespace-only differences ignored. An empty page counts as surviving
-  the round trip: the visual tab is offered and saving without editing keeps
-  the body empty. When the round trip changes the page, the editor shows a
-  warning, keeps the source, and leaves the user in the source tab.
+  the round trip, so the visual tab is offered and saving without editing
+  keeps the body empty. When the round trip changes the page, the editor shows
+  a warning, keeps the source, and leaves the user in the source tab. Without
+  the editor asset there is nothing to compare against: the visual tab stays
+  hidden, no warning is shown, and the textarea saves the page on its own.
+  A link added in the visual tab keeps its query parameters: the editor's
+  double-escaped ampersands are repaired when the value is written back. A
+  page that already contains such a link still fails the raw round-trip
+  check, so it stays in the source tab with the warning.
 - `html_file` stores only a file key in the database. The trusted HTML body is
   read from the configured HTML file directory or packaged ContentPages folder.
 - `server_report` hides the body editor and shows only the report-key picker.

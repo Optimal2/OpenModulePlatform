@@ -277,6 +277,34 @@
                 return toastEditor.getMarkdown();
             };
 
+            // The vendored visual editor double-escapes ampersands in link
+            // query strings: getHTML hands back
+            // href="https://e.test/p?a=1&amp;amp;b=2&amp;amp;c=3", whose
+            // parsed attribute value still contains a literal "&amp;".
+            // Repair only such attribute values through the parsed DOM, so
+            // prose that literally shows "&amp;" keeps its text exactly.
+            // Returns the editor string untouched when no attribute needed
+            // repair, leaving unedited pages byte-identical.
+            const repairDoubleEscapedAttributes = (html) => {
+                const parsed = new DOMParser().parseFromString(html || '', 'text/html');
+                let repaired = false;
+
+                for (const element of parsed.body.querySelectorAll('*')) {
+                    for (const attribute of Array.from(element.attributes)) {
+                        if (attribute.value.includes('&amp;')) {
+                            attribute.value = attribute.value.split('&amp;').join('&');
+                            repaired = true;
+                        }
+                    }
+                }
+
+                if (!repaired) {
+                    return html;
+                }
+
+                return parsed.body.innerHTML;
+            };
+
             const setToastEditorValue = (type, value) => {
                 if (!toastEditor) {
                     return;
@@ -424,8 +452,14 @@
                 }
 
                 const value = getToastEditorValue(editorType);
-                source.value = value;
+
+                // The baseline keeps the raw editor value, so an unedited
+                // page still posts unchanged and a repaired value does not
+                // look dirty again on a later tab switch or submit.
                 editorBaseline = value;
+                source.value = editorType === 'html'
+                    ? repairDoubleEscapedAttributes(value)
+                    : value;
             };
 
             const ensureToastEditor = (type, forceValueSync = false) => {

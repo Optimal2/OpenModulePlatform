@@ -162,6 +162,113 @@ public sealed partial class ContentEditorRoundTripTests
     }
 
     [Fact]
+    public async Task Visual_link_with_query_parameters_posts_a_working_link()
+    {
+        // The link is added through the real toolbar link button and its
+        // popup, which proves the real path instead of calling the editor
+        // API directly (the editor instance is a closure variable in the
+        // page script and is not reachable from the test).
+        const string linkUrl = "https://e.test/p?a=1&b=2&c=3";
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            await page.ClickAsync(".toastui-editor-ww-container .ProseMirror");
+            await page.Keyboard.PressAsync("End");
+            // The link button lives in the toolbar overflow dropdown, which
+            // Playwright never sees as visible. The clicks are dispatched on
+            // the real toolbar buttons, so the real popup and its insertion
+            // command still run; only the mouse-visibility check is skipped.
+            await page.EvaluateAsync("() => { document.querySelector('.toastui-editor-toolbar button.more')?.click(); document.querySelector('.toastui-editor-toolbar button.link')?.click(); }");
+            await page.FillAsync("#toastuiLinkUrlInput", linkUrl);
+            await page.FillAsync("#toastuiLinkTextInput", "x");
+            await page.ClickAsync(".toastui-editor-ok-button");
+        });
+
+        Assert.Empty(result.PageErrors);
+        Assert.NotNull(result.PostedBody);
+        Assert.Contains(">x</a>", result.PostedBody!, StringComparison.Ordinal);
+
+        // The posted body parses back to the three query parameters: the
+        // visual editor's double-escaped ampersands were repaired on
+        // write-back instead of being saved.
+        using var links = JsonDocument.Parse(result.LinksJson);
+        Assert.Equal(1, links.RootElement.GetArrayLength());
+        var query = links.RootElement[0].GetProperty("params");
+        Assert.Equal("1", query.GetProperty("a").GetString());
+        Assert.Equal("2", query.GetProperty("b").GetString());
+        Assert.Equal("3", query.GetProperty("c").GetString());
+    }
+
+    [Fact]
+    public async Task Visual_link_with_query_parameters_returns_to_source_with_warning()
+    {
+        const string linkUrl = "https://e.test/p?a=1&b=2&c=3";
+        string? textareaValue = null;
+        PageState? afterVisual = null;
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            await page.ClickAsync(".toastui-editor-ww-container .ProseMirror");
+            await page.Keyboard.PressAsync("End");
+            // Same dispatched toolbar clicks as above: the link button sits
+            // in the overflow dropdown, invisible to Playwright.
+            await page.EvaluateAsync("() => { document.querySelector('.toastui-editor-toolbar button.more')?.click(); document.querySelector('.toastui-editor-toolbar button.link')?.click(); }");
+            await page.FillAsync("#toastuiLinkUrlInput", linkUrl);
+            await page.FillAsync("#toastuiLinkTextInput", "x");
+            await page.ClickAsync(".toastui-editor-ok-button");
+
+            await page.ClickAsync("[data-editor-mode=\"source\"]");
+            textareaValue = (await ReadStateAsync(page)).TextareaValue;
+
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            afterVisual = await ReadStateAsync(page);
+        });
+
+        Assert.Empty(result.PageErrors);
+        Assert.NotNull(textareaValue);
+
+        // The textarea holds the repaired value: the HTML source with
+        // single-escaped ampersands, not the editor's double escape.
+        Assert.Contains("a=1&amp;b=2&amp;c=3", textareaValue!, StringComparison.Ordinal);
+        Assert.DoesNotContain("&amp;amp;", textareaValue!, StringComparison.Ordinal);
+
+        // The round-trip check still compares the raw editor value, which no
+        // longer survives, so Visual refuses and the page stays in source
+        // with the warning.
+        Assert.Equal("source", afterVisual!.ActiveTab);
+        Assert.True(afterVisual.WarningVisible);
+
+        // The posted body still carries the working link.
+        Assert.NotNull(result.PostedBody);
+        using var links = JsonDocument.Parse(result.LinksJson);
+        Assert.Equal(1, links.RootElement.GetArrayLength());
+        var query = links.RootElement[0].GetProperty("params");
+        Assert.Equal("1", query.GetProperty("a").GetString());
+        Assert.Equal("2", query.GetProperty("b").GetString());
+        Assert.Equal("3", query.GetProperty("c").GetString());
+    }
+
+    [Fact]
+    public async Task Visual_edit_keeps_literal_ampersand_prose_exact()
+    {
+        const string proseBody = "<p>Fish &amp; Chips</p>";
+        var result = await SubmitAsync(proseBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            await page.ClickAsync(".toastui-editor-ww-container .ProseMirror");
+            await page.Keyboard.PressAsync("End");
+            await page.Keyboard.TypeAsync("!");
+        });
+
+        Assert.Empty(result.PageErrors);
+        Assert.NotNull(result.PostedBody);
+
+        // The repair touches attribute values only: prose that literally
+        // shows "&amp;" keeps that text exactly.
+        Assert.Contains("Fish &amp; Chips!", NormalizeLineEndings(result.PostedBody!), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Markdown_page_saved_from_the_default_visual_tab_is_unchanged()
     {
         PageState? state = null;
