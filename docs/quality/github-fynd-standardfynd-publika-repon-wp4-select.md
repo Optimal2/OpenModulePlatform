@@ -123,6 +123,25 @@ the same focused class then passed 20/20 with exit code 0.
 - The fixture proves no-follow sizing and entry accounting for one owned NTFS
   junction. It does not attempt to characterize every file-system error,
   reparse-point type, or non-Windows platform.
-- These results support a patch proposal. They are not a claim of final source
-  integration, implementation acceptance, version preparation, commit, push, or
-  CI completion.
+- These were proposal-stage results. They did not themselves establish final
+  source integration, implementation acceptance, version preparation, commit,
+  push, or CI completion.
+
+## Final source integration and rerun
+
+The corrected conductor artifact retained the original patch SHA-256
+`8d23afc4b4faf2197a15f1afb5431d5ddcb1eb379c6c6041b637514aa02bbfc1` and all
+13,864 original patch bytes. It was applied without source changes and committed
+as `52dd748948a2e1c0c8eef5d642c68aad2c6588a5` on integration base
+`cb9ac63ccc2b21a30f76ca16900042a5681b90a6`.
+
+The proposal's two causal mutation receipts and restoration hashes were verified
+against the artifact. Because the production content did not change after that
+proof, the mutations were not repeated. Instead, the real final candidate was
+rebuilt and rerun with `--configuration Release` and TRX logging. Native results
+were exit 0 with 20 total, 20 executed, 20 passed, and 0 failed for
+`MaintenanceQuarantineTests`, including the direct junction test, and exit 0
+with 21 total, 21 executed, 21 passed, and 0 failed for
+`PackageLibraryDefinitionGateTests`. The final production SHA-256 values remain
+`46d3ce3cf15576cf502460f533f4bf28871ed84ff904ce036a8d211a36d1e182` and
+`86c9797e50ec3c3adbb3ed2d9c7a0d6486e4cdd446ae36f0849ccf4990310bf5`.

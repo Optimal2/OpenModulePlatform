@@ -46,12 +46,20 @@ changing the worktree, and `git apply --numstat` reported additions only for bot
 paths. The original and restored source bytes had identical SHA-256 hashes, and the final
 worktree status was empty with `HEAD` equal to the recorded base commit.
 
-## Limitations
+## Proposal-stage limitations
 
-Builds and tests were not run because this comment-only proposal explicitly excludes them.
+Builds and tests were not run because this comment-only proposal explicitly excluded them.
 No account lookup, account-rights operation, `LogonUser` call, protected-process interaction,
 SQL operation, service operation, installation, or deployment was performed. Consequently,
-this proposal makes no claim of compiler, analyzer, runtime, or native-account verification.
-The final integration stage remains responsible for rebasing the complete candidate,
-preparing repository and component identities, and running the required implementation and
-artifact gates.
+the proposal made no claim of compiler, analyzer, runtime, or native-account verification.
+
+## Final source integration
+
+The reviewed patch with SHA-256
+`472d6e99fd2980ecd96bfe5911d4876d0740916328700bfdad0227bfaa98c753` was
+applied without content changes and committed as
+`5539f4aa894e45e6b586cdcef5cabf4949868135` on integration base
+`cb9ac63ccc2b21a30f76ca16900042a5681b90a6`. No ABI, layout, field modifier,
+P/Invoke, call-site, or executable-logic change was introduced. No real Win32
+account operation or redundant runtime test was performed for this comment-only
+edit.

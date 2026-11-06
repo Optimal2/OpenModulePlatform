@@ -58,19 +58,34 @@ helper performed the comment-only byte comparison described above and also exite
 No build or test command was run, as required for this comment-only proposal. Native
 test count is therefore **0**, not a passing runtime result.
 
-## Remaining validation and limitations
+## Proposal-stage remaining validation and limitations
 
 The existing test
 `ConfigurationContinuityGateTests.CarryOver_LeavesKeyTheNewResolutionSetsItself`
 characterizes the explicit-new-value-wins contract with different casing, but it was
-only inspected here. The final implementation stage must run it and report its real
-count and native exit code, using the repository's normal isolated validation setup:
+only inspected during the proposal. The final implementation stage therefore had to
+run it and perform the separately specified actual `nextKeys.Add => true`
+mutation/restoration proof with explicit native counts and exit codes. The
+proposal-stage evidence did not dismiss the original finding.
 
-```text
-dotnet test OpenModulePlatform.HostAgent.Runtime.Tests/OpenModulePlatform.HostAgent.Runtime.Tests.csproj --filter FullyQualifiedName~ConfigurationContinuityGateTests.CarryOver_LeavesKeyTheNewResolutionSetsItself --logger "console;verbosity=normal" --verbosity minimal
-```
+## Final source integration and preservation proof
 
-That stage must also perform the separately specified actual `nextKeys.Add => true`
-mutation/restoration proof and report its before, RED, and restored results. Until then,
-this document provides source-level and patch-shape evidence only; it is not runtime
-acceptance evidence and does not dismiss the original finding.
+The reviewed patch with SHA-256
+`483bd0abf7fa78e935d5c5f8feda0c7058fe7b0bc0032df59a7830904fe86ffb` was
+applied without content changes and committed as
+`e2ec6841223708d0f3014102e7e402b9a64b1b55` on integration base
+`cb9ac63ccc2b21a30f76ca16900042a5681b90a6`.
+
+The final source before mutation had SHA-256
+`2609a13945a0a6dfcbd1923e609ffa3522e5fe060e146e8d33b0a720ea559147`.
+The existing focused test passed with native exit 0 and TRX counters 1 total,
+1 executed, 1 passed, and 0 failed. Changing only the production
+`nextKeys.Add(property.Key)` check to `true` produced mutant SHA-256
+`e0249ef2c6bfb01c81b2af188a4e7d2b2bee210bc00dd2518f208e5f9c339bf6`.
+The same test then failed with native exit 1 and TRX counters 1 total, 1
+executed, 0 passed, and 1 failed. Its precedence assertion reported
+`Assert.Empty() Failure: Collection was not empty` with
+`["AllowedHosts", "Logging"]`; this was a genuine test assertion, not a build,
+fixture, discovery, or setup failure. Restoring the original expression returned
+the exact pre-mutation SHA-256, and the focused test again passed 1/1 with
+native exit 0. No executable change was retained.
