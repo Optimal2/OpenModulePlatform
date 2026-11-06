@@ -5432,10 +5432,21 @@
             bindEntryFavoriteToggles(root, widget, token);
             bindEntryListFilters(widget);
             bindDashboardMusicPlayers(widget);
+            bindDashboardNotifications(widget);
         });
     }
 
     function clearDashboardBindingMarkers(element) {
+        // cloneNode copies attributes, but not the listeners or in-flight work
+        // they describe. A restored feed and its forms need fresh bindings.
+        element.querySelectorAll('[data-dashboard-notification-feed]').forEach((feed) => {
+            delete feed.dataset.dashboardNotificationFeedBound;
+            delete feed.dataset.notificationLoading;
+        });
+        element.querySelectorAll('[data-dashboard-notification-form]').forEach((form) => {
+            delete form.dataset.dashboardNotificationFormBound;
+            delete form.dataset.dashboardNotificationSubmitting;
+        });
         element.querySelectorAll('[data-dashboard-entry-favorite-toggle]').forEach((button) => {
             delete button.dataset.dashboardFavoriteBound;
         });
