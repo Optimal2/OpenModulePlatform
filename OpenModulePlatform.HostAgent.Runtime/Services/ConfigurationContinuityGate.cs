@@ -89,6 +89,10 @@ internal static class ConfigurationContinuityGate
                 return effectiveFiles;
             }
 
+            // nextKeys.Add both checks and records case-insensitive membership beside
+            // the copy: explicit new values win, and a carried name is registered
+            // immediately. JsonObject's default exact-key duplicate rejection does not
+            // reject distinct-case names, so OrdinalIgnoreCase membership remains meaningful.
             var nextKeys = next.Select(property => property.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var property in previous)
             {
