@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -48,17 +49,13 @@ internal sealed class OutputFileExistsException : IOException
 /// Unix .NET may implement it as an existence check followed by a rename, and
 /// two concurrent writers were measured both succeeding. The owner then writes
 /// the content to a temporary file beside the target (same directory, same
-/// volume) and renames it over its own claim, so a reader never observes a
-/// partial package under the final name -- only, briefly, the empty claim.
-///
-/// The rename replaces whatever holds the name, so it runs only after the
-/// target is verified to still be this writer's claim: empty and the same file
-/// (volume serial number and file index) that was created. A claim deleted and
-/// recreated by someone else while the content was written is refused instead
-/// of replaced. Every bounded publish retry repeats that verification before
-/// another overwrite attempt. A process killed between claim and rename leaves
-/// the empty claim behind; the next build recognises an empty file and explains it
-/// instead of reporting a package that does not exist.
+/// volume). On Windows the empty claim is removed by a verified, delete-capable
+/// handle that denies writes and renames while held. Publication then uses a
+/// non-replacing rename. There is briefly no file at the final name; a competing
+/// file created in that gap wins and is never overwritten. Readers see no partial
+/// package. A killed process can leave an empty claim, which the next build explains.
+/// This implementation belongs to the Windows bootstrapper and rejects other
+/// operating systems before creating even the output directory.
 /// </remarks>
 internal static class NoOverwriteFile
 {
@@ -79,21 +76,24 @@ internal static class NoOverwriteFile
     /// </summary>
     public static void Write(
         string path, Action<Stream> write, Action<string>? reportWarning = null,
-        Func<string, FileStream>? createClaim = null)
+        Func<string, FileStream>? createClaim = null, Action? beforePublish = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(write);
+        EnsureSupportedPlatform(OperatingSystem.IsWindows());
 
         var fullPath = System.IO.Path.GetFullPath(path);
         var directory = System.IO.Path.GetDirectoryName(fullPath)
             ?? throw new ArgumentException($"'{path}' has no parent directory.", nameof(path));
         Directory.CreateDirectory(directory);
 
-        var claim = ClaimName(fullPath, createClaim);
+        var claim = ClaimName(fullPath, createClaim, reportWarning);
         var tempPath = System.IO.Path.Join(
             directory,
             $".{System.IO.Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
         var published = false;
+        var claimReleased = false;
+        var claimNeedsCleanup = true;
         try
         {
             using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
@@ -102,44 +102,68 @@ internal static class NoOverwriteFile
                 stream.Flush(flushToDisk: true);
             }
 
-            // Replacing is correct only while the target is this writer's own
-            // empty claim, never someone else's file.
-            if (!IsOwnClaim(fullPath, claim))
-            {
-                throw new OutputFileExistsException(
-                    fullPath,
-                    $"{fullPath} was replaced by another file while this package was written, and was not overwritten. "
-                        + "An existing package is never overwritten; build again to get a new version.");
-            }
-
-            // A scanner-like handle on the claim (without FILE_SHARE_DELETE)
-            // denies the rename while it is held. Such handles are transient,
-            // so retry the rename for a bounded window; a handle that persists
-            // across the whole window still fails with the original error and
-            // the cleanup below warns about the leftover reservation.
+            // A scanner-like handle can deny removal or publication. Retry for
+            // a bounded window, but never delete by a previously checked pathname
+            // and never use an overwrite rename, even on a retry.
             var publishUntil = DateTime.UtcNow.Add(PublishRetryWindow);
-            var reverifyClaim = false;
+            var ownClaimPending = false;
             for (;;)
             {
-                // The first attempt uses the proof above. Every retry must prove
-                // again that the name still belongs to this writer before replacing it.
-                if (reverifyClaim && !IsOwnClaim(fullPath, claim))
-                {
-                    throw new OutputFileExistsException(
-                        fullPath,
-                        $"{fullPath} was replaced by another file while this package was written, and was not overwritten. "
-                            + "An existing package is never overwritten; build again to get a new version.");
-                }
-
                 try
                 {
-                    File.Move(tempPath, fullPath, overwrite: true);
+                    if (!claimReleased)
+                    {
+                        if (!ReleaseOwnClaim(fullPath, claim))
+                        {
+                            claimNeedsCleanup = false;
+                            throw ReplacedClaim(fullPath);
+                        }
+                        claimReleased = true;
+                        claimNeedsCleanup = false;
+                        // The released claim is delete-pending: the name stays
+                        // visible until the last reader lets go of the file.
+                        // Sample that state once, here, so the publish can tell
+                        // "my own claim still holds the name" from "a foreign
+                        // file took the name". While this writer's own
+                        // delete-pending claim occupies the name, no foreign
+                        // file can take it.
+                        ownClaimPending = File.Exists(fullPath);
+                        // Optional scheduling seam, like createClaim: production
+                        // callers supply neither. It selects the final race window.
+                        beforePublish?.Invoke();
+                    }
+                    File.Move(tempPath, fullPath, overwrite: false);
                     break;
+                }
+                catch (OutputFileExistsException) { throw; }
+                catch (Exception ex) when (claimReleased
+                    && (ex is IOException or UnauthorizedAccessException) && File.Exists(fullPath))
+                {
+                    if (ownClaimPending)
+                    {
+                        // The name is held by this writer's own delete-pending
+                        // claim, not by a foreign file: the delete completes as
+                        // soon as the last reader releases the file. Wait for
+                        // that inside the bounded window instead of reporting a
+                        // replacement that never happened.
+                        if (DateTime.UtcNow < publishUntil)
+                        {
+                            Thread.Sleep(20);
+                            continue;
+                        }
+
+                        throw new OutputFileExistsException(
+                            fullPath,
+                            $"{fullPath} is still held by this build's own released name reservation, which another reader has not released yet. "
+                                + "The package was not written and no existing file was overwritten; release the reader and build again.",
+                            ex);
+                    }
+
+                    throw ReplacedClaim(fullPath, ex);
                 }
                 catch (Exception ex)
                     when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < publishUntil)
                 {
-                    reverifyClaim = true;
                     Thread.Sleep(20);
                 }
             }
@@ -149,15 +173,33 @@ internal static class NoOverwriteFile
         finally
         {
             TryDelete(tempPath, reportWarning, "temporary package file");
-            if (!published && IsOwnClaim(fullPath, claim))
+            if (!published && claimNeedsCleanup)
             {
-                // Release the claim so a failed build leaves no empty package behind.
-                TryDelete(fullPath, reportWarning, "empty name reservation");
+                // Cleanup uses the same locked handle proof as publication, so
+                // it cannot delete a foreign file swapped in after a name check.
+                try { ReleaseOwnClaim(fullPath, claim); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    ReportLeftover(fullPath, "empty name reservation", ex, reportWarning);
+                }
             }
         }
     }
 
-    private static FileIdentity ClaimName(string fullPath, Func<string, FileStream>? createClaim)
+    internal static void EnsureSupportedPlatform(bool isWindows)
+    {
+        if (!isWindows)
+        {
+            throw new PlatformNotSupportedException("Package file publication requires Windows.");
+        }
+    }
+
+    private static OutputFileExistsException ReplacedClaim(string path, Exception? innerException = null)
+        => new(path, $"{path} was replaced by another file while this package was written, and was not overwritten. "
+            + "An existing package is never overwritten; build again to get a new version.", innerException);
+
+    private static FileIdentity ClaimName(
+        string fullPath, Func<string, FileStream>? createClaim, Action<string>? reportWarning)
     {
         // A delete-pending name becomes visible or claimable again once the
         // competing rename/delete completes, while a permanent denial never
@@ -205,10 +247,10 @@ internal static class NoOverwriteFile
 
         if (identity is null)
         {
-            // Without an identity the final rename could not prove it replaces
-            // its own claim, so give the name back and fail.
-            TryDelete(fullPath, reportWarning: null, "empty name reservation");
-            throw new IOException($"The identity of the name reservation {fullPath} could not be read.");
+            // Without identity it is unsafe to delete by name, even on failure.
+            var error = new IOException($"The identity of the name reservation {fullPath} could not be read.");
+            ReportLeftover(fullPath, "empty name reservation", error, reportWarning);
+            throw error;
         }
 
         return identity.Value;
@@ -244,28 +286,48 @@ internal static class NoOverwriteFile
     }
 
     /// <summary>
-    /// True when <paramref name="fullPath"/> is still the empty file this writer
-    /// created. Any doubt (missing file, unreadable identity) answers false.
+    /// Removes only this writer's empty claim. The handle denies writes/deletes
+    /// between the identity/length proof and disposition, closing the cleanup
+    /// race too. Missing or foreign files are untouched and return false.
     /// </summary>
-    private static bool IsOwnClaim(string fullPath, FileIdentity claim)
+    private static bool ReleaseOwnClaim(string fullPath, FileIdentity claim)
     {
-        try
+        const uint deleteAndReadAttributes = 0x00010000 | 0x00000080;
+        const uint openReparsePoint = 0x00200000;
+        using var handle = NativeMethods.CreateFile(
+            fullPath, deleteAndReadAttributes, FileShare.Read, IntPtr.Zero,
+            FileMode.Open, openReparsePoint, IntPtr.Zero);
+        if (handle.IsInvalid)
         {
-            using var target = new FileStream(
-                fullPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            return target.Length == 0 && FileIdentity.Of(target.SafeFileHandle) == claim;
+            var error = Marshal.GetLastPInvokeError();
+            if (error is 2 or 3) { return false; }
+            throw FileOperationError(fullPath, error);
         }
-        catch (IOException)
+
+        if (!NativeMethods.GetFileInformationByHandle(handle, out var info))
+        {
+            throw FileOperationError(fullPath, Marshal.GetLastPInvokeError());
+        }
+        var identity = new FileIdentity(info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow);
+        if (identity != claim || info.FileSizeHigh != 0 || info.FileSizeLow != 0)
         {
             return false;
         }
-        catch (UnauthorizedAccessException)
+
+        byte deleteFile = 1; // FILE_DISPOSITION_INFO contains one BOOLEAN.
+        if (!NativeMethods.SetFileInformationByHandle(handle, 4, ref deleteFile, 1))
         {
-            return false;
+            throw FileOperationError(fullPath, Marshal.GetLastPInvokeError());
         }
+        return true; // Closing the verified handle releases this file, not a new pathname occupant.
+    }
+
+    private static Exception FileOperationError(string path, int error)
+    {
+        var cause = new Win32Exception(error);
+        return error == 5
+            ? new UnauthorizedAccessException($"Could not release name reservation {path}: {cause.Message}", cause)
+            : new IOException($"Could not release name reservation {path}: {cause.Message}", cause);
     }
 
     /// <summary>
@@ -323,7 +385,7 @@ internal static class NoOverwriteFile
     private static void ReportLeftover(string path, string description, Exception ex, Action<string>? reportWarning)
     {
         var message = $"The {description} {path} of a failed package write could not be removed ({ex.Message}). "
-            + "It holds no package; delete it before building this version again.";
+            + "Inspect this path before building this version again; never remove another writer's package.";
         if (reportWarning is not null)
         {
             reportWarning(message);
@@ -345,6 +407,32 @@ internal static class NoOverwriteFile
 
     private static class NativeMethods
     {
+        // The claim is released through a raw handle instead of File.Delete,
+        // because the release has to be proved against the file this writer
+        // created, not against whatever holds the name by then. CreateFileW
+        // asks for DELETE plus FILE_READ_ATTRIBUTES so the handle can carry
+        // the delete disposition and report the identity of the file it
+        // actually opened. The share mode allows reading only, so while the
+        // handle is held no other writer can write, replace or rename the
+        // file, and the identity proof and the delete cannot be separated.
+        // FILE_FLAG_OPEN_REPARSE_POINT keeps a link at the path from being
+        // followed to some other file.
+        [DllImport("kernel32.dll", EntryPoint = "CreateFileW", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern SafeFileHandle CreateFile(
+            string fileName, uint desiredAccess, FileShare shareMode, IntPtr securityAttributes,
+            FileMode creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+        // The release marks the verified file delete-pending through the file
+        // disposition information class while the handle is still open, so the
+        // name cannot be taken by another writer between the identity proof
+        // and the delete. The file itself disappears when the last handle to
+        // it is closed, which is why a reader that still holds the claim keeps
+        // the name visible for a while after the release.
+        [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetFileInformationByHandle(
+            SafeFileHandle file, int informationClass, ref byte information, uint bufferSize);
+
         [StructLayout(LayoutKind.Sequential)]
         internal struct ByHandleFileInformation
         {
