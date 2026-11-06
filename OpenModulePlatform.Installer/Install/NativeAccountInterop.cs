@@ -116,6 +116,8 @@ public static class ServiceLogonRight
 
     private static bool ContainsEmbeddedNul(string? value) => value?.IndexOf('\0') >= 0;
 
+    // Mirrors the native LSA_UNICODE_STRING sequential layout and follows the
+    // writable-field DTO convention used by the adjacent LsaObjectAttributes.
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct LsaUnicodeString
     {
