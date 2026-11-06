@@ -498,6 +498,42 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
+    public void AForeignFileReplacingAnOwnDeletePendingClaimIsNotMisclassified()
+    {
+        // Keep the initial own-reader state through the publisher's sample, then
+        // let the delete complete and give the released name to a foreign file.
+        // A cached ownClaimPending value would now describe the wrong file.
+        var path = Path.Join(_testRoot, "package.zip");
+        FileStream? reader = null;
+        var ownClaimWasVisible = false;
+        var failure = Record.Exception(() => NoOverwriteFile.Write(
+            path,
+            stream => stream.Write(Encoding.UTF8.GetBytes("mine")),
+            createClaim: claimPath =>
+            {
+                var claim = new FileStream(
+                    claimPath, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                reader = new FileStream(
+                    claimPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                return claim;
+            },
+            beforePublish: () =>
+            {
+                ownClaimWasVisible = File.Exists(path);
+                reader!.Dispose();
+                reader = null;
+                File.WriteAllText(path, "foreign");
+            }));
+
+        Assert.True(ownClaimWasVisible, "The initial delete-pending own-reader state was not measured.");
+        var ex = Assert.IsType<OutputFileExistsException>(failure);
+        Assert.Contains("was replaced by another file", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("own released name reservation", ex.Message, StringComparison.Ordinal);
+        Assert.Equal("foreign", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
     public void UnsupportedPlatformIsRejectedByThePremutationGuard()
     {
         Assert.Throws<PlatformNotSupportedException>(() => NoOverwriteFile.EnsureSupportedPlatform(false));
