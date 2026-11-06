@@ -120,13 +120,12 @@ internal static class NoOverwriteFile
                         }
                         claimReleased = true;
                         claimNeedsCleanup = false;
-                        // The released claim is delete-pending: the name stays
-                        // visible until the last reader lets go of the file.
-                        // Sample that state once, here, so the publish can tell
-                        // "my own claim still holds the name" from "a foreign
-                        // file took the name". While this writer's own
-                        // delete-pending claim occupies the name, no foreign
-                        // file can take it.
+                        // The released claim can be delete-pending: the name stays
+                        // visible until the last reader lets go of the file. This
+                        // sample is only an optimization; every failed publish
+                        // rechecks the current file identity before waiting, because
+                        // the own claim can disappear and a foreign file can take
+                        // the name after this point.
                         ownClaimPending = File.Exists(fullPath);
                         // Optional scheduling seam, like createClaim: production
                         // callers supply neither. It selects the final race window.
@@ -139,9 +138,9 @@ internal static class NoOverwriteFile
                 catch (Exception ex) when (claimReleased
                     && (ex is IOException or UnauthorizedAccessException) && File.Exists(fullPath))
                 {
-                    if (ownClaimPending)
+                    if (ownClaimPending && IsOwnReleasedClaim(fullPath, claim))
                     {
-                        // The name is held by this writer's own delete-pending
+                        // The name is still held by this writer's own delete-pending
                         // claim, not by a foreign file: the delete completes as
                         // soon as the last reader releases the file. Wait for
                         // that inside the bounded window instead of reporting a
@@ -283,6 +282,27 @@ internal static class NoOverwriteFile
                 + "this package right now, or an interrupted build left its name reservation behind. If no other "
                 + "build is running, delete the empty file and build again; an existing file is never overwritten.",
             innerException);
+    }
+
+    /// <summary>
+    /// Rechecks which file currently owns a released name. An open or identity
+    /// read failure is ambiguous and therefore never proves own-claim ownership.
+    /// </summary>
+    private static bool IsOwnReleasedClaim(string fullPath, FileIdentity claim)
+    {
+        const uint readAttributes = 0x00000080;
+        const uint openReparsePoint = 0x00200000;
+        using var handle = NativeMethods.CreateFile(
+            fullPath, readAttributes, FileShare.ReadWrite | FileShare.Delete, IntPtr.Zero,
+            FileMode.Open, openReparsePoint, IntPtr.Zero);
+        if (handle.IsInvalid
+            || !NativeMethods.GetFileInformationByHandle(handle, out var info))
+        {
+            return false;
+        }
+
+        var identity = new FileIdentity(info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow);
+        return identity == claim;
     }
 
     /// <summary>
