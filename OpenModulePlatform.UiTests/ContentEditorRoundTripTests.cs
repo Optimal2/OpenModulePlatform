@@ -202,6 +202,116 @@ public sealed partial class ContentEditorRoundTripTests
     }
 
     [Fact]
+    public async Task Clicking_the_active_visual_tab_keeps_html_edits()
+    {
+        string editorHtml = string.Empty;
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            await page.ClickAsync(".toastui-editor-ww-container .ProseMirror");
+            await page.Keyboard.PressAsync("End");
+            await page.Keyboard.TypeAsync(" EDITED");
+
+            // Clicking the already active Visual tab is a no-op: the edit
+            // above must still be in the editor afterwards.
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            var state = await ReadStateAsync(page);
+            Assert.Equal("visual", state.ActiveTab);
+            editorHtml = await page.EvaluateAsync<string>(
+                "() => { const view = document.querySelector('.toastui-editor-ww-container .ProseMirror'); return view ? view.innerHTML : ''; }");
+        });
+
+        Assert.Empty(result.PageErrors);
+        Assert.Contains("EDITED", editorHtml, StringComparison.Ordinal);
+
+        Assert.NotNull(result.PostedBody);
+        Assert.Contains("EDITED", result.PostedBody!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Clicking_the_active_visual_tab_keeps_markdown_edits()
+    {
+        string editorHtml = string.Empty;
+        var result = await SubmitAsync(MarkdownBody, "markdown", async page =>
+        {
+            // Markdown opens on the visual tab already.
+            var state = await ReadStateAsync(page);
+            Assert.Equal("visual", state.ActiveTab);
+
+            await page.ClickAsync(".toastui-editor-ww-container .ProseMirror");
+            await page.Keyboard.PressAsync("End");
+            await page.Keyboard.TypeAsync(" EDITED");
+
+            // Clicking the already active Visual tab is a no-op: the edit
+            // above must still be in the editor afterwards.
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            state = await ReadStateAsync(page);
+            Assert.Equal("visual", state.ActiveTab);
+            editorHtml = await page.EvaluateAsync<string>(
+                "() => { const view = document.querySelector('.toastui-editor-ww-container .ProseMirror'); return view ? view.innerHTML : ''; }");
+        });
+
+        Assert.Empty(result.PageErrors);
+        Assert.Contains("EDITED", editorHtml, StringComparison.Ordinal);
+
+        Assert.NotNull(result.PostedBody);
+        Assert.Contains("EDITED", result.PostedBody!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Empty_html_page_offers_visual_and_saves_empty()
+    {
+        PageState? before = null;
+        PageState? after = null;
+        var result = await SubmitAsync(string.Empty, "html", async page =>
+        {
+            // An empty page opens in the source tab with no warning.
+            before = await ReadStateAsync(page);
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            after = await ReadStateAsync(page);
+        });
+
+        Assert.Empty(result.PageErrors);
+
+        Assert.Equal("source", before!.ActiveTab);
+        Assert.False(before.WarningVisible);
+
+        // The visual tab is offered for an empty page and shows no warning.
+        Assert.Equal("visual", after!.ActiveTab);
+        Assert.False(after.WarningVisible);
+
+        // Saving without editing still posts an empty body, not <p><br></p>.
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(string.Empty, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
+    public async Task Missing_editor_asset_hides_visual_tab_without_warning_and_saves_body()
+    {
+        PageState? state = null;
+        var result = await SubmitAsync(
+            FixtureBody,
+            "html",
+            async page =>
+            {
+                state = await ReadStateAsync(page);
+            },
+            includeEditorAsset: false);
+
+        Assert.Empty(result.PageErrors);
+
+        // With no editor bundle the visual tab is not offered and no warning
+        // is shown for a page that was never compared.
+        Assert.Equal("source", state!.ActiveTab);
+        Assert.True(state.VisualTabHidden);
+        Assert.False(state.WarningVisible);
+
+        // The textarea still saves the body unchanged.
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(FixtureBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
     public async Task Vendored_editor_round_trip_is_lossy_for_the_fixture()
     {
         // Characterization test, not an acceptance test: it documents that the
@@ -238,6 +348,8 @@ public sealed partial class ContentEditorRoundTripTests
 
         public bool WarningVisible { get; set; }
 
+        public bool VisualTabHidden { get; set; }
+
         public string TextareaValue { get; set; } = string.Empty;
     }
 
@@ -250,7 +362,8 @@ public sealed partial class ContentEditorRoundTripTests
     private static async Task<SubmitResult> SubmitAsync(
         string source,
         string contentType = "html",
-        Func<IPage, Task>? interact = null)
+        Func<IPage, Task>? interact = null,
+        bool includeEditorAsset = true)
     {
         var (editCshtml, editorJs) = ReadRepositoryInputs();
         var pageScript = ExtractInlineEditorScript(editCshtml);
@@ -263,7 +376,7 @@ public sealed partial class ContentEditorRoundTripTests
         var pageErrors = new List<string>();
         page.PageError += (_, message) => pageErrors.Add(message);
 
-        var harnessHtml = BuildHarnessHtml(editorJs, pageScript, source, contentType);
+        var harnessHtml = BuildHarnessHtml(includeEditorAsset ? editorJs : null, pageScript, source, contentType);
         var posted = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         await page.RouteAsync("**/*", async route =>
         {
@@ -425,7 +538,7 @@ public sealed partial class ContentEditorRoundTripTests
         return script!;
     }
 
-    private static string BuildHarnessHtml(string editorJs, string pageScript, string source, string contentType)
+    private static string BuildHarnessHtml(string? editorJs, string pageScript, string source, string contentType)
     {
         // The textarea is HTML-escaped here exactly as Razor would render the
         // persisted body, so the script under test receives the true source.
@@ -460,7 +573,7 @@ public sealed partial class ContentEditorRoundTripTests
             "<div data-server-report-field hidden></div>" +
             "<button type=\"submit\">Save page</button>" +
             "</form>" +
-            "<script>" + EscapeForInlineScript(editorJs) + "</script>" +
+            (editorJs is null ? string.Empty : "<script>" + EscapeForInlineScript(editorJs) + "</script>") +
             "<script>" + pageScript + "</script>" +
             "</body></html>";
     }
@@ -509,5 +622,5 @@ public sealed partial class ContentEditorRoundTripTests
     // Reads the editor state that the page under test exposes: which tab is
     // selected, whether the warning is visible and what the textarea holds.
     private const string StateProbeScript =
-        """() => { const active = document.querySelector('[data-editor-mode][aria-selected="true"]'); const warning = document.querySelector('[data-editor-warning]'); const textarea = document.getElementById('Input_Body'); return JSON.stringify({ activeTab: active ? active.getAttribute('data-editor-mode') : '', warningVisible: !!warning && !warning.hidden && warning.getClientRects().length > 0, textareaValue: textarea ? textarea.value : '' }); }""";
+        """() => { const active = document.querySelector('[data-editor-mode][aria-selected="true"]'); const warning = document.querySelector('[data-editor-warning]'); const visual = document.querySelector('[data-editor-mode="visual"]'); const textarea = document.getElementById('Input_Body'); return JSON.stringify({ activeTab: active ? active.getAttribute('data-editor-mode') : '', warningVisible: !!warning && !warning.hidden && warning.getClientRects().length > 0, visualTabHidden: !!visual && !!visual.hidden, textareaValue: textarea ? textarea.value : '' }); }""";
 }

@@ -28,12 +28,14 @@ Choose the page content type before editing the body:
   not from a CDN — there is no external origin to be unavailable. If the asset
   still fails to load, the raw textarea remains available and the page still
   saves Markdown. The visual tab writes back to the stored body only when the
-  page was actually edited in it.
+  page was actually edited in it. Editing a Markdown page in the visual tab can
+  normalize its formatting, for example rewriting `_text_` as `*text*`.
 - `html` opens on the HTML-source tab. A visual tab is offered only when the
   page survives a visual-editor round trip unchanged, compared as parsed DOM
-  with whitespace-only differences ignored. When the round trip changes the
-  page, the editor shows a warning, keeps the source, and leaves the user in
-  the source tab.
+  with whitespace-only differences ignored. An empty page counts as surviving
+  the round trip: the visual tab is offered and saving without editing keeps
+  the body empty. When the round trip changes the page, the editor shows a
+  warning, keeps the source, and leaves the user in the source tab.
 - `html_file` stores only a file key in the database. The trusted HTML body is
   read from the configured HTML file directory or packaged ContentPages folder.
 - `server_report` hides the body editor and shows only the report-key picker.

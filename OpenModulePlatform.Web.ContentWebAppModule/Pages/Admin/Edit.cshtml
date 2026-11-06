@@ -360,9 +360,22 @@
 
                 setToastEditorValue('html', html || '');
                 const original = parseHtmlBody(html || '');
+
+                // An empty page has nothing the visual editor could change:
+                // setHTML('') reads back as <p><br></p>, which must not count
+                // as a change, so the visual tab is offered for it.
+                if (significantChildren(original).length === 0) {
+                    return true;
+                }
+
                 const roundTripped = parseHtmlBody(getToastEditorValue('html'));
                 return sameHtmlNode(original, roundTripped);
             };
+
+            // The editor bundle failed to load, so there is nothing to compare
+            // against: the visual tab stays hidden, no warning is shown, and
+            // the textarea saves the page on its own.
+            const isEditorAssetAvailable = () => !!window.toastui?.Editor;
 
             const setVisualTabAvailability = (available) => {
                 if (!visualTab) {
@@ -493,9 +506,23 @@
             for (const button of editorTabButtons) {
                 button.addEventListener('click', () => {
                     const mode = button.dataset.editorMode;
+
+                    // Clicking the already active tab is a no-op: re-syncing
+                    // from the stale textarea would discard unsaved visual
+                    // edits.
+                    if (mode === editorMode) {
+                        return;
+                    }
+
                     const type = contentType?.value || 'markdown';
 
                     if (mode === 'visual' && type === 'html') {
+                        // Without the editor bundle there is nothing to
+                        // compare against: stay in the source tab quietly.
+                        if (!isEditorAssetAvailable()) {
+                            return;
+                        }
+
                         // The source may have been edited since the page was
                         // loaded, so the round trip is checked again here. A
                         // page that does not survive it keeps its source.
@@ -579,10 +606,14 @@
                     ensureToastEditor(type, typeChanged);
 
                     // The visual tab is only offered for a page that survives the
-                    // round trip through the visual editor unchanged.
-                    const lossless = htmlRoundTripIsLossless(source?.value || '');
+                    // round trip through the visual editor unchanged. Without
+                    // the editor bundle there is nothing to compare against,
+                    // so the tab stays hidden and no warning is shown.
+                    const lossless = isEditorAssetAvailable()
+                        ? htmlRoundTripIsLossless(source?.value || '')
+                        : true;
                     setVisualTabAvailability(lossless);
-                    showEditorWarning(!lossless);
+                    showEditorWarning(!lossless && isEditorAssetAvailable());
                     setEditorMode(editorMode);
                 }
                 else {
