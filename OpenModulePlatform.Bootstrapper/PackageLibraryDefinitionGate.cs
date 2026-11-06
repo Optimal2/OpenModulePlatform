@@ -360,9 +360,8 @@ internal static class PackageLibraryDefinitionGate
         var resolved = new HashSet<string>(resolvedRoots.Select(NormalizeSourceRoot), StringComparer.OrdinalIgnoreCase);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var skipped = new List<SkippedDeveloperSourceRoot>();
-        foreach (var configuredRoot in configuredRoots)
+        foreach (var root in configuredRoots.Select(NormalizeSourceRoot))
         {
-            var root = NormalizeSourceRoot(configuredRoot);
             if (!seen.Add(root) || resolved.Contains(root))
             {
                 continue;

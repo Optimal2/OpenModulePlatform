@@ -299,9 +299,8 @@ internal static class MaintenanceQuarantine
     internal static List<RetentionSweepEntry> EnumerateEntries(string root)
     {
         var entries = new List<RetentionSweepEntry>();
-        foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly))
+        foreach (var info in Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly).Select(directory => new DirectoryInfo(directory)))
         {
-            var info = new DirectoryInfo(directory);
             long size = 0;
             // A junction planted inside a quarantined tree must not be walked: sizing
             // through it would count (and a future change could touch) whatever is on
@@ -314,9 +313,8 @@ internal static class MaintenanceQuarantine
             entries.Add(new RetentionSweepEntry(info.FullName, size, info.LastWriteTimeUtc));
         }
 
-        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly))
+        foreach (var info in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly).Select(file => new FileInfo(file)))
         {
-            var info = new FileInfo(file);
             entries.Add(new RetentionSweepEntry(info.FullName, info.Length, info.LastWriteTimeUtc));
         }
 

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -253,6 +255,47 @@ public sealed class MaintenanceQuarantineTests
         Assert.Throws<InvalidOperationException>(settings.Validate);
     }
 
+    [SupportedOSPlatform("windows")]
+    [SkippableFact]
+    public void EnumerateEntries_CountsOwnedContentsAndSidecarWithoutFollowingAJunction()
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "NTFS junctions require Windows.");
+        using var root = new TempDirectory();
+        var quarantine = Directory.CreateDirectory(Path.Join(root.Path, "quarantine")).FullName;
+        var entry = Directory.CreateDirectory(Path.Join(quarantine, "OMP.Example__20261007-120000__finding-1")).FullName;
+        Directory.CreateDirectory(Path.Join(entry, "nested"));
+        File.WriteAllBytes(Path.Join(entry, "payload.bin"), new byte[3]);
+        File.WriteAllBytes(Path.Join(entry, "nested", "other.bin"), new byte[5]);
+        var sidecar = entry + MaintenanceQuarantine.ReasonSidecarSuffix;
+        File.WriteAllBytes(sidecar, new byte[7]);
+
+        // Both ends belong to this fixture. The target is outside the quarantine so
+        // following the link changes the directory entry's size by exactly 1,024 bytes.
+        var linkedTarget = Directory.CreateDirectory(Path.Join(root.Path, "linked-target")).FullName;
+        File.WriteAllBytes(Path.Join(linkedTarget, "must-not-be-counted.bin"), new byte[1024]);
+        var link = Path.Join(entry, "junction");
+        try
+        {
+            CreateJunction(link, linkedTarget);
+
+            var entries = MaintenanceQuarantine.EnumerateEntries(quarantine);
+
+            Assert.Equal(2, entries.Count);
+            Assert.Equal([entry, sidecar], entries.Select(candidate => candidate.Path));
+            Assert.Equal(8, entries[0].LengthBytes);
+            Assert.Equal(7, entries[1].LengthBytes);
+        }
+        finally
+        {
+            // Remove the link itself before the fixture's recursive cleanup; never
+            // recursively delete through it into the linked target.
+            if (Directory.Exists(link) || new DirectoryInfo(link).Exists)
+            {
+                Directory.Delete(link);
+            }
+        }
+    }
+
     private static string CreateQuarantined(string quarantine, string name, DateTime stampUtc, int payloadBytes = 16)
     {
         var directory = Path.Join(quarantine, $"{name}__{stampUtc:yyyyMMdd-HHmmss}__finding-1");
@@ -262,6 +305,37 @@ public sealed class MaintenanceQuarantineTests
         Directory.SetLastWriteTimeUtc(directory, stampUtc);
         File.SetLastWriteTimeUtc(directory + MaintenanceQuarantine.ReasonSidecarSuffix, stampUtc.AddSeconds(1));
         return directory;
+    }
+
+    private static void CreateJunction(string linkPath, string targetPath)
+    {
+        var startInfo = new ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var argument in new[] { "/c", "mklink", "/J", linkPath, targetPath })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo)!;
+        try
+        {
+            Assert.True(process.WaitForExit(10_000), "Junction creation timed out.");
+            Assert.Equal(0, process.ExitCode);
+            Assert.True(File.GetAttributes(linkPath).HasFlag(FileAttributes.ReparsePoint));
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(10_000);
+            }
+        }
     }
 
     private static HostAgentSettings CreateSettings(string servicesRoot)
