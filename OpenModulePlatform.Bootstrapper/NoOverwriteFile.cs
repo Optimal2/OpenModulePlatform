@@ -138,24 +138,17 @@ internal static class NoOverwriteFile
                 catch (Exception ex) when (claimReleased
                     && (ex is IOException or UnauthorizedAccessException) && File.Exists(fullPath))
                 {
-                    if (ownClaimPending && IsOwnReleasedClaim(fullPath, claim))
+                    // A different identity read through a supported handle proves
+                    // foreign replacement. An inaccessible delete-pending name is
+                    // ambiguous, never proof of own ownership: it may be retried
+                    // inside the bounded window, but a persistent failure gets the
+                    // ordinary replacement refusal rather than an own-claim claim.
+                    if (ownClaimPending
+                        && !IsForeignFileAtReleasedName(fullPath, claim)
+                        && DateTime.UtcNow < publishUntil)
                     {
-                        // The name is still held by this writer's own delete-pending
-                        // claim, not by a foreign file: the delete completes as
-                        // soon as the last reader releases the file. Wait for
-                        // that inside the bounded window instead of reporting a
-                        // replacement that never happened.
-                        if (DateTime.UtcNow < publishUntil)
-                        {
-                            Thread.Sleep(20);
-                            continue;
-                        }
-
-                        throw new OutputFileExistsException(
-                            fullPath,
-                            $"{fullPath} is still held by this build's own released name reservation, which another reader has not released yet. "
-                                + "The package was not written and no existing file was overwritten; release the reader and build again.",
-                            ex);
+                        Thread.Sleep(20);
+                        continue;
                     }
 
                     throw ReplacedClaim(fullPath, ex);
@@ -285,10 +278,10 @@ internal static class NoOverwriteFile
     }
 
     /// <summary>
-    /// Rechecks which file currently owns a released name. An open or identity
-    /// read failure is ambiguous and therefore never proves own-claim ownership.
+    /// Proves foreign replacement only when a supported handle identifies a
+    /// different file. An open or identity read failure remains ambiguous.
     /// </summary>
-    private static bool IsOwnReleasedClaim(string fullPath, FileIdentity claim)
+    private static bool IsForeignFileAtReleasedName(string fullPath, FileIdentity claim)
     {
         const uint readAttributes = 0x00000080;
         const uint openReparsePoint = 0x00200000;
@@ -302,7 +295,7 @@ internal static class NoOverwriteFile
         }
 
         var identity = new FileIdentity(info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow);
-        return identity == claim;
+        return identity != claim;
     }
 
     /// <summary>
