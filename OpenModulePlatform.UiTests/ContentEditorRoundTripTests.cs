@@ -6,12 +6,12 @@ namespace OpenModulePlatform.UiTests;
 
 /// <summary>
 /// Round-trip guard for the content editor (Pages/Admin/Edit.cshtml).
-/// The page opens HTML content in the visual ToastUI editor and rewrites the
-/// textarea on submit, so an unchanged page is still transformed when saved.
-/// The harness below reads the real Edit.cshtml from the repository at test
-/// time, extracts its real inline script from the Scripts section, and runs
-/// it against a minimal DOM with the same ids and data attributes, plus the
-/// real vendored ToastUI bundle. Nothing here needs SQL Server and nothing
+/// The page used to open HTML content in the visual ToastUI editor and rewrite
+/// the textarea on submit, so an unchanged page was still transformed when it
+/// was saved. The harness below reads the real Edit.cshtml from the repository
+/// at test time, extracts its real inline script from the Scripts section, and
+/// runs it against a minimal DOM with the same ids and data attributes, plus
+/// the real vendored ToastUI bundle. Nothing here needs SQL Server and nothing
 /// leaves the machine: the harness document and the form POST are served and
 /// intercepted by a Playwright route on a stub origin, so no socket is ever
 /// opened.
@@ -29,19 +29,38 @@ public sealed partial class ContentEditorRoundTripTests
         "<p><a class=\"content-link\" href=\"https://example.test/p?a=1&b=2&c=3\">Raw ampersands</a></p>\n" +
         "<p><a class=\"content-link\" href=\"https://example.test/p?a=1&amp;b=2&amp;c=3\">Escaped ampersands</a></p>";
 
-    [Fact(Skip = "WP2 of the content-editor campaign (lossless save) has not landed yet: the visual editor rewrites HTML on submit, so this acceptance test stays skipped until that fix removes the Skip.")]
+    // A page the visual editor carries without changing it.
+    private const string SafeHtmlBody = "<p>Hello</p>";
+
+    // Markdown the visual editor does not hand back unchanged: the editor
+    // rewrites the emphasis marker, so a write-back that happens without a
+    // user edit shows up in the posted body.
+    private const string MarkdownBody =
+        "# Title\n\nSome _text_ with a [link](https://example.test/p?a=1&b=2).";
+
+    [Fact]
     public async Task Saving_unchanged_html_page_from_default_tab_keeps_it()
     {
-        var result = await SubmitUnchangedAsync(FixtureBody);
+        PageState? state = null;
+        var result = await SubmitAsync(FixtureBody, "html", async page =>
+        {
+            state = await ReadStateAsync(page);
+        });
 
         Assert.Empty(result.PageErrors);
         Assert.NotNull(result.PostedBody);
 
+        // An HTML page opens in the source tab, so the visual editor never
+        // touches the stored body.
+        Assert.Equal("source", state!.ActiveTab);
+
         // The acceptance assertion: saving without touching anything must be a
         // no-op. Asserted as behaviour (byte-identical body plus intact query
         // parameters), so any lossless fix passes regardless of how it is
-        // implemented.
-        Assert.Equal(FixtureBody, result.PostedBody);
+        // implemented. Only the line endings are normalised: a browser submits
+        // a textarea value with CRLF line breaks while the fixture uses LF,
+        // and that difference is not a content change.
+        Assert.Equal(FixtureBody, NormalizeLineEndings(result.PostedBody!));
 
         using var links = JsonDocument.Parse(result.LinksJson);
         Assert.Equal(2, links.RootElement.GetArrayLength());
@@ -55,6 +74,134 @@ public sealed partial class ContentEditorRoundTripTests
     }
 
     [Fact]
+    public async Task Unsafe_html_page_clicking_visual_stays_in_source_and_warns()
+    {
+        PageState? state = null;
+        var result = await SubmitAsync(FixtureBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            state = await ReadStateAsync(page);
+        });
+
+        Assert.Empty(result.PageErrors);
+
+        // The visual editor would change this page, so the click keeps the
+        // source tab and explains why.
+        Assert.Equal("source", state!.ActiveTab);
+        Assert.True(state.WarningVisible);
+
+        // The body is posted unchanged.
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(FixtureBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
+    public async Task Html_source_edited_into_an_unsafe_page_keeps_the_source_tab()
+    {
+        const string editedBody = "<p class=\"note\">Hello</p>";
+        PageState? state = null;
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            // The page was safe when it was loaded, but the source is edited
+            // into a page the visual editor would change.
+            await page.ClickAsync("[data-editor-mode=\"source\"]");
+            await page.FillAsync("#Input_Body", editedBody);
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            state = await ReadStateAsync(page);
+        });
+
+        Assert.Empty(result.PageErrors);
+
+        // The round trip is checked again when Visual is clicked, so the
+        // edited page keeps its source and the warning is shown.
+        Assert.Equal("source", state!.ActiveTab);
+        Assert.True(state.WarningVisible);
+
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(editedBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
+    public async Task Safe_html_page_opened_in_visual_tab_is_saved_unchanged()
+    {
+        PageState? state = null;
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            state = await ReadStateAsync(page);
+        });
+
+        Assert.Empty(result.PageErrors);
+
+        // The visual tab is offered for a page that survives the round trip.
+        Assert.Equal("visual", state!.ActiveTab);
+        Assert.False(state.WarningVisible);
+
+        // Opening the visual tab without editing is not a change.
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(SafeHtmlBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
+    public async Task Safe_html_page_edited_in_visual_tab_is_saved_with_the_edit()
+    {
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            await page.ClickAsync(".toastui-editor-ww-container .toastui-editor-contents");
+            await page.Keyboard.PressAsync("End");
+            await page.Keyboard.TypeAsync(" World");
+        });
+
+        Assert.Empty(result.PageErrors);
+        Assert.NotNull(result.PostedBody);
+
+        // An edit in the visual tab is written back to the stored body.
+        Assert.Contains("World", result.PostedBody!, StringComparison.Ordinal);
+        Assert.NotEqual(SafeHtmlBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
+    public async Task Markdown_page_saved_from_the_default_visual_tab_is_unchanged()
+    {
+        PageState? state = null;
+        var result = await SubmitAsync(MarkdownBody, "markdown", async page =>
+        {
+            state = await ReadStateAsync(page);
+        });
+
+        Assert.Empty(result.PageErrors);
+
+        // Markdown keeps the visual tab as its default.
+        Assert.Equal("visual", state!.ActiveTab);
+
+        // The visual editor normalises Markdown, so an untouched page must not
+        // be written back.
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(MarkdownBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
+    public async Task Switching_html_between_source_and_visual_without_editing_keeps_the_body()
+    {
+        string? textareaValue = null;
+        var result = await SubmitAsync(SafeHtmlBody, "html", async page =>
+        {
+            await page.ClickAsync("[data-editor-mode=\"source\"]");
+            await page.ClickAsync("[data-editor-mode=\"visual\"]");
+            textareaValue = (await ReadStateAsync(page)).TextareaValue;
+        });
+
+        Assert.Empty(result.PageErrors);
+
+        // Switching tabs without editing leaves the textarea alone.
+        Assert.Equal(SafeHtmlBody, textareaValue);
+
+        Assert.NotNull(result.PostedBody);
+        Assert.Equal(SafeHtmlBody, NormalizeLineEndings(result.PostedBody!));
+    }
+
+    [Fact]
     public async Task Vendored_editor_round_trip_is_lossy_for_the_fixture()
     {
         // Characterization test, not an acceptance test: it documents that the
@@ -64,7 +211,7 @@ public sealed partial class ContentEditorRoundTripTests
         // visual editor instead of changing the bundle). If it starts failing
         // after a vendored editor upgrade, the round trip became lossless and
         // this guard should be reconsidered.
-        var roundTripped = await RoundTripDirectlyAsync(FixtureBody);
+        var roundTripped = await RoundTripDirectlyAsync(FixtureBody, "html");
 
         Assert.NotEqual(FixtureBody, roundTripped);
         Assert.DoesNotContain("<style", roundTripped, StringComparison.OrdinalIgnoreCase);
@@ -72,9 +219,38 @@ public sealed partial class ContentEditorRoundTripTests
         Assert.Contains("&amp;amp;", roundTripped, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Vendored_editor_round_trip_changes_the_markdown_fixture()
+    {
+        // Characterization test, not an acceptance test: it documents that the
+        // visual editor does not hand Markdown back unchanged. That is why the
+        // editor value is only written back when the user really changed it.
+        var roundTripped = await RoundTripDirectlyAsync(MarkdownBody, "markdown");
+
+        Assert.NotEqual(MarkdownBody, roundTripped);
+    }
+
     private sealed record SubmitResult(string? PostedBody, string LinksJson, IReadOnlyList<string> PageErrors);
 
-    private static async Task<SubmitResult> SubmitUnchangedAsync(string source)
+    private sealed class PageState
+    {
+        public string ActiveTab { get; set; } = string.Empty;
+
+        public bool WarningVisible { get; set; }
+
+        public string TextareaValue { get; set; } = string.Empty;
+    }
+
+    // A browser submits a textarea value with CRLF line breaks while the
+    // fixtures use LF. That difference is a transport detail, not a content
+    // change, so it is normalised before the bodies are compared.
+    private static string NormalizeLineEndings(string value)
+        => value.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private static async Task<SubmitResult> SubmitAsync(
+        string source,
+        string contentType = "html",
+        Func<IPage, Task>? interact = null)
     {
         var (editCshtml, editorJs) = ReadRepositoryInputs();
         var pageScript = ExtractInlineEditorScript(editCshtml);
@@ -87,7 +263,7 @@ public sealed partial class ContentEditorRoundTripTests
         var pageErrors = new List<string>();
         page.PageError += (_, message) => pageErrors.Add(message);
 
-        var harnessHtml = BuildHarnessHtml(editorJs, pageScript, source);
+        var harnessHtml = BuildHarnessHtml(editorJs, pageScript, source, contentType);
         var posted = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         await page.RouteAsync("**/*", async route =>
         {
@@ -120,10 +296,15 @@ public sealed partial class ContentEditorRoundTripTests
         // ever leaves the machine, and web storage behaves as in production.
         await page.GotoAsync(HarnessUrl, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
 
-        // The default tab is visual and the page is submitted untouched: no
-        // tab clicks, no edits. Click the real submit control so the form's
-        // submit handler (which pulls the visual editor value back into the
-        // textarea) runs exactly as in production.
+        // The page is submitted untouched unless the scenario asks for an
+        // interaction first. The submit is done with the real submit control so
+        // the form's submit handler (which pulls the visual editor value back
+        // into the textarea) runs exactly as in production.
+        if (interact is not null)
+        {
+            await interact(page);
+        }
+
         await page.ClickAsync("#content-edit-form button[type=submit]");
         var postData = await posted.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
@@ -138,7 +319,15 @@ public sealed partial class ContentEditorRoundTripTests
         return new SubmitResult(postedBody, linksJson, pageErrors);
     }
 
-    private static async Task<string> RoundTripDirectlyAsync(string source)
+    private static async Task<PageState> ReadStateAsync(IPage page)
+    {
+        var json = await page.EvaluateAsync<string>(StateProbeScript);
+        return JsonSerializer.Deserialize<PageState>(
+            json,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+    }
+
+    private static async Task<string> RoundTripDirectlyAsync(string source, string mode)
     {
         var (_, editorJs) = ReadRepositoryInputs();
 
@@ -175,8 +364,8 @@ public sealed partial class ContentEditorRoundTripTests
         await page.GotoAsync(HarnessUrl, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
 
         var roundTripped = await page.EvaluateAsync<string>(
-            """(html) => { const editor = new toastui.Editor({ el: document.getElementById('editor-host'), height: '300px', initialEditType: 'wysiwyg', previewStyle: 'tab', hideModeSwitch: true, initialValue: '' }); editor.setHTML(html || ''); return editor.getHTML(); }""",
-            source);
+            """(args) => { const editor = new toastui.Editor({ el: document.getElementById('editor-host'), height: '300px', initialEditType: 'wysiwyg', previewStyle: 'tab', hideModeSwitch: true, initialValue: '' }); if (args.mode === 'markdown') { editor.setMarkdown(args.source || ''); return editor.getMarkdown(); } editor.setHTML(args.source || ''); return editor.getHTML(); }""",
+            new { source, mode });
 
         Assert.Empty(pageErrors);
         return roundTripped;
@@ -236,7 +425,7 @@ public sealed partial class ContentEditorRoundTripTests
         return script!;
     }
 
-    private static string BuildHarnessHtml(string editorJs, string pageScript, string source)
+    private static string BuildHarnessHtml(string editorJs, string pageScript, string source, string contentType)
     {
         // The textarea is HTML-escaped here exactly as Razor would render the
         // persisted body, so the script under test receives the true source.
@@ -245,11 +434,14 @@ public sealed partial class ContentEditorRoundTripTests
             .Replace("<", "&lt;", StringComparison.Ordinal)
             .Replace(">", "&gt;", StringComparison.Ordinal);
 
+        var markdownSelected = contentType == "markdown" ? string.Empty : " selected";
+        var htmlSelected = contentType == "html" ? " selected" : string.Empty;
+
         return "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>" +
             "<form method=\"post\" id=\"content-edit-form\" action=\"https://roundtrip.invalid/content-edit\">" +
             "<select id=\"Input_ContentType\" name=\"Input.ContentType\">" +
-            "<option value=\"markdown\">Markdown</option>" +
-            "<option value=\"html\" selected>HTML</option>" +
+            "<option value=\"markdown\"" + markdownSelected + ">Markdown</option>" +
+            "<option value=\"html\"" + htmlSelected + ">HTML</option>" +
             "<option value=\"html_file\">HTML file</option>" +
             "<option value=\"server_report\">Server report</option>" +
             "</select>" +
@@ -259,6 +451,7 @@ public sealed partial class ContentEditorRoundTripTests
             "<button type=\"button\" data-editor-mode=\"source\" data-html-source-label=\"HTML source\" data-markdown-source-label=\"Markdown source\" aria-selected=\"false\">Markdown source</button>" +
             "</div>" +
             "<div id=\"content-editor\" hidden></div>" +
+            "<div class=\"omp-feedback__alert status-banner\" role=\"alert\" data-editor-warning hidden>The visual editor cannot be used for this page because it would change the HTML. Edit the HTML source instead.</div>" +
             "<textarea id=\"Input_Body\" name=\"Input.Body\" rows=\"18\">" + escapedSource + "</textarea>" +
             "<span data-editor-hint=\"markdown\">Write Markdown content.</span>" +
             "<span data-editor-hint=\"html\" hidden>Write trusted HTML directly.</span>" +
@@ -312,4 +505,9 @@ public sealed partial class ContentEditorRoundTripTests
 
     private const string LinkProbeScript =
         """(html) => { const doc = new DOMParser().parseFromString(html, 'text/html'); return JSON.stringify(Array.from(doc.querySelectorAll('a')).map(a => { let params = null; try { const url = new URL(a.getAttribute('href'), 'https://example.test/'); params = { a: url.searchParams.get('a'), b: url.searchParams.get('b'), c: url.searchParams.get('c') }; } catch (e) { params = { error: String((e && e.message) || e) }; } return { href: a.getAttribute('href'), params }; })); }""";
+
+    // Reads the editor state that the page under test exposes: which tab is
+    // selected, whether the warning is visible and what the textarea holds.
+    private const string StateProbeScript =
+        """() => { const active = document.querySelector('[data-editor-mode][aria-selected="true"]'); const warning = document.querySelector('[data-editor-warning]'); const textarea = document.getElementById('Input_Body'); return JSON.stringify({ activeTab: active ? active.getAttribute('data-editor-mode') : '', warningVisible: !!warning && !warning.hidden && warning.getClientRects().length > 0, textareaValue: textarea ? textarea.value : '' }); }""";
 }

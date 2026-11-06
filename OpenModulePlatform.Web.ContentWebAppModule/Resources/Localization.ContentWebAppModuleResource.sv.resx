@@ -103,6 +103,7 @@
   <data name="Visual" xml:space="preserve"><value>Visuell</value></data>
   <data name="HTML source" xml:space="preserve"><value>HTML-kod</value></data>
   <data name="Markdown source" xml:space="preserve"><value>Markdown-kod</value></data>
+  <data name="The visual editor cannot be used for this page because it would change the HTML. Edit the HTML source instead." xml:space="preserve"><value>För den här sidan går det inte att använda den visuella redigeraren, eftersom den skulle ändra HTML-koden. Använd HTML-källkoden i stället.</value></data>
   <data name="Bold" xml:space="preserve"><value>Fet</value></data>
   <data name="Italic" xml:space="preserve"><value>Kursiv</value></data>
   <data name="Heading 2" xml:space="preserve"><value>Rubrik 2</value></data>

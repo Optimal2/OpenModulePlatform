@@ -128,6 +128,7 @@
                 aria-selected="false">@L["Markdown source"]</button>
         </div>
         <div id="content-editor" class="content-editor" hidden></div>
+        <div class="omp-feedback__alert status-banner" role="alert" data-editor-warning hidden>@L["The visual editor cannot be used for this page because it would change the HTML. Edit the HTML source instead."]</div>
         <textarea asp-for="Input.Body" rows="18" class="content-editor__source"></textarea>
         <span class="field-hint" data-editor-hint="markdown">@L["Write Markdown content. Server report shortcodes such as DB_JSON are supported."]</span>
         <span class="field-hint" data-editor-hint="html" hidden>@L["Write trusted HTML directly. Server report shortcodes such as DB_JSON and DB_JSON_SCRIPT are supported."]</span>
@@ -246,6 +247,8 @@
             const editorTabs = document.querySelector('[data-editor-tabs]');
             const editorTabButtons = Array.from(document.querySelectorAll('[data-editor-mode]'));
             const sourceTab = document.querySelector('[data-editor-mode="source"]');
+            const visualTab = document.querySelector('[data-editor-mode="visual"]');
+            const editorWarning = document.querySelector('[data-editor-warning]');
             const form = document.getElementById('content-edit-form');
             const contentType = document.getElementById('Input_ContentType');
             const editorField = document.querySelector('[data-content-editor-field]');
@@ -255,7 +258,11 @@
             const htmlHint = document.querySelector('[data-editor-hint="html"]');
             let toastEditor = null;
             let toastEditorContentType = null;
-            let editorMode = 'visual';
+            // Baseline captured from the editor right after every programmatic
+            // set. A programmatic set fires the editor's change event too, so
+            // the change event cannot be used as the "the user edited" signal.
+            let editorBaseline = null;
+            let editorMode = 'source';
             let previousType = null;
 
             const getToastEditorValue = (type) => {
@@ -283,12 +290,129 @@
                 }
 
                 toastEditorContentType = type;
+
+                // Capture the baseline immediately after the programmatic set so
+                // that a later comparison tells a user edit from a plain load.
+                editorBaseline = getToastEditorValue(type);
+            };
+
+            // The visual editor is only trustworthy when it hands back what it
+            // was given. The comparison runs on the parsed DOM and ignores
+            // whitespace-only differences, so a cosmetic reformat does not
+            // count as a change while a lost element, attribute or query
+            // parameter does.
+            const parseHtmlBody = (html) =>
+                new DOMParser().parseFromString(html || '', 'text/html').body;
+
+            const normalizeText = (text) => (text || '').replace(/\s+/g, ' ').trim();
+
+            const significantChildren = (element) => Array.from(element.childNodes).filter((node) =>
+                node.nodeType !== Node.TEXT_NODE || normalizeText(node.nodeValue).length > 0);
+
+            const sameHtmlNode = (left, right) => {
+                if (!left || !right || left.nodeType !== right.nodeType) {
+                    return false;
+                }
+
+                if (left.nodeType === Node.TEXT_NODE) {
+                    return normalizeText(left.nodeValue) === normalizeText(right.nodeValue);
+                }
+
+                if (left.nodeType !== Node.ELEMENT_NODE) {
+                    return (left.nodeValue || '') === (right.nodeValue || '');
+                }
+
+                if (left.tagName !== right.tagName) {
+                    return false;
+                }
+
+                const leftAttributes = Array.from(left.attributes)
+                    .map((attribute) => `${attribute.name}=${attribute.value}`)
+                    .sort();
+                const rightAttributes = Array.from(right.attributes)
+                    .map((attribute) => `${attribute.name}=${attribute.value}`)
+                    .sort();
+
+                if (leftAttributes.length !== rightAttributes.length
+                    || !leftAttributes.every((attribute, index) => attribute === rightAttributes[index])) {
+                    return false;
+                }
+
+                const leftChildren = significantChildren(left);
+                const rightChildren = significantChildren(right);
+
+                if (leftChildren.length !== rightChildren.length) {
+                    return false;
+                }
+
+                return leftChildren.every((child, index) => sameHtmlNode(child, rightChildren[index]));
+            };
+
+            // Round trips the source through the visual editor without touching
+            // the textarea. The editor keeps the probed value, so the baseline
+            // is captured again by the set.
+            const htmlRoundTripIsLossless = (html) => {
+                if (!toastEditor
+                    || typeof toastEditor.setHTML !== 'function'
+                    || typeof toastEditor.getHTML !== 'function') {
+                    return false;
+                }
+
+                setToastEditorValue('html', html || '');
+                const original = parseHtmlBody(html || '');
+                const roundTripped = parseHtmlBody(getToastEditorValue('html'));
+                return sameHtmlNode(original, roundTripped);
+            };
+
+            const setVisualTabAvailability = (available) => {
+                if (!visualTab) {
+                    return;
+                }
+
+                // Without the editor asset the visual tab cannot be offered at
+                // all; the textarea keeps saving the page on its own.
+                if (!window.toastui?.Editor) {
+                    visualTab.hidden = true;
+                    visualTab.dataset.editorVisualUnavailable = 'true';
+                    return;
+                }
+
+                // The tab stays clickable: a click on a page the visual editor
+                // would change explains that instead of doing nothing.
+                visualTab.hidden = false;
+                visualTab.dataset.editorVisualUnavailable = available ? 'false' : 'true';
+            };
+
+            const showEditorWarning = (visible) => {
+                if (editorWarning) {
+                    editorWarning.hidden = !visible;
+                }
+            };
+
+            // True only when the editor holds something else than the baseline
+            // captured after the last programmatic set. Opening a page or
+            // switching tabs never changes the stored body this way.
+            const isVisualEditorDirty = (type) => {
+                if (!toastEditor || editorBaseline === null) {
+                    return false;
+                }
+
+                return getToastEditorValue(type) !== editorBaseline;
             };
 
             const pullVisualEditorValue = (type = contentType?.value || 'markdown') => {
-                if (source && toastEditor && editorMode === 'visual') {
-                    source.value = getToastEditorValue(type);
+                if (!source || !toastEditor || editorMode !== 'visual') {
+                    return;
                 }
+
+                const editorType = toastEditorContentType || type;
+                if (!isVisualEditorDirty(editorType)) {
+                    return;
+                }
+
+                const value = getToastEditorValue(editorType);
+                source.value = value;
+                editorBaseline = value;
             };
 
             const ensureToastEditor = (type, forceValueSync = false) => {
@@ -367,7 +491,25 @@
             };
 
             for (const button of editorTabButtons) {
-                button.addEventListener('click', () => setEditorMode(button.dataset.editorMode));
+                button.addEventListener('click', () => {
+                    const mode = button.dataset.editorMode;
+                    const type = contentType?.value || 'markdown';
+
+                    if (mode === 'visual' && type === 'html') {
+                        // The source may have been edited since the page was
+                        // loaded, so the round trip is checked again here. A
+                        // page that does not survive it keeps its source.
+                        const lossless = htmlRoundTripIsLossless(source?.value || '');
+                        setVisualTabAvailability(lossless);
+                        showEditorWarning(!lossless);
+
+                        if (!lossless) {
+                            return;
+                        }
+                    }
+
+                    setEditorMode(mode);
+                });
             }
 
             const hideEnhancedEditors = () => {
@@ -382,6 +524,8 @@
                 }
 
                 source?.classList.remove('is-enhanced');
+                setVisualTabAvailability(false);
+                showEditorWarning(false);
             };
 
             const syncContentType = () => {
@@ -391,8 +535,16 @@
                 const isHtml = type === 'html';
                 const typeChanged = previousType !== null && previousType !== type;
                 if (typeChanged) {
-                    editorMode = 'visual';
+                    // The editor still holds the previous type's content: pull it
+                    // back (only when the user actually changed it) before the
+                    // editor is switched to the new type.
+                    pullVisualEditorValue(previousType);
                 }
+
+                // HTML pages open in the source tab, Markdown pages in the
+                // visual tab. Choosing HTML on the create page therefore lands
+                // in the source tab.
+                editorMode = type === 'html' ? 'source' : 'visual';
 
                 if (editorField) {
                     editorField.hidden = isServerReport || isHtmlFile;
@@ -419,29 +571,29 @@
                     source?.classList.remove('content-editor__source--html');
                 }
                 else if (isHtml) {
-                    if (previousType === 'markdown') {
-                        pullVisualEditorValue(previousType);
-                    }
-
                     if (editorTabs) {
                         editorTabs.hidden = false;
                     }
 
                     source?.classList.add('content-editor__source--html');
                     ensureToastEditor(type, typeChanged);
+
+                    // The visual tab is only offered for a page that survives the
+                    // round trip through the visual editor unchanged.
+                    const lossless = htmlRoundTripIsLossless(source?.value || '');
+                    setVisualTabAvailability(lossless);
+                    showEditorWarning(!lossless);
                     setEditorMode(editorMode);
                 }
                 else {
-                    if (previousType === 'html') {
-                        pullVisualEditorValue(previousType);
-                    }
-
                     if (editorTabs) {
                         editorTabs.hidden = false;
                     }
 
                     source?.classList.remove('content-editor__source--html');
                     ensureToastEditor(type, typeChanged);
+                    setVisualTabAvailability(true);
+                    showEditorWarning(false);
                     setEditorMode(editorMode);
                 }
 

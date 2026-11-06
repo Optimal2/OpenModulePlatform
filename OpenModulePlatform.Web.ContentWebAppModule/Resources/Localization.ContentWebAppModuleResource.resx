@@ -103,6 +103,7 @@
   <data name="Visual" xml:space="preserve"><value>Visual</value></data>
   <data name="HTML source" xml:space="preserve"><value>HTML source</value></data>
   <data name="Markdown source" xml:space="preserve"><value>Markdown source</value></data>
+  <data name="The visual editor cannot be used for this page because it would change the HTML. Edit the HTML source instead." xml:space="preserve"><value>The visual editor cannot be used for this page because it would change the HTML. Edit the HTML source instead.</value></data>
   <data name="Bold" xml:space="preserve"><value>Bold</value></data>
   <data name="Italic" xml:space="preserve"><value>Italic</value></data>
   <data name="Heading 2" xml:space="preserve"><value>Heading 2</value></data>
