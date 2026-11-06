@@ -39,9 +39,8 @@ internal sealed class MainForm : Form
     private readonly Button _installClose;
 
     private InstallerSession? _session;
-    private PrerequisiteEvaluation? _evaluation;
     private InstallSessionLog? _log;
-    private bool _passwordValidated;
+    private readonly AccountValidationState _accountValidation = new();
     private bool _installRunning;
 
     public MainForm()
@@ -110,6 +109,12 @@ internal sealed class MainForm : Form
         _passwordVerify.Click += OnVerifyPassword;
         _recheckButton = new Button { Width = 140, Height = 34, Top = 400, Left = 0 };
         _installButton = new Button { Width = 140, Height = 34, Top = 400, Left = 150, Enabled = false };
+        _passwordBox.TextChanged += (_, _) =>
+        {
+            _accountValidation.InvalidatePassword();
+            _passwordStatus.Text = string.Empty;
+            _installButton.Enabled = _accountValidation.CanInstall;
+        };
         _prereqClose = new Button { Text = UiText.Get("ButtonClose"), Width = 110, Height = 34, Top = 400, Left = 300 };
         _recheckButton.Click += async (_, _) => await RefreshPrerequisitesAsync();
         _installButton.Click += async (_, _) => await RunInstallAsync();
@@ -275,6 +280,9 @@ internal sealed class MainForm : Form
         }
 
         _recheckButton.Enabled = false;
+        _passwordVerify.Enabled = false;
+        _accountValidation.BeginRefresh();
+        _passwordStatus.Text = string.Empty;
         _installButton.Enabled = false;
         _checkList.Items.Clear();
         try
@@ -283,8 +291,8 @@ internal sealed class MainForm : Form
                 _session.Config,
                 _session.PayloadRoot,
                 new WindowsPrerequisiteEnvironment(),
-                _passwordValidated));
-            _evaluation = evaluation;
+                serviceAccountPasswordValidated: false));
+            _accountValidation.CompleteRefresh(evaluation);
 
             foreach (var check in evaluation.Checks)
             {
@@ -311,20 +319,21 @@ internal sealed class MainForm : Form
             if (needsPassword)
             {
                 _passwordLabel.Text = UiText.Format("PasswordFor", evaluation.ServiceAccount.DisplayName);
-                _passwordStatus.Text = _passwordValidated ? UiText.Get("PasswordVerified") : string.Empty;
+                _passwordStatus.Text = string.Empty;
             }
 
-            _installButton.Enabled = evaluation.CanInstall;
+            _installButton.Enabled = _accountValidation.CanInstall;
         }
         finally
         {
             _recheckButton.Enabled = true;
+            _passwordVerify.Enabled = true;
         }
     }
 
     private void OnVerifyPassword(object? sender, EventArgs e)
     {
-        var evaluation = _evaluation;
+        var evaluation = _accountValidation.Evaluation;
         if (evaluation is null || !evaluation.ServiceAccount.RequiresPassword)
         {
             return;
@@ -336,11 +345,11 @@ internal sealed class MainForm : Form
             account.LogonDomain,
             _passwordBox.Text,
             out var error);
-        _passwordValidated = ok;
+        _accountValidation.SetPasswordValidation(ok);
         _passwordStatus.Text = ok
             ? UiText.Get("PasswordVerified")
             : UiText.Format("PasswordRejected", error);
-        _installButton.Enabled = CanInstallAfterPasswordValidation(ok, evaluation);
+        _installButton.Enabled = _accountValidation.CanInstall;
     }
 
     internal static bool CanInstallAfterPasswordValidation(bool passwordValidated, PrerequisiteEvaluation evaluation)
@@ -355,7 +364,8 @@ internal sealed class MainForm : Form
 
     private async Task RunInstallAsync()
     {
-        if (_session is null || _evaluation is null)
+        var evaluation = _accountValidation.Evaluation;
+        if (_session is null || evaluation is null || !_accountValidation.CanInstall)
         {
             return;
         }
@@ -379,7 +389,7 @@ internal sealed class MainForm : Form
             _session.Config,
             _session.Profile.ConfigPath,
             _session.PayloadRoot,
-            _evaluation,
+            evaluation,
             _passwordBox.Text);
         try
         {
@@ -439,4 +449,27 @@ internal sealed class MainForm : Form
             }
         }
     }
+}
+
+/// <summary>Pure installation gate shared by input edits, refresh and verification.</summary>
+internal sealed class AccountValidationState
+{
+    public PrerequisiteEvaluation? Evaluation { get; private set; }
+    public bool PasswordValidated { get; private set; }
+
+    public bool CanInstall => Evaluation is not null && (Evaluation.ServiceAccount.RequiresPassword
+        ? MainForm.CanInstallAfterPasswordValidation(PasswordValidated, Evaluation)
+        : Evaluation.CanInstall);
+
+    public void SetPasswordValidation(bool validated) => PasswordValidated = validated;
+
+    public void InvalidatePassword() => PasswordValidated = false;
+
+    public void BeginRefresh()
+    {
+        InvalidatePassword();
+        Evaluation = null;
+    }
+
+    public void CompleteRefresh(PrerequisiteEvaluation evaluation) => Evaluation = evaluation;
 }
