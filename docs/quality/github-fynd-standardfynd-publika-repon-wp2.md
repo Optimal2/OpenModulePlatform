@@ -25,7 +25,7 @@ failing test and is not RED evidence; the causal test experiments below provide 
 
 | # | File:scanned line | Disposition |
 |---|---|---|
-| 1 | OpenModulePlatform.Installer.Tests/AccountPasswordValidatorTests.cs:33 | Removed at source: the NUL-guard FakeLogon must never run, so it now assigns `token = null!` instead of minting a SafeHandle. If the guard ever regresses, the test still fails on `Assert.Contains("NUL", error)`. |
+| 1 | OpenModulePlatform.Installer.Tests/AccountPasswordValidatorTests.cs:33 | Removed at source: the NUL-guard FakeLogon must never run, so it now assigns `token = null!` instead of minting a SafeHandle. If the guard ever regresses, the test first fails on `Assert.Equal(0, calls)` (expected `0`, actual `1`) because the supplied FakeLogon runs. |
 | 2 | OpenModulePlatform.Installer.Tests/AccountPasswordValidatorTests.cs:71 | Kept with rationale comment: the fake passes the token to `Validate` via `out`; `Validate` wraps it in `using` (NativeAccountInterop.cs). Proven by the existing `Assert.True(returnedToken.IsClosed)`. |
 | 3 | OpenModulePlatform.Installer.Tests/AccountPasswordValidatorTests.cs:97 | Kept with rationale comment: same ownership transfer; `Validate` disposes even on the failure path. Proven by the existing `Assert.True(returnedToken.IsClosed)`. |
 | 4 | OpenModulePlatform.Portal.Tests/Services/ModuleFragmentWidgetTests.cs:543 | Kept with rationale comment: the stub returns the message through `SendAsync` to the HttpClient pipeline; `PortalModuleFragmentService` disposes it (`using var response`). Proven by new `Fetch_DisposesStubbedFragmentResponse`. |
