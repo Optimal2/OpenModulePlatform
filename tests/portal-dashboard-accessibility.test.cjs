@@ -93,17 +93,23 @@ test('isolated CSS cascade preserves collapsed values and measures unresolved ta
     // Reuse the repository's pinned, already-installed Playwright tooling. No
     // download, application server, shared browser or external request is used.
     const os = require('node:os');
-    const scratch = process.env.AO_JOB_SCRATCH || 'G:\\AI_Workdir';
-    process.env.TMP = scratch;
-    process.env.TEMP = scratch;
-    process.env.PLAYWRIGHT_BROWSERS_PATH ||= path.join(os.homedir(), 'AppData/Local/ms-playwright');
+    const scratch = process.env.AO_JOB_SCRATCH || os.tmpdir();
+    const runRoot = fs.mkdtempSync(path.join(scratch, 'portal-dashboard-accessibility-'));
+    const inheritedTmp = process.env.TMP;
+    const inheritedTemp = process.env.TEMP;
     const packages = fs.readFileSync(path.join(__dirname, '../Directory.Packages.props'), 'utf8');
     const version = /Include="Microsoft.Playwright" Version="([^"]+)"/.exec(packages)[1];
     const modulePath = path.join(process.env.NUGET_PACKAGES || path.join(os.homedir(), '.nuget/packages'),
         'microsoft.playwright', version, '.playwright/package');
     const { chromium } = require(modulePath);
-    const browser = await chromium.launch({ headless: true });
+    let browser;
     try {
+        browser = await chromium.launch({
+            headless: true,
+            env: { ...process.env, TMP: runRoot, TEMP: runRoot }
+        });
+        assert.equal(process.env.TMP, inheritedTmp, 'browser setup must not mutate process.env.TMP');
+        assert.equal(process.env.TEMP, inheritedTemp, 'browser setup must not mutate process.env.TEMP');
         const page = await browser.newPage();
         await page.route('**/*', route => route.abort());
         const portal = fs.readFileSync(path.join(__dirname, '../OpenModulePlatform.Portal/wwwroot/css/site.css'), 'utf8');
@@ -130,6 +136,9 @@ test('isolated CSS cascade preserves collapsed values and measures unresolved ta
             assert.deepEqual(values.backgrounds, ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'], palette);
         }
     } finally {
-        await browser.close();
+        if (browser) {
+            await browser.close();
+        }
+        fs.rmSync(runRoot, { recursive: true, force: true });
     }
 });
