@@ -9,10 +9,11 @@ verified by content (the worktree has since moved a few lines through these edit
 15 owned findings: 1 removed at the source, 14 documented as correct-by-design with a
 concise `// CodeQL cs/local-not-disposed: kept - ...` rationale comment at each site,
 following the repository's existing convention (cf. `cs/unmanaged-code: kept` in
-`NativeAccountInterop.cs` and `Program.cs`). No finding describes a real leak: every flagged
-allocation transfers ownership to a caller or framework object that disposes it, and the two
-test-side ownership contracts that carry four and one findings now have regression tests
-that assert disposal.
+`NativeAccountInterop.cs` and `Program.cs`). No finding describes a real leak: flagged
+allocations either transfer ownership to a caller or framework object that disposes them,
+or are deliberate process-lifetime console writers that must remain open for later standard
+output/error writes. The two test-side ownership contracts that carry four and one findings
+now have regression tests that assert disposal.
 
 No production behavior changed (comments in production files only, no logic edits). The
 required packaged-component and repository version metadata is updated during integration.
@@ -32,7 +33,7 @@ failing test and is not RED evidence; the causal test experiments below provide 
 | 6 | OpenModulePlatform.Portal.Tests/Services/ModuleFragmentWidgetTests.cs:671 | Kept with rationale comment: same as 4. |
 | 7 | OpenModulePlatform.Portal.Tests/Services/ModuleFragmentWidgetTests.cs:879 | Kept with rationale comment: same as 4 (cached 500 response; the cached path also goes through the same `using`). |
 | 8 | OpenModulePlatform.Portal.Tests/Pages/ConfigOverlaysPageTests.cs:572 | Kept with rationale comment: created only on the success path and returned to the HttpClient caller, which disposes it (`using var response` in `PostFormDisposesContentForEverySendOutcome`); failure paths never receive it. |
-| 9 | OpenModulePlatform.Installer/Program.cs:270 | Kept with rationale comment: `Console.SetOut` takes ownership of the writer for the rest of the process; disposing it would break console output. |
+| 9 | OpenModulePlatform.Installer/Program.cs:270 | Kept with rationale comment: `Console.SetOut` installs a process-lifetime writer for later standard-output writes; this does not assume automatic disposal by `Console`, and disposing the writer here would break later output. |
 | 10 | OpenModulePlatform.Installer/Program.cs:269 | Kept with rationale comment: same as 9 for `Console.SetError`. |
 | 11 | OpenModulePlatform.WorkerManager.WindowsService/Services/SystemLogNLogTarget.cs:59 | Kept with rationale comment: `AsyncTargetWrapper` is added to the NLog configuration and logging rules (`config.AddTarget`, `LogManager.Configuration`); NLog owns it for process life. |
 | 12 | OpenModulePlatform.WorkerManager.WindowsService/Services/SystemLogNLogTarget.cs:40 | Kept with rationale comment: `DatabaseTarget` is owned by the wrapper above. |
@@ -52,8 +53,8 @@ failing test and is not RED evidence; the causal test experiments below provide 
 No new tests were added for findings 1-3 (existing `IsClosed` assertions already prove
 disposal) or 8 (the existing `using var response` in the test owns the returned response).
 Findings 9-14 have no dedicated runtime-disposal test in this change. That is a coverage
-limitation, not a claim that NLog or Console ownership cannot be tested with a purpose-built,
-isolated harness.
+limitation, not a claim that NLog configuration ownership or the process-lifetime console-writer
+rationale cannot be tested with a purpose-built, isolated harness.
 
 ## Causal RED/GREEN evidence
 
@@ -140,8 +141,9 @@ Native exit 0; 1 passed, 0 failed.
 
 Confidence is high for findings 4-7 and 15 because the mutation experiments demonstrate a
 causal disposal assertion, not merely a passing test. Existing assertions cover findings 1-3;
-the adjacent ownership path covers finding 8. Findings 9-10 rely on documented Console
-ownership, and findings 11-14 rely on NLog configuration ownership verified by code reading;
-those six have no dedicated dynamic disposal test here. CodeQL clearance remains unmeasured
+the adjacent ownership path covers finding 8. Findings 9-10 rely on the deliberate
+process-lifetime use of the console writers, without an automatic-disposal or cleanup-transfer
+guarantee from `Console`; findings 11-14 rely on NLog configuration ownership verified by code
+reading. Those six have no dedicated dynamic disposal test here. CodeQL clearance remains unmeasured
 until a fresh rescan. If a documented site is still flagged, the next step is the GitHub
 Dismiss flow (an operator decision per the playbook), not another ownership rewrite.

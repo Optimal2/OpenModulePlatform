@@ -222,6 +222,20 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
     }
 
     [Fact]
+    public async Task ImportCancellationSource_WhenTasksAreNull_ReturnsNullAndDisposesSource()
+    {
+        var cts = new CancellationTokenSource();
+
+        var observed = await ObserveTasksAndDisposeCancellationSourceAsync(cts, tasks: null);
+
+        Assert.Null(observed);
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            using var registration = cts.Token.Register(static () => { });
+        });
+    }
+
+    [Fact]
     public async Task ImportCancellationSource_WhenCleanupObservationTimesOut_StaysAliveAndObservesLateFailures()
     {
         var cts = new CancellationTokenSource();
@@ -613,26 +627,22 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
         CancellationTokenSource cancellationSource,
         Task? tasks)
     {
-        if (tasks is null)
+        using (cancellationSource)
         {
-            cancellationSource.Dispose();
-            return null;
-        }
+            if (tasks is null)
+                return null;
 
-        try
-        {
-            await tasks.ConfigureAwait(false);
-            return null;
-        }
-        catch
-        {
-            // Awaiting observes every task through WhenAll. Returning the aggregate makes
-            // late-failure observation explicit and deterministically testable.
-            return tasks.Exception;
-        }
-        finally
-        {
-            cancellationSource.Dispose();
+            try
+            {
+                await tasks.ConfigureAwait(false);
+                return null;
+            }
+            catch
+            {
+                // Awaiting observes every task through WhenAll. Returning the aggregate makes
+                // late-failure observation explicit and deterministically testable.
+                return tasks.Exception;
+            }
         }
     }
 
