@@ -63,10 +63,10 @@ bumps.
 
 | Identity | Before | Final |
 | --- | --- | --- |
-| `repositoryVersion` | `0.3.1110` | `{{REPOSITORY_VERSION}}` |
-| `omp-hostagent-service` component | `0.3.336` | `{{HOSTAGENT_VERSION}}` |
-| `omp_core` module definition | `0.3.290` | `{{CORE_DEFINITION_VERSION}}` |
-| `omp_core` compatible artifact maximum for `omp_hostagent` | `0.3.336` | `{{HOSTAGENT_VERSION}}` |
+| `repositoryVersion` | `0.3.1110` | `0.3.1111` |
+| `omp-hostagent-service` component | `0.3.336` | `0.3.337` |
+| `omp_core` module definition | `0.3.290` | `0.3.291` |
+| `omp_core` compatible artifact maximum for `omp_hostagent` | `0.3.336` | `0.3.337` |
 
 The other 13 component versions, all component minimum constraints, the other
 eight module definitions, and their compatible-artifact constraints remain
