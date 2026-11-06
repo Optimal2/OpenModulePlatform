@@ -97,9 +97,139 @@ summary and are not counted as validation. A direct build then exposed the missi
 `project.assets.json` (`NETSDK1004`, exit 1); the accepted before-tests above were rerun
 with restore and produced real test counts.
 
+## Recovery causal preservation proofs
+
+Recovery base: `e1216a119d6618c5d5d733b7f617a16f64794171`. The original observations
+above remain **GREEN-before/GREEN-after characterization** of working code; they are not
+retroactively relabeled as defect REDs. The following four temporary production mutations
+are separate causal proofs that the focused tests protect the preserved contracts. Every
+mutation was rebuilt by `dotnet test`, run sequentially, restored to the exact original
+bytes, and never committed.
+
+The unmodified baseline first passed `MainFormTests` **4/4** and `UserEditBitTextTests`
+**3/3**, each with native exit **0**, using these commands:
+
+```text
+dotnet test OpenModulePlatform.Installer.Tests/OpenModulePlatform.Installer.Tests.csproj --filter FullyQualifiedName~MainFormTests --logger "console;verbosity=normal" --verbosity minimal
+dotnet test OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj --filter FullyQualifiedName~UserEditBitTextTests --logger "console;verbosity=normal" --verbosity minimal
+```
+
+### M1: password validation remains mandatory
+
+Mutation: remove only `passwordValidated &&` from
+`MainForm.CanInstallAfterPasswordValidation`.
+
+```text
+dotnet test OpenModulePlatform.Installer.Tests/OpenModulePlatform.Installer.Tests.csproj --filter FullyQualifiedName~MainFormTests.Password_validation_is_required_before_install --no-restore --logger "console;verbosity=normal" --verbosity minimal
+```
+
+RED receipt: native exit **1**, **1 failed / 1 passed**. The false-password theory case
+failed at `MainFormTests.cs:19`: `Assert.Equal`, expected `False`, actual `True`. After the
+exact restoration, the same command was GREEN: native exit **0**, **2/2 passed**.
+
+### M2: a validated password does not bypass a blocking prerequisite
+
+Mutation: add only `|| check.Id == PrerequisiteCheckId.SqlDatabase` to the failed-check
+acceptance predicate, thereby accepting a blocking database check.
+
+```text
+dotnet test OpenModulePlatform.Installer.Tests/OpenModulePlatform.Installer.Tests.csproj --filter FullyQualifiedName~MainFormTests.Validated_password_does_not_bypass_a_blocking_check --no-restore --logger "console;verbosity=normal" --verbosity minimal
+```
+
+RED receipt: native exit **1**, **1/1 failed** at `MainFormTests.cs:42`: `Assert.False`,
+expected `False`, actual `True`. After the exact restoration, the same command was GREEN:
+native exit **0**, **1/1 passed**.
+
+### M3: true keeps its lowercase display text
+
+Mutation: change only the `BitText` true arm from `"true"` to `"True"`.
+
+```text
+dotnet test OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj --filter FullyQualifiedName~UserEditBitTextTests.Bit_values_keep_their_invariant_display_text --no-restore --logger "console;verbosity=normal" --verbosity minimal
+```
+
+RED receipt: native exit **1**, **1 failed / 2 passed**. The true theory case failed at
+`UserEditBitTextTests.cs:34`: `Assert.Equal`, expected `"true"`, actual `"True"`. After the
+exact restoration, the same command was GREEN: native exit **0**, **3/3 passed**.
+
+### M4: null remains distinct from false
+
+Mutation: change only the first, live `BitText` null guard from `return null` to
+`return "false"`. This is the output consumed by `PortalSettingValueText`, not a later dead
+fallback.
+
+```text
+dotnet test OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj --filter FullyQualifiedName~UserEditBitTextTests.Bit_values_keep_their_invariant_display_text --no-restore --logger "console;verbosity=normal" --verbosity minimal
+```
+
+RED receipt: native exit **1**, **1 failed / 2 passed**. The null theory case failed at
+`UserEditBitTextTests.cs:34`: `Assert.Equal`, expected `""`, actual `"false"`. After the
+exact restoration, the final class-level command below was GREEN: native exit **0**,
+**3/3 passed**.
+
+```text
+dotnet test OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj --filter FullyQualifiedName~UserEditBitTextTests --no-restore --logger "console;verbosity=normal" --verbosity minimal
+```
+
+The final restored installer rerun was also GREEN, native exit **0**, **4/4 passed**:
+
+```text
+dotnet test OpenModulePlatform.Installer.Tests/OpenModulePlatform.Installer.Tests.csproj --filter FullyQualifiedName~MainFormTests --no-restore --logger "console;verbosity=normal" --verbosity minimal
+```
+
+Original and restored SHA-256 values, checked after each applicable restoration:
+
+```text
+OpenModulePlatform.Installer/Ui/MainForm.cs
+b2df9b774b661d561c7e7473acc252939605c589b1f4affd5ea9b74265494d53
+OpenModulePlatform.Portal/Pages/Admin/Users/Edit.cshtml.cs
+221ee1b2d42601997091a756bafc3eb547ecca288c8832acfe6fb956b10705a0
+```
+
+The real `OnVerifyPassword` still passes its Boolean result and snapshotted evaluation to
+`CanInstallAfterPasswordValidation`; the real page value-cell path still calls
+`PortalSettingValueText`, which calls `BitText`. The tests use only synthetic booleans and
+fabricated prerequisite/setting objects. They do not instantiate or show a Windows Form,
+call `AccountPasswordValidator.Validate` or Win32 `LogonUser`, accept sign-in inputs,
+exercise GUI event dispatch, or perform database I/O. Consequently they prove the pure
+gating and presentation contracts, not actual credential validation, WinForms behavior, or
+database availability.
+
+## F1: repository-default installer package identity
+
+The accepted empirical identity probe was a genuine policy RED (native exit **1**), not a
+build failure. Release builds of the Installation library at
+`fccc8b92921cc8365e4231aa101a7c5eae60c63d` and
+`e1216a119d6618c5d5d733b7f617a16f64794171` both exited **0**, but their DLL SHA-256 values
+differed and PE metadata showed `ValidateAppliedCoreDefinition` absent in the former and
+present in the latter. Both selected `repositoryVersion` **0.3.1109** and therefore the same
+default identity, `OpenModulePlatformHostAgentFirst-0.3.1109.zip`. No zip, signing, publish,
+import, installation, or runtime operation ran, and this receipt makes no claim about prior
+artifact distribution.
+
+Guarded integration preparation used the canonical
+`scripts/omp/bump-version.ps1 -RepositoryOnly` path to raise only `repositoryVersion` from
+**0.3.1109** to **0.3.1110**. Component versions, module-definition versions, minimums, and
+compatible-artifact ranges remain unchanged. The production validator remains present in
+`OpenModulePlatform.Installation/InstallationEngine.CoreMaintenance.cs`.
+
+The actual packager precedence was inspected: with no `-Version` override and a blank
+configuration value, `scripts/deployment/package-hostagent-first.ps1` selects
+`omp-components.json:repositoryVersion`, then formats both the package directory and zip name
+as `OpenModulePlatformHostAgentFirst-$Version`. No installer package was created for this
+proof. The final manifest policy check exited **0** and printed the new, distinct identity:
+
+```text
+python -c "import json; from pathlib import Path; v=json.loads(Path('omp-components.json').read_text(encoding='utf-8-sig'))['repositoryVersion']; identity=f'OpenModulePlatformHostAgentFirst-{v}.zip'; assert v == '0.3.1110' and identity != 'OpenModulePlatformHostAgentFirst-0.3.1109.zip'; print(identity)"
+OpenModulePlatformHostAgentFirst-0.3.1110.zip
+```
+
 ## Scope
 
-Production changes are limited to the two owned finding files. The two new test files are
-explicit related regressions. The Portal component and repository version are prepared
-through the canonical version script during guarded integration. The installer has no
-separate component key; its package identity follows `repositoryVersion`.
+The original production changes are limited to the two owned finding files. The two new test
+files are explicit related regressions. The Portal component and repository version were
+prepared through the canonical version script during guarded integration. This recovery adds
+only this evidence document and the F1 repository-only identity bump; all four temporary
+source mutations were exactly restored and no production or test source change is retained.
+The installer has no separate component key; its package identity follows
+`repositoryVersion`.
