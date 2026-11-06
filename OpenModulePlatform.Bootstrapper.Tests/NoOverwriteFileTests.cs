@@ -497,14 +497,18 @@ public sealed class NoOverwriteFileTests : IDisposable
         Assert.Equal([path], Directory.GetFiles(_testRoot));
     }
 
-    [Fact]
-    public void AForeignFileReplacingAnOwnDeletePendingClaimIsNotMisclassified()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AForeignFileReplacingAnOwnDeletePendingClaimIsNotMisclassified(bool denyIdentityProbe)
     {
         // Keep the initial own-reader state through the publisher's sample, then
         // let the delete complete and give the released name to a foreign file.
-        // A cached ownClaimPending value would now describe the wrong file.
+        // A cached ownClaimPending value would now describe the wrong file. The
+        // sharing-denial case must stay ambiguous, not become own-claim proof.
         var path = Path.Join(_testRoot, "package.zip");
         FileStream? reader = null;
+        FileStream? foreign = null;
         var ownClaimWasVisible = false;
         var failure = Record.Exception(() => NoOverwriteFile.Write(
             path,
@@ -522,8 +526,18 @@ public sealed class NoOverwriteFileTests : IDisposable
                 ownClaimWasVisible = File.Exists(path);
                 reader!.Dispose();
                 reader = null;
-                File.WriteAllText(path, "foreign");
+                if (denyIdentityProbe)
+                {
+                    foreign = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+                    foreign.Write(Encoding.UTF8.GetBytes("foreign"));
+                    foreign.Flush(flushToDisk: true);
+                }
+                else
+                {
+                    File.WriteAllText(path, "foreign");
+                }
             }));
+        foreign?.Dispose();
 
         Assert.True(ownClaimWasVisible, "The initial delete-pending own-reader state was not measured.");
         var ex = Assert.IsType<OutputFileExistsException>(failure);
