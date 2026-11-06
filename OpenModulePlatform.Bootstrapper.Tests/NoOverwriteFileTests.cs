@@ -184,9 +184,9 @@ public sealed class NoOverwriteFileTests : IDisposable
     [Fact]
     public async Task PublishRetryNeverReplacesAFileThatIsNoLongerItsOwnClaim()
     {
-        // Force the first rename to fail. A second handle on the temporary file
-        // keeps every rename denied while another writer atomically takes the
-        // name, so the next retry cannot race the foreign publish itself.
+        // Force the first publication attempt to fail. A second handle on the
+        // temporary file keeps every rename denied while another writer atomically
+        // takes the name, so the next retry cannot race the foreign publish itself.
         var path = Path.Join(_testRoot, "package.zip");
         var foreignPath = Path.Join(_testRoot, "foreign.tmp");
         File.WriteAllText(foreignPath, "foreign");
@@ -240,7 +240,7 @@ public sealed class NoOverwriteFileTests : IDisposable
                     {
                         // After the temporary stream closes, the publish retry is
                         // the only managed wait in Write. Observing it proves that
-                        // the first rename was denied before the foreign publish;
+                        // the first attempt was denied before the foreign publish;
                         // a fixed delay cannot provide that ordering guarantee.
                         // Bounded: with the publish retry removed the thread never
                         // waits, and an unbounded spin would hang the suite instead
@@ -249,7 +249,7 @@ public sealed class NoOverwriteFileTests : IDisposable
                             SpinWait.SpinUntil(
                                 () => (publishThread.ThreadState & ThreadState.WaitSleepJoin) != 0,
                                 TimeSpan.FromSeconds(30)),
-                            "The publish never waited to retry, so the first rename was not denied.");
+                            "The publish never waited to retry, so the first attempt was not denied.");
                         targetBlocker.Dispose();
 
                         // Closing the target blocker can leave its name transiently
@@ -323,6 +323,8 @@ public sealed class NoOverwriteFileTests : IDisposable
         var path = Path.Join(_testRoot, "package.zip");
         const int writers = 8;
         var owned = new bool[writers];
+        var activeCallbacks = 0;
+        var overlappingCallbacks = 0;
         var warnings = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var start = new Barrier(writers);
         var writes = Enumerable.Range(0, writers)
@@ -336,7 +338,12 @@ public sealed class NoOverwriteFileTests : IDisposable
                         {
                             // Only the writer that holds the claim gets to write content.
                             Volatile.Write(ref owned[index], true);
-                            stream.Write(Encoding.UTF8.GetBytes("writer-" + index));
+                            if (Interlocked.Increment(ref activeCallbacks) > 1)
+                            {
+                                Interlocked.Increment(ref overlappingCallbacks);
+                            }
+                            try { stream.Write(Encoding.UTF8.GetBytes("writer-" + index)); }
+                            finally { Interlocked.Decrement(ref activeCallbacks); }
                         },
                         warnings.Enqueue);
                 },
@@ -358,10 +365,11 @@ public sealed class NoOverwriteFileTests : IDisposable
                     ? "published"
                     : $"{write.Exception.GetBaseException().GetType().Name}: {write.Exception.GetBaseException().Message}"))
                 .Concat(warnings.Select(static warning => "warning: " + warning)));
-        var owners = Enumerable.Range(0, writers).Where(index => owned[index]).ToArray();
         var winners = Enumerable.Range(0, writers).Where(index => writes[index].Exception is null).ToArray();
 
-        Assert.True(owners.Length <= 1, "More than one writer held the name:" + Environment.NewLine + outcomes);
+        // A later callback can claim the brief released-name gap, after the
+        // previous callback has finished. Never overlap production or publish twice.
+        Assert.True(overlappingCallbacks == 0, "Content callbacks overlapped:" + Environment.NewLine + outcomes);
         Assert.True(winners.Length <= 1, "More than one writer published:" + Environment.NewLine + outcomes);
         Assert.True(winners.All(index => owned[index]), "A writer published without holding the name:" + Environment.NewLine + outcomes);
         Assert.All(
@@ -401,6 +409,128 @@ public sealed class NoOverwriteFileTests : IDisposable
         }));
 
         Assert.Empty(Directory.GetFiles(_testRoot));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("foreign package")]
+    public void ForeignFileAtTheFinalPublishBoundaryIsNeverOverwritten(string foreignContent)
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+
+        var failure = Record.Exception(() => NoOverwriteFile.Write(
+            path, stream => stream.Write(Encoding.UTF8.GetBytes("mine")), beforePublish: () =>
+            {
+                // Select the interleaving at the last pathname operation. This
+                // only touches files owned by this test, never protected paths.
+                File.Delete(path);
+                File.WriteAllText(path, foreignContent);
+            }));
+
+        Assert.Equal(foreignContent, File.ReadAllText(path));
+        var ex = Assert.IsType<OutputFileExistsException>(failure);
+        Assert.Equal(Path.GetFullPath(path), ex.Path);
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void AnOwnDeletePendingClaimIsNotMistakenForAForeignPackage()
+    {
+        // The writer releases its own empty claim before the final rename, and
+        // the release only completes once the last reader lets go of the file.
+        // A reader that opened the claim with FileShare.Delete keeps the name
+        // visible while the delete is pending, so File.Exists still reports
+        // true. That is this writer's own claim and not a foreign package: the
+        // publish has to wait for the delete inside the bounded window instead
+        // of reporting a replacement that never happened.
+        var path = Path.Join(_testRoot, "package.zip");
+        FileStream? reader = null;
+        var readerReleased = new ManualResetEventSlim(false);
+        var claimStillVisible = false;
+        Exception? publishException;
+        try
+        {
+            publishException = Record.Exception(() => NoOverwriteFile.Write(
+                path,
+                stream => stream.Write(Encoding.UTF8.GetBytes("mine")),
+                createClaim: claimPath =>
+                {
+                    // The claim is created with a share mode that lets the
+                    // reader below attach to the same file, the way a scanner
+                    // attaches to a file it has found. Only files this test
+                    // owns are touched.
+                    var claim = new FileStream(
+                        claimPath, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                    reader = new FileStream(
+                        claimPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    return claim;
+                },
+                beforePublish: () =>
+                {
+                    // The claim is delete-pending by now and the reader still
+                    // holds it, so the name has to be visible while only this
+                    // writer's own claim occupies it.
+                    claimStillVisible = File.Exists(path);
+
+                    // Release the reader shortly afterwards, the way a scanner
+                    // moves on. The delay only has to outlast the first
+                    // rename attempt, which happens right after this seam.
+                    Task.Run(() =>
+                    {
+                        Thread.Sleep(300);
+                        reader?.Dispose();
+                        reader = null;
+                        readerReleased.Set();
+                    });
+                }));
+        }
+        finally
+        {
+            reader?.Dispose();
+            readerReleased.Wait(TimeSpan.FromSeconds(10));
+        }
+
+        // The measured state: the released claim still owns the name.
+        Assert.True(claimStillVisible, "The delete-pending claim stopped being visible, so the window was not measured.");
+        Assert.Null(publishException);
+        Assert.Equal("mine", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void UnsupportedPlatformIsRejectedByThePremutationGuard()
+    {
+        Assert.Throws<PlatformNotSupportedException>(() => NoOverwriteFile.EnsureSupportedPlatform(false));
+        NoOverwriteFile.EnsureSupportedPlatform(true);
+        Assert.Empty(Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void ALateWriterCanWinTheReleasedNameWithoutBeingOverwritten()
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+        Assert.Throws<OutputFileExistsException>(() => NoOverwriteFile.Write(
+            path, stream => stream.Write(Encoding.UTF8.GetBytes("first")), beforePublish: () =>
+                NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("late winner")))));
+
+        Assert.Equal("late winner", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void TheFinalNameDoesNotExposePartiallyWrittenContent()
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+        NoOverwriteFile.Write(path, stream =>
+        {
+            stream.Write(Encoding.UTF8.GetBytes("part one"));
+            stream.Flush();
+            Assert.Empty(File.ReadAllBytes(path));
+            stream.Write(Encoding.UTF8.GetBytes(" and part two"));
+        });
+
+        Assert.Equal("part one and part two", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
     }
 
     [Theory]
