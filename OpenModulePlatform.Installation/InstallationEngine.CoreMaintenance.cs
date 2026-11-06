@@ -23,6 +23,14 @@ public static partial class InstallationEngine
             throw new InvalidOperationException("Core maintenance could not verify HostScope and its trusted constraint. Do not stage artifacts.");
     }
 
+    internal static void ValidateAppliedCoreDefinition(ModuleDefinitionDocument definition, AppliedModuleDefinition? current)
+    {
+        if (current is null
+            || current.DefinitionVersion != definition.DefinitionVersion
+            || !string.Equals(current.DefinitionSha256, definition.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Core maintenance could not verify the applied version and hash. Do not stage artifacts.");
+    }
+
     internal static void ValidateCoreMaintenancePayload(ModuleDefinitionDocument definition, string expectedVersion, SqlBootstrapOptions sql, string payloadRoot)
     {
         using var document = JsonDocument.Parse(definition.DefinitionJson);
@@ -94,10 +102,7 @@ WHERE LOWER(ModuleKey) = N'omp_core' AND DefinitionVersion = @version;
         var timeout = sql.CommandTimeoutSeconds;
         await AssertSingleAppliedCoreAsync(connection, timeout);
         var current = await QueryAppliedModuleDefinitionAsync(connection, "omp_core", timeout);
-        if (current is null
-            || current.DefinitionVersion != definition.DefinitionVersion
-            || !string.Equals(current.DefinitionSha256, definition.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Core maintenance could not verify the applied version and hash. Do not stage artifacts.");
+        ValidateAppliedCoreDefinition(definition, current);
 
         const string text = """
 SELECT CASE WHEN COL_LENGTH(N'omp.ConfigOverlayDocuments', N'HostScope') IS NOT NULL

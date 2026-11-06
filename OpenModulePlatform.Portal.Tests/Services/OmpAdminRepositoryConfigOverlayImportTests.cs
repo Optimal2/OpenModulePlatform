@@ -138,8 +138,9 @@ public sealed class OmpAdminRepositoryConfigOverlayImportTests : IClassFixture<C
 
         var export = await _repository.GetConfigOverlayExportJsonAsync(imported.DocumentId, CancellationToken.None);
         Assert.NotNull(export);
-        Assert.Equal("AllHosts", export!.Value.HostScope);
-        Assert.Contains("appsettings.json", export.Value.Json, StringComparison.Ordinal);
+        var exportedOverlay = export.GetValueOrDefault();
+        Assert.Equal("AllHosts", exportedOverlay.HostScope);
+        Assert.Contains("appsettings.json", exportedOverlay.Json, StringComparison.Ordinal);
     }
 
     [Fact]

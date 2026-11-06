@@ -31,8 +31,8 @@ narrowing). No finding described a reachable `NullReferenceException`.
 | 10 | OpenModulePlatform.Portal/Pages/Admin/ConfigOverlays.cshtml.cs | 180 | Fixed | `if (Draft.Id is int uploadDraftId)` in `OnPostUploadFileAsync`; `uploadDraftId` replaces both `Draft.Id.Value` uses |
 | 11 | OpenModulePlatform.Portal/Pages/Admin/ConfigOverlays.cshtml.cs | 108 | Fixed | `if (Draft.Id is int saveDraftId)` in `OnPostSaveAsync`; `saveDraftId` replaces both `Draft.Id.Value` uses |
 | 12 | OpenModulePlatform.Portal/Pages/Admin/ConfigOverlays.cshtml.cs | 91 | Fixed | `if (id is int impactOverlayId && ...)`; `impactOverlayId` replaces both `id.Value` uses |
-| 13 | OpenModulePlatform.Installation/InstallationEngine.CoreMaintenance.cs | 98 (now 99) | Fixed | Explicit `current is null \|\|` first disjunct instead of `current?.DefinitionVersion != ...`; the `||` short-circuit truth table is unchanged |
-| 14 | OpenModulePlatform.Portal.Tests/Services/OmpAdminRepositoryConfigOverlayImportTests.cs | 141 | Fixed | `export!.Value.HostScope` after the existing `Assert.NotNull` |
+| 13 | OpenModulePlatform.Installation/InstallationEngine.CoreMaintenance.cs | 98 | Fixed | Explicit `current is null \|\|` first disjunct instead of `current?.DefinitionVersion != ...`; recovery extracted the unchanged condition into the internal pure `ValidateAppliedCoreDefinition`, called by `VerifyCoreMaintenanceAsync` |
+| 14 | OpenModulePlatform.Portal.Tests/Services/OmpAdminRepositoryConfigOverlayImportTests.cs | 141; remaining site at 142 | Fixed | The original rewrite used `export!.Value.HostScope` but left `export.Value.Json`; recovery keeps `Assert.NotNull(export)` and unwraps once into the nonnullable local `exportedOverlay = export.GetValueOrDefault()` for both assertions |
 | 15 | OpenModulePlatform.Portal.Tests/Pages/SystemLogCalendarInputTests.cs | 108 | Fixed | `model.To!.Value.Date - model.From!.Value.Date`, matching the `!` style already used on lines 106-107 |
 | 16 | OpenModulePlatform.Portal.Tests/Pages/SystemLogCalendarInputTests.cs | 108 | Fixed | Same line, second dereference (two findings shared one line) |
 | 17 | examples/WorkerAppModule/WebApp/Pages/AppInstances/Edit.cshtml.cs | 88 | Fixed | `(int?)Input.ConfigId` lifted conversion instead of `Input.ConfigId?.Value`; identical boxed value (`null` stays `null`) without any member dereference |
@@ -45,52 +45,100 @@ attributes. Externally visible behavior is unchanged in every case:
   guard passed (`null` fails the pattern; `IsNullOrWhiteSpace` still rejects
   empty/whitespace hosts), so the same requests reach the same store calls.
 - `current is null ||` throws in exactly the states the old `?.`-comparison
-  threw in (`null`, version mismatch, hash mismatch).
+  threw in (`null`, version mismatch, hash mismatch). The extracted validator
+  preserves the exact `InvalidOperationException` message and ordinal,
+  case-insensitive hash comparison.
 - `(int?)Input.ConfigId` uses the existing lifted implicit conversion and
   boxes the same value the `?.Value` chain produced.
-- Test-only `!` additions sit directly behind the `Assert.NotNull` that
-  already guards the value; with xUnit v2 `NotNull` returns void, so `!` is
-  the only available narrowing and matches the surrounding test style.
+- The original test-only `!` additions sit directly behind `Assert.NotNull`
+  and match the surrounding test style. xUnit v2 `NotNull` returns void, but
+  `!` is not the only possible narrowing: an explicit nonnullable local or a
+  pattern can also make the guard visible. The remaining export site now uses
+  a single `GetValueOrDefault()` local after its unchanged assertion. Working
+  nullable assertions elsewhere were not churned for cosmetics.
 
-## Validation (exact commands, native exit codes)
+## Measured scanner state
+
+The original code-level dispositions above are not proof of scanner closure.
+The conductor's independent 2026-11-06 GitHub sweep of published `b6cc23d8`
+measured the OMP standard-query total falling from 144 to 127 and
+`cs/dereferenced-value-may-be-null` falling from 18 to **one**, not zero. The
+remaining location was `OmpAdminRepositoryConfigOverlayImportTests.cs:142`,
+`Assert.Contains("appsettings.json", export.Value.Json, StringComparison.Ordinal)`.
+That is the site recovered above. Final CodeQL closure still requires a fresh
+post-recovery conductor rescan; no zero-finding claim is made here.
+
+## Original WP1 validation (recorded, not a behavioral RED/GREEN proof)
 
 - `dotnet build OpenModulePlatform.slnx --nologo -v minimal` — exit 0,
-  0 errors. The 11 remaining warnings are all in untouched files
-  (HostAgent Sentinel, DeploymentLockFileTests, OrphanServiceAppFinderTests,
-  DpapiNg call sites, OmpAuthRepository, UniversalPackageSeedSqlOrderingTests);
-  none of the 7 edited files produces a warning.
+  0 errors and 11 warnings in untouched files.
 - `dotnet test OpenModulePlatform.Portal.Tests --no-build --filter "UserSettingBitMigrationTests|OmpAdminRepositoryConfigOverlayImportTests|SystemLogCalendarInputTests|ConfigOverlaysPageTests"` — exit 0, 78/78 passed.
-  `ConfigOverlaysPageTests` is outside this work package and was run
-  read-only as regression cover for the page rewrite, not edited.
 - `dotnet test OpenModulePlatform.Bootstrapper.Tests --no-build --filter "PlatformCoreMaintenanceTests"` — exit 0, 52/52 passed.
-  Read-only run as regression cover for the `VerifyCoreMaintenanceAsync`
-  rewrite; the file itself belongs to a later package (Note rules) and was
-  not touched.
 - `dotnet test OpenModulePlatform.Installation.Tests --no-build` — exit 0,
   30/30 passed.
-- `git diff --check` — exit 0, no whitespace errors.
-- RED/GREEN note: RED here is the scanner state (18 open findings at base);
-  all 18 sites were safe under existing guards, so there was no failing
-  runtime behavior to reproduce first. GREEN is the build plus the 160 tests
-  above on the rewritten code. The query itself cannot be re-run locally (no
-  CodeQL CLI on the workstation); the next browser sweep is expected to show
-  0 open `cs/dereferenced-value-may-be-null` findings.
+- `git diff --check` — exit 0.
 
-## Test collateral
+An open scanner count was never a failing runtime test and is not labelled
+RED. The recovery below supplies actual behavioral RED/GREEN evidence for the
+post-apply guard.
 
-No new test was added. The rewrites are behavior-identical, so the existing
-suites are the regression collateral: the four Portal test classes cover the
-edited test files and the overlay page, `PlatformCoreMaintenanceTests` covers
-core-maintenance behavior end to end, and `Installation.Tests` covers the
-edited assembly. Adding a dedicated test for an unchanged truth table would
-be change without value.
+## Recovery validation (exact commands, native exit codes)
+
+Initial and restored GREEN:
+
+- `dotnet test OpenModulePlatform.Installation.Tests/OpenModulePlatform.Installation.Tests.csproj --filter "FullyQualifiedName~CoreMaintenanceVerificationTests" --nologo -v minimal` — exit 0, 5/5 passed before mutation.
+- `dotnet test OpenModulePlatform.Installation.Tests/OpenModulePlatform.Installation.Tests.csproj --no-restore --filter "FullyQualifiedName~CoreMaintenanceVerificationTests" --nologo -v minimal` — exit 0, 5/5 passed after exact source restoration.
+- `dotnet test OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj --filter "FullyQualifiedName~OmpAdminRepositoryConfigOverlayImportTests" --nologo -v minimal` — exit 0, 6/6 passed using only its normal isolated test fixture.
+- `dotnet test OpenModulePlatform.Installation.Tests/OpenModulePlatform.Installation.Tests.csproj --no-build --nologo -v minimal` — exit 0, 35/35 passed.
+- `dotnet test OpenModulePlatform.Bootstrapper.Tests/OpenModulePlatform.Bootstrapper.Tests.csproj --filter "FullyQualifiedName~PlatformCoreMaintenanceTests" --nologo -v minimal` — exit 0, 52/52 passed.
+- `dotnet build OpenModulePlatform.slnx --nologo -v minimal` — exit 0, 0 errors and 6 warnings, all in untouched HostAgent Sentinel/HostAgent.Runtime.Tests files.
+- `dotnet test OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj --no-build --filter "UserSettingBitMigrationTests|OmpAdminRepositoryConfigOverlayImportTests|SystemLogCalendarInputTests|ConfigOverlaysPageTests" --nologo -v minimal` — exit 0, 78/78 passed.
+- `git diff --check` — exit 0.
+
+Causal mutation checks temporarily removed one guard at a time from the real
+production validator. Each command built successfully and then failed its
+corresponding exact test with native exit 1 (1/1 failed, 0 passed):
+
+- Null guard removed; filter `ValidateAppliedCoreDefinition_MissingCurrent_ThrowsExactVerificationError`:
+  `Assert.Throws() Failure: Exception type was not an exact match`; expected
+  `InvalidOperationException`, actual `NullReferenceException`.
+- Version guard removed; filter `ValidateAppliedCoreDefinition_DifferentVersion_ThrowsExactVerificationError`:
+  `Assert.Throws() Failure: No exception was thrown`; expected
+  `InvalidOperationException`.
+- Hash guard removed; filter `ValidateAppliedCoreDefinition_DifferentHash_ThrowsExactVerificationError`:
+  `Assert.Throws() Failure: No exception was thrown`; expected
+  `InvalidOperationException`.
+
+Every filter above was passed as
+`--filter "FullyQualifiedName~CoreMaintenanceVerificationTests.<method>"` to
+`dotnet test OpenModulePlatform.Installation.Tests/OpenModulePlatform.Installation.Tests.csproj --no-restore --nologo -v minimal`.
+The production file SHA-256 was
+`A4EAF5FBC27D285CD0ED557E01A09313B6B31F4E48144F6F516FC7A961694CA3`
+before the first mutation and after the final restoration. No mutation was
+committed.
+
+## Test collateral and limits
+
+`CoreMaintenanceVerificationTests.cs` directly covers the existing post-apply
+condition: missing current definition, different version, different hash,
+matching identity, and case-insensitively matching hash. The negative tests
+require the exact exception type and message. This is separate from
+pre-transition validation.
+
+`VerifyCoreMaintenanceAsync` was inspected at its real call site: it queries
+`omp_core`, calls `ValidateAppliedCoreDefinition(definition, current)` before
+schema and SQL-history checks, and retains the guarded `current!` use for the
+later SQL-history query. Pure-validator tests cannot simulate SQL I/O or a
+concurrent database race, and do not dynamically prove that caller wiring.
+`PlatformCoreMaintenanceTests` exercise adjacent payload, transition and repair
+operations; they do not exercise this exact post-apply current-null/version/hash
+condition. They and the full Installation suite are regression collateral, not
+substitutes for the focused tests.
 
 ## Confidence
 
-High for the defect verdicts (each flagged expression was read with its
-guard; the only uncertainty was which sub-expression the query flagged on
-lines carrying several, and every candidate on those lines was rewritten).
-Medium that the next sweep shows exactly zero: the rewrites remove every
-nullable dereference shape on the flagged lines, but rescan timing and rule
-revisions are outside this worktree. If any finding survives, it will be a
-new rule interpretation, not an unaddressed line.
+High for the preserved guard contract because each guard was independently
+mutated, produced its genuine failed assertion, was byte-restored, and passed
+again. High for the remaining site's code-level disposition because the null
+assertion and failure behavior remain unchanged. Scanner closure is unclaimed
+until the conductor's fresh post-recovery rescan.
