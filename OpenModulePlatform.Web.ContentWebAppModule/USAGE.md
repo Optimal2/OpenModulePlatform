@@ -23,15 +23,46 @@ Markdown and raw HTML content is stored in the database. HTML file pages are sto
 
 Choose the page content type before editing the body:
 
-- `markdown` uses visual and Markdown-source tabs. The editor is served from the
-  module itself (`wwwroot/lib/toastui-editor/`), not from a CDN — there is no
-  external origin to be unavailable. If the asset still fails to load, the raw
-  textarea remains available and the page still saves Markdown.
-- `html` uses visual and HTML-source tabs. HTML is trusted editor content and is
-  rendered without sanitization.
+- `markdown` uses visual and Markdown-source tabs and opens on the visual tab.
+  The editor is served from the module itself (`wwwroot/lib/toastui-editor/`),
+  not from a CDN — there is no external origin to be unavailable. If the asset
+  still fails to load, the raw textarea remains available and the page still
+  saves Markdown. The visual tab writes back to the stored body only when the
+  page was actually edited in it.
+- `html` opens on the HTML-source tab. A visual tab is offered only when the
+  page survives a visual-editor round trip unchanged, compared as parsed DOM
+  with whitespace-only differences ignored. When the round trip changes the
+  page, the editor shows a warning, keeps the source, and leaves the user in
+  the source tab.
 - `html_file` stores only a file key in the database. The trusted HTML body is
   read from the configured HTML file directory or packaged ContentPages folder.
 - `server_report` hides the body editor and shows only the report-key picker.
+
+Opening or switching tabs without editing changes nothing, for HTML and Markdown
+alike: the stored body is written back only when the visual tab was actually
+changed.
+
+The visual editor is not lossless. Measured on 2026-11-06, a setHTML/getHTML
+round trip removes style elements, class attributes, input elements and target
+attributes, empties the `href` of a `file:` link, and rewrites every `&` in a
+link's query string as `&amp;amp;`. A link written with several parameters:
+
+```html
+<a href="https://example.test/p?a=1&b=2&c=3">Report</a>
+```
+
+comes back as:
+
+```html
+<a href="https://example.test/p?a=1&amp;amp;b=2&amp;amp;c=3">Report</a>
+```
+
+Every parameter after the first is then lost. A page that uses any of these
+constructs does not survive the round trip, so it is edited in the source tab.
+
+HTML is trusted editor content and is rendered without sanitization. That
+statement is about rendering, not about the visual editor: the two are separate
+stages, and the visual editor can still change what gets stored.
 
 Content type is locked after a page has been created. Create a replacement page
 when content needs to move between Markdown, inline HTML, HTML file, and server
