@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 $ScratchRoot = $env:AO_JOB_SCRATCH
-if ([string]::IsNullOrWhiteSpace($ScratchRoot)) { $ScratchRoot = 'G:\AI_Workdir' }
+if ([string]::IsNullOrWhiteSpace($ScratchRoot)) { $ScratchRoot = [IO.Path]::GetTempPath() }
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runRoot = Join-Path $ScratchRoot ('github-findings-source-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($runRoot)
