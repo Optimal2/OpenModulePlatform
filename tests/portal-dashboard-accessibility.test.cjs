@@ -88,3 +88,48 @@ test('new image widgets have unique, connected tab panels and preserve selection
         }
     }
 });
+
+test('isolated CSS cascade preserves collapsed values and measures unresolved tab backgrounds', async () => {
+    // Reuse the repository's pinned, already-installed Playwright tooling. No
+    // download, application server, shared browser or external request is used.
+    const os = require('node:os');
+    const scratch = process.env.AO_JOB_SCRATCH || 'G:\\AI_Workdir';
+    process.env.TMP = scratch;
+    process.env.TEMP = scratch;
+    process.env.PLAYWRIGHT_BROWSERS_PATH ||= path.join(os.homedir(), 'AppData/Local/ms-playwright');
+    const packages = fs.readFileSync(path.join(__dirname, '../Directory.Packages.props'), 'utf8');
+    const version = /Include="Microsoft.Playwright" Version="([^"]+)"/.exec(packages)[1];
+    const modulePath = path.join(process.env.NUGET_PACKAGES || path.join(os.homedir(), '.nuget/packages'),
+        'microsoft.playwright', version, '.playwright/package');
+    const { chromium } = require(modulePath);
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await page.route('**/*', route => route.abort());
+        const portal = fs.readFileSync(path.join(__dirname, '../OpenModulePlatform.Portal/wwwroot/css/site.css'), 'utf8');
+        const shared = fs.readFileSync(path.join(__dirname, '../OpenModulePlatform.Web.Shared/wwwroot/css/omp-theme.css'), 'utf8');
+        for (const palette of ['absent', 'light', 'dark']) {
+            await page.setContent(`<html data-theme="${palette}"><head><style>${palette === 'absent' ? '' : shared}\n${portal}</style></head>
+                <body><section class="maintenance-preview-candidate-card is-collapsed">
+                <div class="maintenance-preview-candidate-card__summary"><span id="summary">Count</span></div></section>
+                <div class="dashboard-music-player__admin-tabs" id="music"></div>
+                <div class="dashboard-widget__blank-admin-tabs" id="image"></div></body></html>`);
+            const values = await page.evaluate(() => {
+                const summary = getComputedStyle(document.querySelector('#summary'));
+                return {
+                    rootSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
+                    summarySize: parseFloat(summary.fontSize),
+                    summaryColor: summary.color,
+                    missingToken: getComputedStyle(document.documentElement).getPropertyValue('--surface-alt').trim(),
+                    backgrounds: ['music', 'image'].map(id => getComputedStyle(document.getElementById(id)).backgroundColor)
+                };
+            });
+            assert.ok(Math.abs(values.summarySize - values.rootSize * 1.05) < 0.001, palette);
+            assert.equal(values.summaryColor, palette === 'dark' ? 'rgb(182, 195, 213)' : 'rgb(91, 102, 122)', palette);
+            assert.equal(values.missingToken, '', palette);
+            assert.deepEqual(values.backgrounds, ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'], palette);
+        }
+    } finally {
+        await browser.close();
+    }
+});
