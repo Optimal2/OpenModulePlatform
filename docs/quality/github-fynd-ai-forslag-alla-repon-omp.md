@@ -4,9 +4,14 @@ Campaign: `github-fynd-ai-forslag-alla-repon`. Repository: OpenModulePlatform
 (public). Source of the findings: the weekly sweep of 2026-11-06
 (`2026-11-06-github-fynd-ai-forslag-alla-repon-wp0.md`), read against the
 scanned commit `9a88513babab1019382d744ee8c5dd4c82aa3b84`. That sweep listed
-9 open AI findings in 5 files for this repository.
+9 open AI findings in 5 files for this repository. The earlier 2026-11-05
+prep sweep listed `OpenModulePlatform.Portal/Pages/Index.cshtml` in place of
+`OpenModulePlatform.Installer/Ui/MainForm.cs`; this report follows the newer
+2026-11-06 sweep quoted above.
 
-Baseline of this package: `1cc8a623` (`repositoryVersion` 0.3.1111).
+Original artifact baseline: `1cc8a623` (`repositoryVersion` 0.3.1111). The
+preserved commits were recovered onto mainline base `d62b2f18`, whose two
+newer files do not overlap this package.
 
 Every finding below has exactly one disposition and one reason. A finding is
 only called fixed when a native test in this repository proves the new
@@ -41,7 +46,7 @@ alone is backed by a measurement, not by taste.
 
 | Hypothesis | Disposition | Reason |
 | --- | --- | --- |
-| This build's own released name reservation can keep the target name visible, be read as a foreign file and bypass the bounded retry. | Fixed | Measured on Windows: the released claim stays delete-pending while a reader holds it, so `File.Exists` is true and the publish reported a replacement that never happened; the publish now distinguishes its own delete-pending claim from a foreign file and waits inside the bounded window. |
+| This build's own released name reservation can keep the target name visible, be read as a foreign file and bypass the bounded retry. | Fixed | Measured on Windows: the released claim stays delete-pending while a reader holds it, so `File.Exists` is true and the publish reported a replacement that never happened. Publication waits inside the bounded window, while a supported handle that identifies a different file proves foreign replacement; an ambiguous open or sharing failure is never called proof of own ownership. |
 | A numeric version core above the supported range can be written, including as the result of an automatic bump, and the platform then orders it wrongly. | Fixed | The platform compares versions with `System.Version`, whose core parts are `Int32`, so the helper now validates every selected existing, input and result core against 0..2147483647 before any write and reports a supported-range error instead of overflowing. |
 | The version helper has two independent confirmation prompts for one write, so a decline in the inner prompt leaves the repository half bumped. | Fixed | The write phase is plan, confirm, apply with one confirmation boundary per real write; a declined confirmation writes nothing and is reported as a decline. |
 | A selected component whose module definition file is missing, or a selected widget whose package file is missing, leaves earlier selected files half bumped. | Fixed | Every selected path is loaded and validated before the first write, so a missing or invalid selected file fails before any mutation and leaves the manifest, the definitions and the widget packages unchanged. |
@@ -52,6 +57,15 @@ alone is backed by a measurement, not by taste.
 | `Get-WidgetFileEntryVersion` writes a new `widgetVersion` property although `packageVersion` or `version` may be the field the consumer reads. | Rejected | The same helper reads the version as `widgetVersion`, then `packageVersion`, then `version`; the package reader falls back the same way, and the root artifact stamps `packageVersion` and the widget entry stamps `widgetVersion`, so the written value is the value the reader uses. The finding was reported against another repository's copy of the shared helper. |
 | A widget package is validated only after the selected module definitions have already been written. | Stale (regression kept) | The shipped helper loads and validates the whole selection before the first write, so the reported ordering does not exist here; the regression is kept as a test so that a later change cannot reintroduce it. |
 | The Razor compiler directory can be replaced by the compiler DLL name that is combined with it. | Comment only | The second operand of each `Path.Combine` is a fixed relative DLL name, so the combined path stays inside the compiler directory; the reason is now written next to the calls. This is not a newly claimed runtime defect. |
+
+## Recovery review dispositions
+
+| Finding | Disposition | Native evidence and rule |
+| --- | --- | --- |
+| F1: the source-check driver and CSS fixture had a machine-specific scratch fallback. | Fixed | With `AO_JOB_SCRATCH` absent, the actual initialization now resolves below the owned platform temp directory on Windows PowerShell 5.1 and PowerShell 7. The CSS fixture creates a unique owned directory, passes temp variables only to the browser child, mutates no process temp variable, and cleans the directory. The old probes resolved outside owned temp; the new probes pass without touching that external location, and the real 35-case Node driver passes. |
+| F2: the initial `ownClaimPending` sample could become stale before publication. | Fixed | The old source held an own reader through the initial sample, replaced the released name with a foreign file in `beforePublish`, then spent the retry window and misreported its own reservation. The candidate positively detects a different identity through a supported handle, refuses with `OutputFileExistsException`, preserves foreign bytes and cleans its temporary file. A sharing-denied identity probe remains ambiguous and never produces the own-reservation diagnosis; the original bounded own-reader success still passes. |
+| F3: the intermediate review launch named a nonexistent base. | Metadata correction only | The reviewed artifact was the real `1cc8a623..06ecd094` chain. Recovery used the verified original campaign base `9a88513b`, the actual artifact parent `1cc8a623`, and the non-overlapping mainline base `d62b2f18`; no production source change follows from the launch typo. |
+| F4: exact-SHA CI was interpreted as a requirement to change action pins. | Rejected | Exact-SHA verification means each workflow run's `head_sha` equals the published commit. Unchanged action-tag configuration is outside this package, so no workflow file is edited. |
 
 ## Scopes this package does not own
 
