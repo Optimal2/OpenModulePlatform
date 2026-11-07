@@ -588,9 +588,11 @@ public sealed class NoOverwriteFileTests : IDisposable
     [Fact]
     public void ALateWriterCanWinTheReleasedNameWithoutBeingOverwritten()
     {
-        // Deterministic reproduction of the ConcurrentExports CI failure mode
-        // (runs 42275868573 and 42301018483): the owner released its claim and
-        // a second writer claimed the freed name and published before the
+        // Characterization of the publish path (unchanged by the claim
+        // classification fix), not a regression proof of it: a deterministic
+        // reproduction of the ConcurrentExports CI failure mode (runs
+        // 42275868573 and 42301011483). The owner released its claim and a
+        // second writer claimed the freed name and published before the
         // owner's non-replacing rename ran. No thread scheduling is involved:
         // the seam suspends the owner, so the late winner always wins. The
         // owner's rename finds the name taken and refuses with the typed

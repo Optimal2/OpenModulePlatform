@@ -59,12 +59,16 @@ internal sealed class OutputFileExistsException : IOException
 /// and a handle-based <c>FileRenameInfoEx</c> replace fails with access denied,
 /// or sharing violation with POSIX semantics), while a hold that permits the
 /// replace also permits a foreign delete, so verifying-then-replacing would race
-/// again. What never depends on scheduling is the guarantee itself: exactly one
-/// writer publishes, every other writer is refused with
-/// <see cref="OutputFileExistsException"/> (claim losers because the name is
-/// taken, the rare owner preempted in the gap because its rename found the name
-/// taken), and the published file is always the winner's own. Readers see no partial
-/// package. A killed process can leave an empty claim, which the next build explains.
+/// again. At most one writer publishes: under contention the claim owner can
+/// still fail (for example when another handle on its claim keeps the final
+/// rename denied), and then nobody wins. What never depends on scheduling is
+/// that no two files are produced and no writer's file is replaced. A refusal
+/// is typed <see cref="OutputFileExistsException"/> on both the claim path
+/// (the name is taken) and the publish path (the owner's rename found the name
+/// taken by a file that won the gap); contention that outlives the bounded
+/// <c>ClaimRetryWindow</c>/<c>PublishRetryWindow</c> can still surface as a raw
+/// access or IO error. Readers see no partial package. A killed process can
+/// leave an empty claim, which the next build explains.
 /// This implementation belongs to the Windows bootstrapper and rejects other
 /// operating systems before creating even the output directory.
 /// </remarks>
@@ -274,14 +278,16 @@ internal static class NoOverwriteFile
     /// <summary>
     /// Reports whether the operating system refused a file creation because
     /// the name is taken: <c>ERROR_FILE_EXISTS</c> (80) or
-    /// <c>ERROR_ALREADY_EXISTS</c> (183) carried in the low word of the
-    /// <see cref="Exception.HResult"/>. Only the error the failed claim
+    /// <c>ERROR_ALREADY_EXISTS</c> (183) carried in the low word of an
+    /// <see cref="Exception.HResult"/> with the Win32 facility
+    /// (<c>0x8007</c> in the high word). Only the error the failed claim
     /// itself returned proves contention; a later <c>File.Exists</c> re-check
     /// can observe a name that is momentarily absent between the winner's
     /// claim release and its final rename.
     /// </summary>
     private static bool IsNameInUseError(IOException ex)
-        => (ex.HResult & 0xFFFF) is 80 or 183;
+        => (ex.HResult & unchecked((int)0xFFFF0000)) == unchecked((int)0x80070000)
+            && (ex.HResult & 0xFFFF) is 80 or 183;
 
     private static OutputFileExistsException ExistingFile(string fullPath, Exception innerException)
     {

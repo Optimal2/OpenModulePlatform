@@ -409,13 +409,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 - Core-maintenance tests derive the expected version from their actual payload so
   routine module-definition version bumps preserve the newer-version refusal checks.
 - **Concurrent package builds are refused with the typed file-exists error.**
-  When two builds race for the same package name, the loser is now always told
-  the name is taken (`OutputFileExistsException`), even when the winner released
-  its reservation in the same instant; that timing previously escaped as a bare
-  `IOException`. The brief gap between releasing the reservation and publishing
-  stays by design — on Windows a hold that pins the name against swaps also
-  blocks the atomic replace itself — and the rare build preempted there is
-  refused as replaced instead of overwriting anything.
+  When two builds race for the same package name, the loser of the atomic
+  claim is now told the name is taken (`OutputFileExistsException`), even when
+  the winner released its reservation in the same instant; that timing
+  previously escaped as a bare `IOException`. The brief gap between releasing
+  the reservation and publishing stays by design — on Windows a hold that pins
+  the name against swaps also blocks the atomic replace itself — and the rare
+  build preempted there is refused as replaced instead of overwriting anything.
+  At most one build publishes (a contested owner can still fail, leaving no
+  winner); what never depends on scheduling is that no two files are produced
+  and no build's file is replaced. Contention that outlives the bounded retry
+  windows can still surface as a raw access or IO error.
 
 - **The theme menu opens on hover like the top bar's other menus.** The
   theme switch opened only on a click; on a pointer that can hover it now
