@@ -103,6 +103,36 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
+    public void AClaimRefusedByTheOperatingSystemIsTypedEvenWhenTheNameIsMomentarilyAbsent()
+    {
+        // Deterministic reproduction of the ConcurrentWriters CI failure: the
+        // winning writer released its empty claim, so the name is momentarily
+        // absent, while this writer's CreateNew failed with ERROR_FILE_EXISTS.
+        // The refusal is classified from the OS error the claim itself
+        // returned, not from a later File.Exists re-check, so it still
+        // arrives as OutputFileExistsException instead of a raw IOException.
+        // The factory reproduces the genuine OS error by attempting CreateNew
+        // on a different existing file; only files this test owns are touched.
+        var path = Path.Join(_testRoot, "package.zip");
+        var probe = Path.Join(_testRoot, "probe.txt");
+        File.WriteAllText(probe, "probe");
+        var called = false;
+
+        var ex = Assert.Throws<OutputFileExistsException>(() => NoOverwriteFile.Write(
+            path,
+            _ => called = true,
+            createClaim: _ => new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None)));
+
+        Assert.False(called);
+        Assert.Equal(Path.GetFullPath(path), ex.Path);
+        Assert.Contains("already exists", ex.Message, StringComparison.Ordinal);
+        var refusal = Assert.IsType<IOException>(ex.InnerException);
+        Assert.Equal(80, refusal.HResult & 0xFFFF);
+        Assert.False(File.Exists(path));
+        Assert.Equal([probe], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
     public void AccessDeniedWhileNameIsTemporarilyInvisibleRetriesTheAtomicClaim()
     {
         var path = Path.Join(_testRoot, "package.zip");
@@ -558,11 +588,22 @@ public sealed class NoOverwriteFileTests : IDisposable
     [Fact]
     public void ALateWriterCanWinTheReleasedNameWithoutBeingOverwritten()
     {
+        // Deterministic reproduction of the ConcurrentExports CI failure mode
+        // (runs 42275868573 and 42301018483): the owner released its claim and
+        // a second writer claimed the freed name and published before the
+        // owner's non-replacing rename ran. No thread scheduling is involved:
+        // the seam suspends the owner, so the late winner always wins. The
+        // owner's rename finds the name taken and refuses with the typed
+        // "was replaced by another file" failure instead of replacing the
+        // late winner; the old ConcurrentExports assertion that every loser
+        // says "already exists" fails on exactly this outcome.
         var path = Path.Join(_testRoot, "package.zip");
-        Assert.Throws<OutputFileExistsException>(() => NoOverwriteFile.Write(
+        var failure = Record.Exception(() => NoOverwriteFile.Write(
             path, stream => stream.Write(Encoding.UTF8.GetBytes("first")), beforePublish: () =>
                 NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("late winner")))));
 
+        var ex = Assert.IsType<OutputFileExistsException>(failure);
+        Assert.Contains("was replaced by another file", ex.Message, StringComparison.Ordinal);
         Assert.Equal("late winner", File.ReadAllText(path));
         Assert.Equal([path], Directory.GetFiles(_testRoot));
     }

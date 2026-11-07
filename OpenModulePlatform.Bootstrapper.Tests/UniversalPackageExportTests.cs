@@ -295,12 +295,23 @@ public sealed class UniversalPackageExportTests : IDisposable
             .ToArray();
 
         Assert.Equal(1, outcomes.Count(static outcome => outcome is null));
+        // A loser is refused either at the claim (the name is taken:
+        // "already exists") or at the publish (a competing writer claimed the
+        // released name while this owner was preempted: "was replaced by
+        // another file"). Which losers take which path depends on scheduling,
+        // so the assertion accepts both wordings, but every refusal is
+        // pinned to the typed OutputFileExistsException and neither path
+        // ever replaces a file. See the NoOverwriteFile remarks for why the
+        // brief released-name gap cannot be removed on Windows.
         Assert.All(
             outcomes.Where(static outcome => outcome is not null),
             outcome =>
             {
-                var io = Assert.IsAssignableFrom<IOException>(outcome);
-                Assert.Contains("already exists", io.Message, StringComparison.Ordinal);
+                var refused = Assert.IsType<OutputFileExistsException>(outcome);
+                Assert.True(
+                    refused.Message.Contains("already exists", StringComparison.Ordinal)
+                        || refused.Message.Contains("was replaced by another file", StringComparison.Ordinal),
+                    $"Unexpected refusal message: {refused.Message}");
             });
 
         // The one package on disk is whole and is the winner's own.

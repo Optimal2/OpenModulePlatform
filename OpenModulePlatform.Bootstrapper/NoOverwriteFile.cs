@@ -52,7 +52,18 @@ internal sealed class OutputFileExistsException : IOException
 /// volume). On Windows the empty claim is removed by a verified, delete-capable
 /// handle that denies writes and renames while held. Publication then uses a
 /// non-replacing rename. There is briefly no file at the final name; a competing
-/// file created in that gap wins and is never overwritten. Readers see no partial
+/// file created in that gap wins and is never overwritten. The gap is kept
+/// deliberately: publishing over the still-held claim was measured to be
+/// unachievable on Windows. A handle that denies swaps also blocks the atomic
+/// replace itself (<c>File.Move(overwrite: true)</c> fails with access denied,
+/// and a handle-based <c>FileRenameInfoEx</c> replace fails with access denied,
+/// or sharing violation with POSIX semantics), while a hold that permits the
+/// replace also permits a foreign delete, so verifying-then-replacing would race
+/// again. What never depends on scheduling is the guarantee itself: exactly one
+/// writer publishes, every other writer is refused with
+/// <see cref="OutputFileExistsException"/> (claim losers because the name is
+/// taken, the rare owner preempted in the gap because its rename found the name
+/// taken), and the published file is always the winner's own. Readers see no partial
 /// package. A killed process can leave an empty claim, which the next build explains.
 /// This implementation belongs to the Windows bootstrapper and rejects other
 /// operating systems before creating even the output directory.
@@ -203,7 +214,8 @@ internal static class NoOverwriteFile
         // and still propagates raw; the content callback has not run. Only
         // UnauthorizedAccessException is retried: delete-pending contention
         // reports access denied, so an IOException on an invisible name is a
-        // different, non-transient problem and propagates at once.
+        // different, non-transient problem and propagates at once, unless the
+        // operating system itself reported the name as taken (see below).
         var retryUntil = DateTime.UtcNow.Add(ClaimRetryWindow);
         FileStream claim;
         for (;;)
@@ -216,6 +228,17 @@ internal static class NoOverwriteFile
                     ? new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)
                     : createClaim(fullPath);
                 break;
+            }
+            catch (IOException ex) when (IsNameInUseError(ex))
+            {
+                // The operating system refused the atomic claim because the
+                // name is taken. Classify from the error the claim itself
+                // returned, not from a later File.Exists re-check: by then
+                // the winning writer may have released its empty claim and
+                // not yet renamed its package into place, so the name can be
+                // momentarily absent and the refusal would otherwise escape
+                // as a raw IOException on an invisible name.
+                throw ExistingFile(fullPath, ex);
             }
             catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && File.Exists(fullPath))
             {
@@ -247,6 +270,18 @@ internal static class NoOverwriteFile
 
         return identity.Value;
     }
+
+    /// <summary>
+    /// Reports whether the operating system refused a file creation because
+    /// the name is taken: <c>ERROR_FILE_EXISTS</c> (80) or
+    /// <c>ERROR_ALREADY_EXISTS</c> (183) carried in the low word of the
+    /// <see cref="Exception.HResult"/>. Only the error the failed claim
+    /// itself returned proves contention; a later <c>File.Exists</c> re-check
+    /// can observe a name that is momentarily absent between the winner's
+    /// claim release and its final rename.
+    /// </summary>
+    private static bool IsNameInUseError(IOException ex)
+        => (ex.HResult & 0xFFFF) is 80 or 183;
 
     private static OutputFileExistsException ExistingFile(string fullPath, Exception innerException)
     {

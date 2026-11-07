@@ -408,6 +408,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 - Renew the WorkerManager artifact identity after its published binary content changed.
 - Core-maintenance tests derive the expected version from their actual payload so
   routine module-definition version bumps preserve the newer-version refusal checks.
+- **Concurrent package builds are refused with the typed file-exists error.**
+  When two builds race for the same package name, the loser is now always told
+  the name is taken (`OutputFileExistsException`), even when the winner released
+  its reservation in the same instant; that timing previously escaped as a bare
+  `IOException`. The brief gap between releasing the reservation and publishing
+  stays by design — on Windows a hold that pins the name against swaps also
+  blocks the atomic replace itself — and the rare build preempted there is
+  refused as replaced instead of overwriting anything.
 
 - **The theme menu opens on hover like the top bar's other menus.** The
   theme switch opened only on a click; on a pointer that can hover it now
