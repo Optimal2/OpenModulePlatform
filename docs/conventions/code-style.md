@@ -37,7 +37,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — present (`:1`). `root = true` (`:1`), `charset = utf-8` (`:4`), `end_of_line = lf` (`:5`), `insert_final_newline = true` (`:6`), `trim_trailing_whitespace = true` (`:7`), `indent_style = space` / `indent_size = 4` (`:8-9`), JSON/YAML/YML use 2 spaces (`:14-15`), SQL 4 spaces (`:17-18`).
 - **`Directory.Build.props`** — present. Contains static version/company metadata (the assembly version is intentionally decoupled from `omp-components.json`), `IncludeSourceRevisionInInformationalVersion=false` and `EnableSourceControlManagerQueries=false` (outside GitHub Actions) so the build does not embed the git revision and change content-based artifact identity on every commit, and an opt-in isolated build root (`OmpIsolatedBuildRoot`) that moves `obj`/`bin` out of the tree. Does **not** set `Nullable`, `TreatWarningsAsErrors`, `LangVersion`, or `AnalysisLevel`.
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.400` with `rollForward: latestFeature` (`:3-4`).
+- **`global.json`** — pins SDK `10.0.404` with `rollForward: latestFeature` (`:3-4`).
 - **`.csproj`** — projects target `net10.0` and set `Nullable`/`ImplicitUsings` to `enable` (e.g. `OpenModulePlatform.Portal.csproj:3-5`). Exceptions: `OpenModulePlatform.Bootstrapper` and its test project target `net10.0-windows` (WinForms GUI); `OpenModulePlatform.HostAgent.Sentinel` targets `net48` (standalone alarm service that must run without a .NET 10 runtime); `OpenModulePlatform.Web.Shared.Analyzers.csproj` targets `netstandard2.0` (`:4`), pins `LangVersion` to `9.0` (`:5`), and disables implicit usings (`:7`). Analyzer project uses `Microsoft.CodeAnalysis.Analyzers` (`:15`) and `EnforceExtendedAnalyzerRules` (`:9`). No repo-wide `TreatWarningsAsErrors` or `AnalysisLevel`.
 
 ### ExampleModule (contoso-web)
@@ -136,7 +136,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 
 | Repository | `.editorconfig` | CPM | `Nullable` | `ImplicitUsings` | `TreatWarningsAsErrors` | `LangVersion` | `AnalysisLevel` | `EnforceCodeStyleInBuild` | Analyzers | `global.json` | JS lint | JS format | TS config |
 |------------|-----------------|-----|------------|------------------|--------------------------|---------------|-----------------|---------------------------|-----------|---------------|---------|-----------|-----------|
-| OpenModulePlatform | yes (LF) | yes | enable | enable | — | default* | — | — | analyzer project only | 10.0.400 | — | — | — |
+| OpenModulePlatform | yes (LF) | yes | enable | enable | — | default* | — | — | analyzer project only | 10.0.404 | — | — | — |
 | contoso-web | no | yes | enable | enable | — | default | — | — | none | 10.0.200 | — | — | — |
 | fabrikam-web | no | yes | enable | enable | false | default | — | — | none | 10.0.302 | — | — | — |
 | northwind-web | no | yes | enable | enable | false | default | — | — | none | 10.0.302 | — | — | — |
@@ -156,7 +156,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 3. **Central Package Management** — Enabled in seven of the eight .NET repositories: OpenModulePlatform, contoso-web, fabrikam-web, northwind-web, globex-web, adventureworks-web and tailwind-web. **ODVGateway is the only one without it**, which is also the mechanism behind its package-pin drift: with no `Directory.Packages.props` there is no single place to lift a version.
 4. **Warning/error handling** — fabrikam-web, northwind-web, tailwind-web, ODVGateway and adventureworks-web explicitly set `TreatWarningsAsErrors` to `false`. OpenModulePlatform, contoso-web and globex-web do not set it at all. None treat warnings as errors.
 5. **Static analysis** — `AnalysisLevel` is set in tailwind-web, adventureworks-web and ODVGateway (all `latest`). `EnforceCodeStyleInBuild` is set only in ODVGateway (`true`).
-6. **SDK pinning** — Seven of eight .NET repositories pin an SDK in `global.json`, all with `rollForward: latestFeature`: OpenModulePlatform `10.0.400`, ODVGateway `10.0.300`, fabrikam-web/northwind-web/adventureworks-web `10.0.302`, contoso-web/globex-web `10.0.200`. **tailwind-web is the only repository with no pin** and therefore floats to the host SDK. The pins span four feature bands; today they all roll forward to the same installed SDK, so the spread is latent rather than active.
+6. **SDK pinning** — Since 2026-11-11 every .NET repository with a `global.json` pins the same SDK floor, `10.0.404` (the first SDK that ships the patched 10.0.15 runtime), all with `rollForward: latestFeature` except one product repository that pins exactly (`rollForward: disable`). Raising the floor is how a security runtime release reaches every build: a lower floor lets a machine or CI image with an older SDK keep producing self-contained output with a vulnerable runtime. **tailwind-web is the only repository with no pin** and therefore floats to the host SDK.
 7. **JS/TS tooling** — Only OpenDocViewer has ESLint. Neither JS repo has an `.editorconfig`, a Prettier configuration file, or a `tsconfig.json`. AgentDocMap has no lint or format scripts.
 
 ## Recommended standard

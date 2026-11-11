@@ -25,14 +25,14 @@
     <PackageVersion Include="Markdig" Version="1.6.0" />
     <!--
       Roslyn/SDK coupling (verified 2026-08-31):
-      global.json pins SDK 10.0.400, which ships Roslyn 5.9.
+      global.json pins SDK 10.0.404, which ships Roslyn 5.9.
       OmpWebDefaultsAnalyzer is compiled against
       Microsoft.CodeAnalysis.CSharp and loaded as a build-time analyzer into
       every SDK-style web project (Directory.Build.targets), i.e. into the
       SDK's own compiler host. An analyzer built against a NEWER Roslyn than
       the host fails to load (build error); older-than-host is fine. So the
       package pin must stay <= the Roslyn of the oldest allowed SDK band
-      (10.0.400 -> Roslyn 5.9). Keep CSharp and CSharp.Workspaces aligned with
+      (10.0.404 -> Roslyn 5.9). Keep CSharp and CSharp.Workspaces aligned with
       that host version and coordinate future Roslyn updates with global.json.
       The 5.9 upgrade was validated end-to-end; the analyzer still uses only
       long-stable Roslyn APIs.

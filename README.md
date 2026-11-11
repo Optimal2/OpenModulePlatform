@@ -258,7 +258,7 @@ Requirements, all checked by the code rather than by convention:
   and the ASP.NET Core hosting bundle — see
   [docs/HOSTING_WINDOWS_IIS.md](docs/HOSTING_WINDOWS_IIS.md).
 - SQL Server (a local default instance works).
-- .NET SDK `10.0.400` or a later feature band (`global.json`,
+- .NET SDK `10.0.404` or a later feature band (`global.json`,
   `rollForward: latestFeature`).
 - An account allowed to create IIS sites and Windows services.
 
