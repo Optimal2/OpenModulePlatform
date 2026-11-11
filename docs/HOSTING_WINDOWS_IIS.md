@@ -28,6 +28,14 @@ Official guidance:
 - https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/hosting-bundle?view=aspnetcore-10.0
 - https://learn.microsoft.com/en-us/aspnet/core/tutorials/publish-to-iis?view=aspnetcore-10.0
 
+### .NET runtime update advisory
+
+OMP is built against the latest .NET security release. The recommended runtime is the central Microsoft package version (currently `10.0.15`), stamped into every assembly as `AssemblyMetadata("OmpRecommendedDotNetRuntime", ...)`.
+
+Servers are never required to match: framework-dependent apps keep running on any installed `10.0.x` hosting bundle, and nothing refuses to start. The self-contained installer carries its own pinned runtime.
+
+Portal administrators (`OmpPortalPermissions.Admin`) see a non-blocking warning banner in the top bar when the server runs an older `10.0.x` patch; other users see nothing. The `/runtime-versions` report includes `DotNetRuntime { Running, Recommended, IsOutdated }`. Install the latest ASP.NET Core Hosting Bundle (`10.0.x`) on the server to apply the update.
+
 ## web.config
 
 OMP web projects use the `Microsoft.NET.Sdk.Web` SDK.
