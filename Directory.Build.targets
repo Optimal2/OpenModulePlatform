@@ -17,6 +17,28 @@
   </Target>
 
   <!--
+    Record the runtime servicing band OMP was built against without imposing a
+    runtime requirement. The central Microsoft.Extensions.Hosting package is
+    the single source of truth. This target also runs for isolated consumer
+    builds because they import this file from the referenced OMP projects;
+    when central package management does not provide the item, no attribute
+    is emitted. Run before the SDK creates its AssemblyInfo inputs cache as
+    well as before generation, so a central version change invalidates the cache.
+  -->
+  <Target Name="OmpStampRecommendedDotNetRuntime"
+          BeforeTargets="CreateGeneratedAssemblyInfoInputsCacheFile;CoreGenerateAssemblyInfo">
+    <PropertyGroup>
+      <_OmpRecommendedDotNetRuntime>@(PackageVersion->WithMetadataValue('Identity', 'Microsoft.Extensions.Hosting')->Metadata('Version'))</_OmpRecommendedDotNetRuntime>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(_OmpRecommendedDotNetRuntime)' != ''">
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>OmpRecommendedDotNetRuntime</_Parameter1>
+        <_Parameter2>$(_OmpRecommendedDotNetRuntime)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+
+  <!--
     Make the OMP web defaults analyzer run automatically for every ASP.NET Core
     web project in the repository that uses Microsoft.NET.Sdk.Web.
     OpenModulePlatform.Auth is excluded at the analyzer level because it
