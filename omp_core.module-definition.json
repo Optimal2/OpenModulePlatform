@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "definitionType": "platform-core",
   "moduleKey": "omp_core",
-  "definitionVersion": "0.3.292",
+  "definitionVersion": "0.3.293",
   "module": {
     "displayName": "OpenModulePlatform Core",
     "moduleType": "PlatformCore",
@@ -44,7 +44,7 @@
       "targetName": "omp-hostagent",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "minVersion": "0.3.10",
-      "maxVersion": "0.3.338"
+      "maxVersion": "0.3.339"
     },
     {
       "appKey": "omp_workermanager",
@@ -52,7 +52,7 @@
       "targetName": "omp-workermanager",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.77"
+      "maxVersion": "0.3.78"
     },
     {
       "appKey": "omp_workerprocesshost",
@@ -60,7 +60,7 @@
       "targetName": "omp-workerprocesshost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.81"
+      "maxVersion": "0.3.82"
     }
   ],
   "sqlScripts": [

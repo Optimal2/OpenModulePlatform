@@ -13,10 +13,10 @@ internal static class OmpRuntimeAssemblyVersionCheck
     public const string NegotiateAssemblyName = "Microsoft.AspNetCore.Authentication.Negotiate";
     public const string AuthAssemblyName = "OpenModulePlatform.Auth";
 
-    // Patched band: any 10.0.14.x revision is acceptable. It must follow the
+    // Patched band: any 10.0.15.x revision is acceptable. It must follow the
     // Negotiate PackageVersion in Directory.Packages.props; a Portal test
     // fails when the two drift apart.
-    public static readonly Version ExpectedNegotiateBand = new(10, 0, 14);
+    public static readonly Version ExpectedNegotiateBand = new(10, 0, 15);
 
     public static bool IsOnBand(Version? version, Version band)
     {

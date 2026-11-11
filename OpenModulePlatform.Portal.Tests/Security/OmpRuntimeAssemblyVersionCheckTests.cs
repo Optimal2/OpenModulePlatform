@@ -40,13 +40,13 @@ public sealed class OmpRuntimeAssemblyVersionCheckTests
     public void IsOnBand_UsesTheThreePartBandDefinedByTheConstant()
     {
         Assert.True(OmpRuntimeAssemblyVersionCheck.IsOnBand(
+            new Version(10, 0, 15, 42),
+            OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
+        Assert.False(OmpRuntimeAssemblyVersionCheck.IsOnBand(
             new Version(10, 0, 14, 42),
             OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
         Assert.False(OmpRuntimeAssemblyVersionCheck.IsOnBand(
             new Version(10, 0, 13, 42),
-            OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
-        Assert.False(OmpRuntimeAssemblyVersionCheck.IsOnBand(
-            new Version(10, 0, 12, 42),
             OmpRuntimeAssemblyVersionCheck.ExpectedNegotiateBand));
     }
 

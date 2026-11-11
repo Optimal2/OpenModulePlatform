@@ -17,6 +17,12 @@
     <PublishSingleFile>true</PublishSingleFile>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- The self-contained runtime packs (NETCore, AspNetCore, WindowsDesktop) otherwise
+         follow whatever SDK builds the installer, so an older SDK silently ships a
+         vulnerable runtime. Pin them to the patched band; it must match the 10.0.x
+         Microsoft package versions in Directory.Packages.props (enforced by
+         SelfContainedRuntimeVersionTests). -->
+    <RuntimeFrameworkVersion>10.0.15</RuntimeFrameworkVersion>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
 
