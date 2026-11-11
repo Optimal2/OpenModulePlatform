@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Auth/Services/OmpRuntimeAssemblyVersionCheck.cs
 using System.Reflection;
+using OpenModulePlatform.Web.Shared.Runtime;
 
 namespace OpenModulePlatform.Auth.Services;
 
@@ -37,6 +38,43 @@ internal static class OmpRuntimeAssemblyVersionCheck
         return new OmpRuntimeAssemblyVersionReport(
             entries,
             entries.Any(entry => entry.Warning is not null));
+    }
+
+    public static OmpDotNetRuntimeVersionReport CreateDotNetRuntimeReport()
+    {
+        try
+        {
+            return CreateDotNetRuntimeReport(OmpRuntimeAdvisory.EvaluateCurrentProcess());
+        }
+        catch (Exception)
+        {
+            return new OmpDotNetRuntimeVersionReport(null, null, false);
+        }
+    }
+
+    public static OmpDotNetRuntimeVersionReport CreateDotNetRuntimeReport(Version? running, string? recommended)
+    {
+        return CreateDotNetRuntimeReport(OmpRuntimeAdvisory.Compare(running, recommended));
+    }
+
+    private static OmpDotNetRuntimeVersionReport CreateDotNetRuntimeReport(OmpRuntimeAdvisoryResult advisory)
+    {
+        return new OmpDotNetRuntimeVersionReport(
+            FormatRuntimeVersion(advisory.Running),
+            FormatRuntimeVersion(advisory.Recommended),
+            advisory.IsOutdated);
+    }
+
+    private static string? FormatRuntimeVersion(Version? version)
+    {
+        if (version is null)
+        {
+            return null;
+        }
+
+        return version.Build < 0
+            ? $"{version.Major}.{version.Minor}.0"
+            : version.ToString(3);
     }
 
     private static OmpLoadedAssemblyVersion Describe(string assemblyName, Version? expectedBand)
@@ -102,3 +140,8 @@ internal sealed record OmpLoadedAssemblyVersion(
 internal sealed record OmpRuntimeAssemblyVersionReport(
     IReadOnlyList<OmpLoadedAssemblyVersion> Assemblies,
     bool HasWarnings);
+
+internal sealed record OmpDotNetRuntimeVersionReport(
+    string? Running,
+    string? Recommended,
+    bool IsOutdated);

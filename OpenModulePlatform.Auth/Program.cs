@@ -206,6 +206,7 @@ app.MapGet("/runtime-versions", async (HttpContext context, OmpConfigurationServ
     {
         assemblies.Assemblies,
         assemblies.HasWarnings,
+        DotNetRuntime = OmpRuntimeAssemblyVersionCheck.CreateDotNetRuntimeReport(),
         SelfRegistration = selfRegistration
     });
     // Require authentication so the assembly version report is not exposed to

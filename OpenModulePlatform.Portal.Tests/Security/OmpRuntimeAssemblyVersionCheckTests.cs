@@ -1,3 +1,4 @@
+using System.Text.Json;
 using OpenModulePlatform.Auth.Services;
 
 namespace OpenModulePlatform.Portal.Tests.Security;
@@ -89,5 +90,58 @@ public sealed class OmpRuntimeAssemblyVersionCheckTests
         Assert.NotNull(authEntry.LoadedVersion);
         Assert.Matches(@"^\d+\.\d+\.\d+\.\d+$", authEntry.LoadedVersion);
         Assert.Null(authEntry.Warning);
+    }
+
+    [Fact]
+    public void CreateDotNetRuntimeReport_InjectedHigherRecommendationHasExpectedJsonShape()
+    {
+        var report = OmpRuntimeAssemblyVersionCheck.CreateDotNetRuntimeReport(
+            new Version(10, 0, 14, 42),
+            "10.0.15");
+
+        var payload = JsonSerializer.SerializeToElement(new { DotNetRuntime = report });
+        var dotNetRuntime = payload.GetProperty("DotNetRuntime");
+
+        Assert.Equal(3, dotNetRuntime.EnumerateObject().Count());
+        Assert.Equal("10.0.14", dotNetRuntime.GetProperty("Running").GetString());
+        Assert.Equal("10.0.15", dotNetRuntime.GetProperty("Recommended").GetString());
+        Assert.True(dotNetRuntime.GetProperty("IsOutdated").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-version")]
+    public void CreateDotNetRuntimeReport_MissingOrInvalidMetadataIsQuiet(string? recommended)
+    {
+        var report = OmpRuntimeAssemblyVersionCheck.CreateDotNetRuntimeReport(
+            new Version(10, 0, 14),
+            recommended);
+
+        Assert.Equal("10.0.14", report.Running);
+        Assert.Null(report.Recommended);
+        Assert.False(report.IsOutdated);
+    }
+
+    [Fact]
+    public void CreateDotNetRuntimeReport_UnknownRunningVersionIsQuiet()
+    {
+        var report = OmpRuntimeAssemblyVersionCheck.CreateDotNetRuntimeReport(null, "10.0.15");
+
+        Assert.Null(report.Running);
+        Assert.Null(report.Recommended);
+        Assert.False(report.IsOutdated);
+    }
+
+    [Fact]
+    public void CreateDotNetRuntimeReport_TwoPartVersionStillPrintsMajorMinorPatch()
+    {
+        var report = OmpRuntimeAssemblyVersionCheck.CreateDotNetRuntimeReport(
+            new Version(10, 0),
+            "10.0.15");
+
+        Assert.Equal("10.0.0", report.Running);
+        Assert.Equal("10.0.15", report.Recommended);
+        Assert.True(report.IsOutdated);
     }
 }
