@@ -107,4 +107,6 @@
   <data name="Theme: System" xml:space="preserve"><value>System</value></data>
   <data name="Theme: Light" xml:space="preserve"><value>Light</value></data>
   <data name="Theme: Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Older .NET runtime on the server" xml:space="preserve"><value>Older .NET runtime on the server</value></data>
+  <data name="The server is running .NET {0}. OMP is built for {1}, which includes the latest security fixes. Update the ASP.NET Core Hosting Bundle on the server." xml:space="preserve"><value>The server is running .NET {0}. OMP is built for {1}, which includes the latest security fixes. Update the ASP.NET Core Hosting Bundle on the server.</value></data>
 </root>

@@ -1,6 +1,7 @@
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Runtime;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using System.Data;
 using System.Globalization;
@@ -25,6 +27,9 @@ public sealed class PortalTopBarService
     private const string ContentManagePermission = "ContentWebAppModule.Manage";
     private const string PortalSettingCategory = "Portal";
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
+    private const string RuntimeAdvisoryTitleKey = "Older .NET runtime on the server";
+    private const string RuntimeAdvisoryContentKey = "The server is running .NET {0}. OMP is built for {1}, which includes the latest security fixes. Update the ASP.NET Core Hosting Bundle on the server.";
+    private const string RuntimeAdvisoryWarningIconUrl = "/_content/OpenModulePlatform.Web.Shared/icons/warning.svg";
     private const byte BitValueKind = 3;
 
     /// <summary>The Portal user setting the user menu's Do not disturb row flips (with
@@ -73,7 +78,16 @@ public sealed class PortalTopBarService
     private readonly Telemetry.OmpPerformanceTelemetry _telemetry;
     private readonly Telemetry.OmpPerformanceTelemetryOptions _telemetryOptions;
     private readonly ILogger<PortalTopBarService> _log;
+    private readonly IStringLocalizer<SharedResource> _localizer;
+    private readonly IOmpRuntimeAdvisorySource _runtimeAdvisorySource;
+    private static readonly IStringLocalizer<SharedResource> ManualConstructionLocalizer =
+        new StringLocalizer<SharedResource>(
+            new ResourceManagerStringLocalizerFactory(
+                Microsoft.Extensions.Options.Options.Create(new LocalizationOptions { ResourcesPath = "Resources" }),
+                Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance));
 
+    // Preserve the original constructor for consumer applications and tests that construct
+    // the service manually; it uses the same shared resources without requiring DI registration.
     public PortalTopBarService(
         SqlConnectionFactory db,
         RbacService rbac,
@@ -88,6 +102,41 @@ public sealed class PortalTopBarService
         Telemetry.OmpPerformanceTelemetry telemetry,
         Telemetry.OmpPerformanceTelemetryOptions telemetryOptions,
         ILogger<PortalTopBarService> log)
+        : this(
+            db,
+            rbac,
+            cultureSelectionService,
+            authOptions,
+            brandingService,
+            configuration,
+            notifications,
+            messages,
+            banners,
+            cache,
+            telemetry,
+            telemetryOptions,
+            log,
+            ManualConstructionLocalizer,
+            OmpRuntimeAdvisorySource.Instance)
+    {
+    }
+
+    public PortalTopBarService(
+        SqlConnectionFactory db,
+        RbacService rbac,
+        CultureSelectionService cultureSelectionService,
+        IOptions<OmpAuthOptions> authOptions,
+        OmpBrandingService brandingService,
+        OmpConfigurationService configuration,
+        NotificationService notifications,
+        MessageService messages,
+        BannerService banners,
+        IMemoryCache cache,
+        Telemetry.OmpPerformanceTelemetry telemetry,
+        Telemetry.OmpPerformanceTelemetryOptions telemetryOptions,
+        ILogger<PortalTopBarService> log,
+        IStringLocalizer<SharedResource> localizer,
+        IOmpRuntimeAdvisorySource runtimeAdvisorySource)
     {
         _db = db;
         _rbac = rbac;
@@ -102,6 +151,8 @@ public sealed class PortalTopBarService
         _telemetry = telemetry;
         _telemetryOptions = telemetryOptions;
         _log = log;
+        _localizer = localizer;
+        _runtimeAdvisorySource = runtimeAdvisorySource;
     }
 
     /// <summary>
@@ -302,6 +353,13 @@ public sealed class PortalTopBarService
             if (user.Identity?.IsAuthenticated == true)
             {
                 banners = await _banners.GetActiveForRolesAsync(GetBannerRoleIds(roleContext), 3, ct);
+                // Append after the database query: the synthetic advisory neither replaces nor
+                // counts against the three database banners available to every authenticated user.
+                banners = AppendRuntimeAdvisoryBanner(
+                    banners,
+                    isPortalAdmin,
+                    _runtimeAdvisorySource,
+                    _localizer);
             }
 
             if (userId is int resolvedUserId)
@@ -571,6 +629,55 @@ public sealed class PortalTopBarService
             .Concat(roleContext.EffectiveRoleIds)
             .Distinct()
             .ToArray();
+
+    internal static IReadOnlyList<PortalTopBarBanner> AppendRuntimeAdvisoryBanner(
+        IReadOnlyList<PortalTopBarBanner> databaseBanners,
+        bool isPortalAdmin,
+        IOmpRuntimeAdvisorySource runtimeAdvisorySource,
+        IStringLocalizer<SharedResource> localizer)
+    {
+        if (!isPortalAdmin)
+        {
+            return databaseBanners;
+        }
+
+        try
+        {
+            var advisory = runtimeAdvisorySource.GetAdvisory();
+            if (!advisory.IsOutdated || advisory.Running is null || advisory.Recommended is null)
+            {
+                return databaseBanners;
+            }
+
+            var running = FormatRuntimeVersion(advisory.Running);
+            var recommended = FormatRuntimeVersion(advisory.Recommended);
+            var warning = new PortalTopBarBanner(
+                // Database banner identities are positive, so zero cannot collide with a real row.
+                BannerId: 0,
+                localizer[RuntimeAdvisoryTitleKey].Value,
+                localizer[RuntimeAdvisoryContentKey, running, recommended].Value,
+                BannerService.LevelWarning,
+                BannerService.LevelName(BannerService.LevelWarning),
+                RuntimeAdvisoryWarningIconUrl,
+                StartsAtUtc: null,
+                ExpiresAtUtc: null);
+
+            // Keep every database banner already limited to three and append this admin-only
+            // advisory as a fourth item rather than displacing one of them.
+            var banners = new List<PortalTopBarBanner>(databaseBanners.Count + 1);
+            banners.AddRange(databaseBanners);
+            banners.Add(warning);
+            return banners;
+        }
+        catch (Exception)
+        {
+            // Version metadata and localization are advisory only; neither may break the top bar.
+            return databaseBanners;
+        }
+    }
+
+    private static string FormatRuntimeVersion(Version version)
+        => version.ToString(version.Build < 0 ? 2 : 3);
 
     private static IReadOnlyList<PortalTopBarMessageConversation> BuildMessageConversations(
         IReadOnlyList<MessageConversationSummary> conversations,

@@ -210,6 +210,7 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<NotificationService>();
         builder.Services.AddScoped<MessageService>();
         builder.Services.AddScoped<BannerService>();
+        builder.Services.AddSingleton<OpenModulePlatform.Web.Shared.Runtime.IOmpRuntimeAdvisorySource, OpenModulePlatform.Web.Shared.Runtime.OmpRuntimeAdvisorySource>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
         builder.Services.AddScoped<PortalUserBitSettingWriter>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Provisioning.WorkerAppInstanceProvisioningService>();
