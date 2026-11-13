@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Web.ContextGuardModule.Hosting;
 using OpenModulePlatform.Web.ContextGuardModule.Models;
 using OpenModulePlatform.Web.ContextGuardModule.Options;
 using OpenModulePlatform.Web.ContextGuardModule.Services;
@@ -87,7 +88,7 @@ public sealed class ShowModel(
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Lax,
-            Secure = Request.IsHttps,
+            Secure = ContextGuardCookiePolicy.IsSecure(HttpContext),
             Path = Request.PathBase.HasValue ? Request.PathBase.Value + "/show" : "/show"
         });
     }
@@ -111,7 +112,7 @@ public sealed class ShowModel(
             HttpOnly = true,
             IsEssential = true,
             SameSite = SameSiteMode.Lax,
-            Secure = Request.IsHttps,
+            Secure = ContextGuardCookiePolicy.IsSecure(HttpContext),
             Path = Request.PathBase.HasValue ? Request.PathBase.Value : "/",
             Expires = DateTimeOffset.UtcNow.AddDays(30)
         });

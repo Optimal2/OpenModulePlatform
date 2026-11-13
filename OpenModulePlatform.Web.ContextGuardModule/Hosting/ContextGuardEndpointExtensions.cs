@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Extensions.Options;
 using OpenModulePlatform.Web.ContextGuardModule.Pages;
 using OpenModulePlatform.Web.ContextGuardModule.Services;
+using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 
 namespace OpenModulePlatform.Web.ContextGuardModule.Hosting;
@@ -10,6 +13,17 @@ public static class ContextGuardEndpointExtensions
 {
     public static WebApplication MapContextGuardEndpoints(this WebApplication app)
     {
+        var portalOptions = app.Configuration
+            .GetSection("Portal")
+            .Get<WebAppOptions>() ?? new WebAppOptions();
+        if (portalOptions.UseForwardedHeaders)
+        {
+            // This module maps its endpoints before UseOmpWebDefaults. Apply the
+            // shared, KnownProxies/KnownNetworks-based middleware before the rate
+            // limiter so RemoteIpAddress is the forwarded client, not the proxy.
+            app.UseForwardedHeaders();
+        }
+
         app.UseRateLimiter();
         // These two inbound integration endpoints deliberately sit outside OMP login and
         // antiforgery. They only stage/end by a one-time correlation; no context is readable.
@@ -173,7 +187,7 @@ public static class ContextGuardEndpointExtensions
             HttpOnly = true,
             IsEssential = true,
             SameSite = SameSiteMode.Lax,
-            Secure = context.Request.IsHttps,
+            Secure = ContextGuardCookiePolicy.IsSecure(context),
             Path = cookiePath,
             MaxAge = TimeSpan.FromSeconds(service.OptionsSnapshot.HandoffTtlSeconds + 300)
         });
@@ -206,4 +220,19 @@ public static class ContextGuardEndpointExtensions
         Models.ContextLifecycle.Superseded => "superseded",
         _ => "ended"
     };
+}
+
+internal static class ContextGuardCookiePolicy
+{
+    public static bool IsSecure(HttpContext context)
+    {
+        // Resolve the exact policy used by the shared OMP session cookie instead
+        // of maintaining a second configuration parser in this module.
+        var securePolicy = context.RequestServices
+            .GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(OmpAuthDefaults.AuthenticationScheme)
+            .Cookie.SecurePolicy;
+        return securePolicy == CookieSecurePolicy.Always
+            || (securePolicy == CookieSecurePolicy.SameAsRequest && context.Request.IsHttps);
+    }
 }

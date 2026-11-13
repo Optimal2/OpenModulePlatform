@@ -178,7 +178,7 @@ public sealed class ContextGuardModuleTests
     }
 
     [Fact]
-    public async Task Heartbeat_and_state_without_omp_identity_answer_forbidden()
+    public async Task Heartbeat_and_state_challenge_anonymous_callers_and_forbid_missing_omp_identity()
     {
         await using var host = await ContextGuardTestHost.StartAsync();
         await using var browser = await LaunchBrowserAsync();
@@ -191,6 +191,18 @@ public sealed class ContextGuardModuleTests
         Assert.Equal(403, heartbeat.Status);
         var state = await context.APIRequest.GetAsync($"{host.GuardUrl}/context/{contextId}/state");
         Assert.Equal(403, state.Status);
+
+        await using var anonymousContext = await browser.NewContextAsync();
+        var anonymousHeartbeat = await anonymousContext.APIRequest.PostAsync(
+            $"{host.GuardUrl}/context/{contextId}/heartbeat",
+            new() { MaxRedirects = 0 });
+        Assert.Equal(302, anonymousHeartbeat.Status);
+        Assert.StartsWith("/guard/auth/login", anonymousHeartbeat.Headers["location"], StringComparison.Ordinal);
+        var anonymousState = await anonymousContext.APIRequest.GetAsync(
+            $"{host.GuardUrl}/context/{contextId}/state",
+            new() { MaxRedirects = 0 });
+        Assert.Equal(302, anonymousState.Status);
+        Assert.StartsWith("/guard/auth/login", anonymousState.Headers["location"], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -293,6 +305,66 @@ public sealed class ContextGuardModuleTests
         Assert.Equal(204, firstEnd.Status);
         Assert.Equal(204, secondEnd.Status);
         Assert.Equal(429, thirdEnd.Status);
+    }
+
+    [Fact]
+    public async Task Forwarded_client_addresses_have_independent_receive_rate_limit_buckets()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync(
+            receiveRateLimit: 1,
+            useForwardedHeaders: true);
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var first = await PostReceiveWithForwardedForAsync(client, host, "case-proxy-a-1", "192.0.2.10");
+        var exhausted = await PostReceiveWithForwardedForAsync(client, host, "case-proxy-a-2", "192.0.2.10");
+        var otherClient = await PostReceiveWithForwardedForAsync(client, host, "case-proxy-b-1", "192.0.2.20");
+
+        Assert.Equal(303, (int)first.StatusCode);
+        Assert.Equal(429, (int)exhausted.StatusCode);
+        Assert.Equal(303, (int)otherClient.StatusCode);
+    }
+
+    [Fact]
+    public async Task Forwarded_for_header_cannot_create_buckets_when_forwarded_headers_are_disabled()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync(receiveRateLimit: 1);
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var first = await PostReceiveWithForwardedForAsync(client, host, "case-direct-a", "192.0.2.30");
+        var forgedOtherClient = await PostReceiveWithForwardedForAsync(client, host, "case-direct-b", "192.0.2.40");
+
+        Assert.Equal(303, (int)first.StatusCode);
+        Assert.Equal(429, (int)forgedOtherClient.StatusCode);
+    }
+
+    [Fact]
+    public async Task Default_cookie_policy_marks_handoff_key_cookie_secure_on_http()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync(cookieSecurePolicy: null);
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var response = await client.PostAsync(
+            host.GuardUrl + "/handoff/demo",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["correlation"] = "case-secure-default" }));
+
+        Assert.Equal(303, (int)response.StatusCode);
+        var cookie = HandoffSetCookie(response);
+        Assert.Contains(cookie.Split(';'), part => string.Equals(part.Trim(), "secure", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Same_as_request_cookie_policy_leaves_http_handoff_key_cookie_non_secure()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync(cookieSecurePolicy: "sameAsRequest");
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var response = await client.PostAsync(
+            host.GuardUrl + "/handoff/demo",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["correlation"] = "case-secure-request" }));
+
+        Assert.Equal(303, (int)response.StatusCode);
+        var cookie = HandoffSetCookie(response);
+        Assert.DoesNotContain(cookie.Split(';'), part => string.Equals(part.Trim(), "secure", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]
@@ -430,6 +502,27 @@ public sealed class ContextGuardModuleTests
         return (location, pair[1]);
     }
 
+    private static async Task<HttpResponseMessage> PostReceiveWithForwardedForAsync(
+        HttpClient client,
+        ContextGuardTestHost host,
+        string correlation,
+        string forwardedFor)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, host.GuardUrl + "/handoff/demo")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["correlation"] = correlation })
+        };
+        request.Headers.Add("X-Forwarded-For", forwardedFor);
+        return await client.SendAsync(request);
+    }
+
+    private static string HandoffSetCookie(HttpResponseMessage response)
+    {
+        Assert.True(response.Headers.TryGetValues("Set-Cookie", out var cookies));
+        return Assert.Single(cookies!, cookie =>
+            cookie.StartsWith(ShowModel.HandoffKeyCookieName + "=", StringComparison.Ordinal));
+    }
+
     private static async Task<IBrowser> LaunchBrowserAsync()
     {
         var playwright = await Playwright.CreateAsync();
@@ -465,7 +558,9 @@ public sealed class ContextGuardModuleTests
             string scope = ContextGuardScopes.User,
             int handoffTtlSeconds = 60,
             int? receiveRateLimit = null,
-            int? endRateLimit = null)
+            int? endRateLimit = null,
+            bool useForwardedHeaders = false,
+            string? cookieSecurePolicy = "sameAsRequest")
         {
             PrepareStaticAssets();
             var targetBuilder = WebApplication.CreateBuilder();
@@ -489,7 +584,6 @@ public sealed class ContextGuardModuleTests
                     ["Portal:DefaultCulture"] = "en-US",
                     ["Portal:SupportedCultures:0"] = "en-US",
                     ["Portal:PortalTopBar:Enabled"] = "false",
-                    ["OmpAuth:CookieSecurePolicy"] = "sameAsRequest",
                     ["OmpAuth:LoginPath"] = "/guard/auth/login",
                     ["ContextGuard:Scope"] = scope,
                     ["ContextGuard:HandoffTtlSeconds"] = handoffTtlSeconds.ToString(),
@@ -541,6 +635,17 @@ public sealed class ContextGuardModuleTests
                 if (endRateLimit.HasValue)
                 {
                     values["ContextGuard:EndMaxRequestsPerWindow"] = endRateLimit.Value.ToString();
+                }
+
+                if (useForwardedHeaders)
+                {
+                    values["Portal:UseForwardedHeaders"] = "true";
+                    values["Portal:ForwardedHeadersKnownProxies:0"] = "127.0.0.1";
+                }
+
+                if (cookieSecurePolicy is not null)
+                {
+                    values["OmpAuth:CookieSecurePolicy"] = cookieSecurePolicy;
                 }
 
                 guardBuilder.Configuration.AddInMemoryCollection(values);
