@@ -52,6 +52,28 @@ public sealed class ContextGuardServiceTests
         Assert.DoesNotContain(logs.Messages, message => message.Contains(fieldSecret, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void TryGetProfile_WithUnknownUnsafeKey_LogsOnlyBoundedMarkerAndLength()
+    {
+        var logs = new CapturedLogger();
+        var service = new ContextGuardService(
+            new InMemoryHandoffStore(TimeProvider.System),
+            new InMemoryContextStore(TimeProvider.System),
+            new FakeOptionsMonitor(new ContextGuardOptions()),
+            logs);
+        var unsafeKey = "unknown\r\n" + new string('x', 5000);
+
+        var found = service.TryGetProfile(unsafeKey, out _);
+
+        Assert.False(found);
+        var message = Assert.Single(logs.Messages);
+        Assert.DoesNotContain(unsafeKey, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", message, StringComparison.Ordinal);
+        Assert.Contains("ProfileKey=<invalid>", message, StringComparison.Ordinal);
+        Assert.Contains($"ProfileKeyLength={unsafeKey.Length}", message, StringComparison.Ordinal);
+    }
+
     private sealed class FakeOptionsMonitor(ContextGuardOptions value) : IOptionsMonitor<ContextGuardOptions>
     {
         public ContextGuardOptions CurrentValue => value;

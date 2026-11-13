@@ -20,7 +20,7 @@ public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffSt
         {
             var now = timeProvider.GetUtcNow();
             PruneExpiredCore(now);
-            if (_entries.Values.Count(entry => entry.Payload is not null) >= capacity)
+            if (_entries.Count >= capacity)
             {
                 return new HandoffCreateResult(HandoffCreateStatus.CapacityExceeded, null, droppedFieldCount);
             }
@@ -46,15 +46,15 @@ public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffSt
                 return new HandoffRedemption(HandoffRedemptionStatus.Ended, null);
             }
 
+            if (entry.Payload is null)
+            {
+                return new HandoffRedemption(HandoffRedemptionStatus.AlreadyRedeemed, null);
+            }
+
             if (entry.ExpiresUtc <= timeProvider.GetUtcNow())
             {
                 entry.Payload = null;
                 return new HandoffRedemption(HandoffRedemptionStatus.Expired, null);
-            }
-
-            if (entry.Payload is null)
-            {
-                return new HandoffRedemption(HandoffRedemptionStatus.AlreadyRedeemed, null);
             }
 
             var payload = entry.Payload;

@@ -27,7 +27,7 @@ Calling system                 Context Guard                  OMP Auth          
 
 The receive and end endpoints are anonymous in v1 because a cross-site form POST does not carry the `SameSite=Lax` OMP cookie. They explicitly disable antiforgery: they are inbound integration endpoints and cannot read a context or start one without an authenticated redemption. `/show`, heartbeat and state use the ordinary shared OMP authentication pipeline; heartbeat also validates the normal antiforgery token. Razor encoding is used for every rendered value.
 
-The one-time key is random (256 bits), has a short TTL and is removed from the visible URL with `history.replaceState` after redemption. Redemption clears the stored payload. A reused, expired, ended or unknown key produces a named hand-off page, never another user's data.
+The one-time key is random (256 bits), has a short TTL and is removed from the visible URL with `history.replaceState` after redemption. Redemption clears the stored payload. A reused, expired, ended or unknown key produces a named hand-off page, never another user's data. A redeemed key remains `AlreadyRedeemed` even after its TTL until its tombstone is pruned.
 
 ## Calling-system contract
 
@@ -64,7 +64,7 @@ The root section is `ContextGuard`. Validation runs at startup; invalid profiles
 | `HeartbeatIntervalSeconds` | `5` | Browser heartbeat interval. |
 | `HeartbeatTimeoutSeconds` | `30` | Server-side context lifetime without a successful heartbeat. Must be at least twice the interval. Expiry is evaluated on context operations, not by a background timer. |
 | `HeartbeatFailureLimit` | `3` | Consecutive failed browser heartbeats before the page blanks itself. |
-| `MaxPendingHandoffs` | `100` | Process-local pending-hand-off capacity. Full store returns `429`. |
+| `MaxPendingHandoffs` | `100` | Process-local capacity for all hand-off entries, including payload-free redeemed, ended and expired tombstones. Full store returns `429`. Tombstones are pruned five minutes after the one-time-key TTL expires. |
 | `MaxFieldCount` | `64` | Maximum total form values, including repeated names. |
 | `MaxTotalFormBytes` | `65536` | Maximum form body size, including chunked requests where the server supports the per-request limit. |
 | `MaxFieldValueLength` | `8192` | Maximum characters in one form value. |
@@ -90,6 +90,8 @@ The ordinary `Portal`, `OmpAuth`, `ConnectionStrings`, `OmpTime` and `NLog` sect
 The guard page calls `POST {PathBase}/context/{contextId}/heartbeat`. A superseded or ended answer, or the configured number of consecutive failures, makes the page navigate the iframe to `about:blank`, remove it and the delivery form, clear the in-page context/antiforgery values, show a neutral message and call `window.close()`. Browsers normally permit `window.close()` only for script-opened windows; **blanking is the guarantee, closing is best effort**.
 
 A cooperating target can use the authenticated `GET {PathBase}/context/{contextId}/state` endpoint. It returns `current`, `superseded` or `ended`. Both state and heartbeat verify that the authenticated OMP user owns the context; another user's id is not disclosed. The target must preserve the OMP cookie and same-origin/CORS rules itself. The authoritative refusal is server-side, not the iframe JavaScript.
+
+Superseded and ended context metadata is retained for three `HeartbeatTimeoutSeconds` periods so an existing guard page can still learn its terminal state. Store maintenance runs at most once per `HeartbeatTimeoutSeconds` period, while the requested context is checked for timeout on every state or heartbeat operation. After retention, the id returns `ended` without context metadata; it never becomes `current` again.
 
 In `redirect` mode the browser leaves the module, so the module cannot blank or close the target. Heartbeat and state still refuse superseded ids for a cooperating target.
 

@@ -65,5 +65,22 @@ public sealed class InMemoryContextStoreTests
         Assert.Equal(ContextLifecycle.Ended, _store.GetState(second.ContextId, 8, Timeout).State);
     }
 
+    [Fact]
+    public void SupersededContext_IsPrunedAfterRetentionAndStillReturnsEnded()
+    {
+        var first = Create();
+        Create();
+
+        var retained = _store.GetState(first.ContextId, 7, Timeout);
+        Assert.Equal(ContextLifecycle.Superseded, retained.State);
+        Assert.NotNull(retained.Context);
+
+        _time.Advance(TimeSpan.FromTicks((Timeout.Ticks * 3) + 1));
+
+        var pruned = _store.Heartbeat(first.ContextId, 7, Timeout);
+        Assert.Equal(ContextLifecycle.Ended, pruned.State);
+        Assert.Null(pruned.Context);
+    }
+
     private GuardContext Create() => _store.Create(7, "", "profile", "hash", ContextGuardScopes.User, Timeout);
 }

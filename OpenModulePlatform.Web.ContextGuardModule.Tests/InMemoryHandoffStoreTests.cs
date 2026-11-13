@@ -37,6 +37,19 @@ public sealed class InMemoryHandoffStoreTests
     }
 
     [Fact]
+    public void Redeem_WhenRedeemedKeyIsReusedAfterTtl_ReturnsAlreadyRedeemed()
+    {
+        var created = _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), 10);
+        Assert.Equal(HandoffRedemptionStatus.Success, _store.Redeem(created.Key!).Status);
+        _time.Advance(TimeSpan.FromSeconds(61));
+
+        var result = _store.Redeem(created.Key!);
+
+        Assert.Equal(HandoffRedemptionStatus.AlreadyRedeemed, result.Status);
+        Assert.Null(result.Payload);
+    }
+
+    [Fact]
     public void Create_WhenCapacityIsFull_ReturnsCapacityExceeded()
     {
         var first = _store.Create("profile", "hash-1", Fields(), 0, TimeSpan.FromSeconds(60), 1);
@@ -58,6 +71,18 @@ public sealed class InMemoryHandoffStoreTests
         Assert.Equal(1, ended);
         Assert.Equal(HandoffRedemptionStatus.Ended, redemption.Status);
         Assert.Null(redemption.Payload);
+    }
+
+    [Fact]
+    public void Create_WhenEndedTombstoneFillsCapacity_ReturnsCapacityExceeded()
+    {
+        var first = _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), 1);
+        Assert.Equal(1, _store.EndByCorrelation("profile", "hash"));
+
+        var second = _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), 1);
+
+        Assert.Equal(HandoffCreateStatus.CapacityExceeded, second.Status);
+        Assert.Null(second.Key);
     }
 
     private static ContextGuardField[] Fields() => [new("allowed", "allowed-value")];

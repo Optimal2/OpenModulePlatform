@@ -124,7 +124,13 @@ public sealed class ContextGuardService(
         var found = options.CurrentValue.Profiles.TryGetValue(profileKey, out var configured);
         if (!found)
         {
-            logger.LogWarning("Context Guard rejected an unknown profile. ProfileKey={ProfileKey}", profileKey);
+            var logProfileKey = ContextGuardOptionsValidator.IsValidProfileKey(profileKey)
+                ? profileKey
+                : "<invalid>";
+            logger.LogWarning(
+                "Context Guard rejected an unknown profile. ProfileKey={ProfileKey}, ProfileKeyLength={ProfileKeyLength}",
+                logProfileKey,
+                profileKey.Length);
         }
 
         profile = configured;

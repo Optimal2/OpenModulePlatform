@@ -5,9 +5,13 @@ namespace OpenModulePlatform.Web.ContextGuardModule.Stores;
 
 public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextStore
 {
+    private const int RetentionTimeoutPeriods = 3;
     private readonly object _gate = new();
     private readonly Dictionary<Guid, GuardContext> _contexts = [];
+    private readonly Dictionary<Guid, DateTimeOffset> _retiredAt = [];
     private readonly Dictionary<string, Guid> _currentByOwner = new(StringComparer.Ordinal);
+    private readonly Dictionary<Guid, string> _ownerByContext = [];
+    private DateTimeOffset _nextMaintenanceUtc = DateTimeOffset.MinValue;
 
     public GuardContext Create(
         int userId,
@@ -20,12 +24,15 @@ public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextSt
         lock (_gate)
         {
             var now = timeProvider.GetUtcNow();
-            ExpireTimedOutCore(now, heartbeatTimeout);
+            RunMaintenanceCore(now, heartbeatTimeout);
             var ownerKey = OwnerKey(userId, clientId, scope);
             if (_currentByOwner.TryGetValue(ownerKey, out var previousId)
                 && _contexts.TryGetValue(previousId, out var previous))
             {
-                _contexts[previousId] = previous with { Lifecycle = ContextLifecycle.Superseded };
+                var lifecycle = now - previous.LastHeartbeatUtc > heartbeatTimeout
+                    ? ContextLifecycle.Ended
+                    : ContextLifecycle.Superseded;
+                RetireCore(previous, lifecycle, now);
             }
 
             var context = new GuardContext(
@@ -33,6 +40,7 @@ public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextSt
                 now, now, ContextLifecycle.Current);
             _contexts[context.ContextId] = context;
             _currentByOwner[ownerKey] = context.ContextId;
+            _ownerByContext[context.ContextId] = ownerKey;
             return context;
         }
     }
@@ -41,10 +49,11 @@ public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextSt
     {
         lock (_gate)
         {
-            var result = GetStateCore(contextId, userId, timeProvider.GetUtcNow(), heartbeatTimeout);
+            var now = timeProvider.GetUtcNow();
+            var result = GetStateCore(contextId, userId, now, heartbeatTimeout);
             if (result.State == ContextLifecycle.Current && result.Context is not null)
             {
-                var updated = result.Context with { LastHeartbeatUtc = timeProvider.GetUtcNow() };
+                var updated = result.Context with { LastHeartbeatUtc = now };
                 _contexts[contextId] = updated;
                 return new ContextStateResult(ContextLifecycle.Current, updated);
             }
@@ -65,8 +74,9 @@ public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextSt
     {
         lock (_gate)
         {
+            var now = timeProvider.GetUtcNow();
             var ended = 0;
-            foreach (var (contextId, context) in _contexts.ToArray())
+            foreach (var (_, context) in _contexts.ToArray())
             {
                 if (context.Lifecycle != ContextLifecycle.Current
                     || !string.Equals(context.ProfileKey, profileKey, StringComparison.OrdinalIgnoreCase)
@@ -75,8 +85,7 @@ public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextSt
                     continue;
                 }
 
-                _contexts[contextId] = context with { Lifecycle = ContextLifecycle.Ended };
-                RemoveCurrentMappingCore(context);
+                RetireCore(context, ContextLifecycle.Ended, now);
                 ended++;
             }
 
@@ -90,38 +99,68 @@ public sealed class InMemoryContextStore(TimeProvider timeProvider) : IContextSt
         DateTimeOffset now,
         TimeSpan heartbeatTimeout)
     {
-        ExpireTimedOutCore(now, heartbeatTimeout);
+        RunMaintenanceCore(now, heartbeatTimeout);
         if (!_contexts.TryGetValue(contextId, out var context) || context.UserId != userId)
         {
             return new ContextStateResult(ContextLifecycle.Ended, null);
         }
 
+        if (context.Lifecycle == ContextLifecycle.Current
+            && now - context.LastHeartbeatUtc > heartbeatTimeout)
+        {
+            context = RetireCore(context, ContextLifecycle.Ended, now);
+        }
+
         return new ContextStateResult(context.Lifecycle, context);
     }
 
-    private void ExpireTimedOutCore(DateTimeOffset now, TimeSpan heartbeatTimeout)
+    private void RunMaintenanceCore(DateTimeOffset now, TimeSpan heartbeatTimeout)
     {
+        if (now < _nextMaintenanceUtc)
+        {
+            return;
+        }
+
+        _nextMaintenanceUtc = now.Add(heartbeatTimeout);
+        var retention = TimeSpan.FromTicks(heartbeatTimeout.Ticks * RetentionTimeoutPeriods);
         foreach (var (contextId, context) in _contexts.ToArray())
         {
-            if (context.Lifecycle != ContextLifecycle.Current
-                || now - context.LastHeartbeatUtc <= heartbeatTimeout)
+            if (context.Lifecycle == ContextLifecycle.Current)
             {
+                if (now - context.LastHeartbeatUtc > heartbeatTimeout)
+                {
+                    RetireCore(context, ContextLifecycle.Ended, now);
+                }
+
                 continue;
             }
 
-            _contexts[contextId] = context with { Lifecycle = ContextLifecycle.Ended };
-            RemoveCurrentMappingCore(context);
+            if (_retiredAt.TryGetValue(contextId, out var retiredAt)
+                && now - retiredAt >= retention)
+            {
+                _contexts.Remove(contextId);
+                _retiredAt.Remove(contextId);
+                _ownerByContext.Remove(contextId);
+            }
         }
+    }
+
+    private GuardContext RetireCore(GuardContext context, ContextLifecycle lifecycle, DateTimeOffset now)
+    {
+        var retired = context with { Lifecycle = lifecycle };
+        _contexts[context.ContextId] = retired;
+        _retiredAt[context.ContextId] = now;
+        RemoveCurrentMappingCore(context);
+        return retired;
     }
 
     private void RemoveCurrentMappingCore(GuardContext context)
     {
-        foreach (var (ownerKey, contextId) in _currentByOwner.ToArray())
+        if (_ownerByContext.Remove(context.ContextId, out var ownerKey)
+            && _currentByOwner.TryGetValue(ownerKey, out var currentId)
+            && currentId == context.ContextId)
         {
-            if (contextId == context.ContextId)
-            {
-                _currentByOwner.Remove(ownerKey);
-            }
+            _currentByOwner.Remove(ownerKey);
         }
     }
 
