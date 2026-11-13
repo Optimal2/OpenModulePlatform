@@ -99,7 +99,9 @@ foreach ($name in 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'
     if (Test-Path "Env:$name") { Remove-Item "Env:$name" }
 }
 
-& $localCi
+# Optional browser gate for jobs that must prove the post-version tree before
+# integration, without making every ordinary push download/run Chromium.
+& $localCi -IncludeUi:($env:OMP_LOCAL_CI_INCLUDE_UI -eq '1')
 $code = $LASTEXITCODE
 
 if ($code -ne 0) {
