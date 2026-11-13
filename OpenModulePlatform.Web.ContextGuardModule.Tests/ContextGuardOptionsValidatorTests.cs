@@ -34,6 +34,61 @@ public sealed class ContextGuardOptionsValidatorTests
         Assert.False(new ContextGuardOptionsValidator().Validate(null, options).Succeeded);
     }
 
+    [Fact]
+    public void Validate_WithWeakEndCorrelationAndNoAcknowledgement_Fails()
+    {
+        var options = ValidOptions();
+        options.Profiles["profile"].MinCorrelationLength = 4;
+
+        var result = new ContextGuardOptionsValidator().Validate(null, options);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("AllowWeakEndCorrelation", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_WithWeakEndCorrelationAcknowledged_Succeeds()
+    {
+        var options = ValidOptions();
+        options.Profiles["profile"].MinCorrelationLength = 4;
+        options.Profiles["profile"].AllowWeakEndCorrelation = true;
+
+        Assert.True(new ContextGuardOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
+    public void Validate_WithEndDisabled_AcceptsShortMinimumWithoutAcknowledgement()
+    {
+        var options = ValidOptions();
+        options.Profiles["profile"].EndEnabled = false;
+        options.Profiles["profile"].MinCorrelationLength = 4;
+
+        Assert.True(new ContextGuardOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
+    public void Validate_WithSecretWhileEndDisabled_Fails()
+    {
+        var options = ValidOptions();
+        options.Profiles["profile"].EndEnabled = false;
+        options.Profiles["profile"].EndSecret = "shared-secret";
+
+        var result = new ContextGuardOptionsValidator().Validate(null, options);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validate_WithNonPositiveRateLimit_Fails(int permits)
+    {
+        var options = ValidOptions();
+        options.ReceiveMaxRequestsPerWindow = permits;
+
+        Assert.False(new ContextGuardOptionsValidator().Validate(null, options).Succeeded);
+    }
+
     private static ContextGuardOptions ValidOptions() => new()
     {
         Profiles = new Dictionary<string, ContextGuardProfileOptions>(StringComparer.OrdinalIgnoreCase)

@@ -13,9 +13,13 @@ public sealed partial class ContextGuardOptionsValidator : IValidateOptions<Cont
         ValidateRange(options.HeartbeatTimeoutSeconds, 1, 3600, "HeartbeatTimeoutSeconds", errors);
         ValidateRange(options.HeartbeatFailureLimit, 1, 100, "HeartbeatFailureLimit", errors);
         ValidateRange(options.MaxPendingHandoffs, 1, 100_000, "MaxPendingHandoffs", errors);
+        ValidateRange(options.MaxHandoffTombstones, 1, 100_000, "MaxHandoffTombstones", errors);
         ValidateRange(options.MaxFieldCount, 1, 1000, "MaxFieldCount", errors);
         ValidateRange(options.MaxTotalFormBytes, 128, 1_048_576, "MaxTotalFormBytes", errors);
         ValidateRange(options.MaxFieldValueLength, 1, 100_000, "MaxFieldValueLength", errors);
+        ValidateRange(options.AnonymousRateLimitWindowSeconds, 1, 3600, "AnonymousRateLimitWindowSeconds", errors);
+        ValidateRange(options.ReceiveMaxRequestsPerWindow, 1, 100_000, "ReceiveMaxRequestsPerWindow", errors);
+        ValidateRange(options.EndMaxRequestsPerWindow, 1, 100_000, "EndMaxRequestsPerWindow", errors);
 
         if (options.HeartbeatTimeoutSeconds < options.HeartbeatIntervalSeconds * 2)
         {
@@ -82,6 +86,24 @@ public sealed partial class ContextGuardOptionsValidator : IValidateOptions<Cont
                 || host.Contains('/') || host.Contains(':') || host.Contains('@')))
             {
                 errors.Add($"Profile '{profileKey}' AllowedOriginHosts entries must be host names without scheme, port or path.");
+            }
+
+            ValidateRange(profile.MinCorrelationLength, 1, 512, $"Profiles:{profileKey}:MinCorrelationLength", errors);
+            if (profile.EndSecret.Length > 512)
+            {
+                errors.Add($"Profile '{profileKey}' EndSecret must be at most 512 characters.");
+            }
+
+            if (profile.EndEnabled
+                && profile.MinCorrelationLength < ContextGuardProfileOptions.DefaultMinCorrelationLength
+                && !profile.AllowWeakEndCorrelation)
+            {
+                errors.Add($"Profile '{profileKey}' enables the anonymous end endpoint with MinCorrelationLength {profile.MinCorrelationLength}, below the safe default {ContextGuardProfileOptions.DefaultMinCorrelationLength}. Short sequential case numbers are guessable end keys. Raise MinCorrelationLength, configure EndSecret, disable the endpoint with EndEnabled=false, or set AllowWeakEndCorrelation=true to acknowledge the weaker setting explicitly.");
+            }
+
+            if (!profile.EndEnabled && !string.IsNullOrEmpty(profile.EndSecret))
+            {
+                errors.Add($"Profile '{profileKey}' sets EndSecret while EndEnabled is false, so the secret has no effect. Remove the secret or enable the endpoint.");
             }
         }
 

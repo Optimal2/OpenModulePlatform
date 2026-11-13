@@ -16,6 +16,13 @@ public sealed class ShowModel(
 {
     public const string ClientCookieName = ".omp-context-guard-client";
 
+    /// <summary>
+    /// Short-lived, HttpOnly, path-scoped cookie that parks the one-time hand-off
+    /// key between the anonymous receive redirect and the authenticated guard page,
+    /// so the key never travels in the login returnUrl or browser history.
+    /// </summary>
+    public const string HandoffKeyCookieName = ".omp-context-guard-handoff";
+
     public GuardPageModel? Guard { get; private set; }
     public HandoffRedemptionStatus? Error { get; private set; }
     public string HeartbeatUrl { get; private set; } = string.Empty;
@@ -31,13 +38,27 @@ public sealed class ShowModel(
             return Forbid();
         }
 
-        if (string.IsNullOrWhiteSpace(k))
+        // The parked cookie is primary: the receive endpoint no longer emits the
+        // key in any URL. The query form is only a fallback for parked keys lost
+        // between receive and login (for example cleared cookies). A browser that
+        // refuses cookies cannot log in, so no cookie-less end-to-end flow exists.
+        var parked = Request.Cookies.TryGetValue(HandoffKeyCookieName, out var parkedKey)
+            && !string.IsNullOrWhiteSpace(parkedKey)
+            ? parkedKey
+            : null;
+        if (parked is not null)
+        {
+            DeleteHandoffKeyCookie();
+        }
+
+        var key = parked ?? k;
+        if (string.IsNullOrWhiteSpace(key))
         {
             Error = HandoffRedemptionStatus.Unknown;
             return Page();
         }
 
-        var result = service.Redeem(k, userId, ResolveClientId());
+        var result = service.Redeem(key, userId, ResolveClientId());
         if (result.Status != HandoffRedemptionStatus.Success || result.Redeemed is null)
         {
             Error = result.Status;
@@ -58,6 +79,17 @@ public sealed class ShowModel(
         HeartbeatUrl = Url.Content($"~/context/{context.ContextId}/heartbeat");
         AntiforgeryToken = antiforgery.GetAndStoreTokens(HttpContext).RequestToken ?? string.Empty;
         return Page();
+    }
+
+    private void DeleteHandoffKeyCookie()
+    {
+        Response.Cookies.Delete(HandoffKeyCookieName, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Path = Request.PathBase.HasValue ? Request.PathBase.Value + "/show" : "/show"
+        });
     }
 
     private string ResolveClientId()

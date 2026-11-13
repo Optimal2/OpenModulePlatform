@@ -74,6 +74,86 @@ public sealed class ContextGuardServiceTests
         Assert.Contains($"ProfileKeyLength={unsafeKey.Length}", message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CheckEndAllowed_WithDisabledEndpoint_RefusesWithoutReadingSecret()
+    {
+        var profile = EndProfile(endEnabled: false);
+
+        Assert.Equal(EndRequestStatus.EndDisabled,
+            ContextGuardService.CheckEndAllowed(profile, "long-enough-correlation-value", "wrong-secret"));
+    }
+
+    [Fact]
+    public void CheckEndAllowed_WithShortCorrelation_RefusesBeforeSecretCheck()
+    {
+        var profile = EndProfile();
+
+        Assert.Equal(EndRequestStatus.CorrelationTooShort,
+            ContextGuardService.CheckEndAllowed(profile, "short", profile.EndSecret));
+    }
+
+    [Fact]
+    public void CheckEndAllowed_WithSecret_AcceptsOnlyExactMatch()
+    {
+        var profile = EndProfile();
+
+        Assert.Equal(EndRequestStatus.Allowed,
+            ContextGuardService.CheckEndAllowed(profile, "long-enough-correlation-value", "shared-secret-value"));
+        Assert.Equal(EndRequestStatus.InvalidSecret,
+            ContextGuardService.CheckEndAllowed(profile, "long-enough-correlation-value", "wrong-secret"));
+        Assert.Equal(EndRequestStatus.InvalidSecret,
+            ContextGuardService.CheckEndAllowed(profile, "long-enough-correlation-value", null));
+    }
+
+    [Fact]
+    public void CheckEndAllowed_WithoutConfiguredSecret_AllowsAnyPresenter()
+    {
+        var profile = EndProfile();
+        profile.EndSecret = string.Empty;
+
+        Assert.Equal(EndRequestStatus.Allowed,
+            ContextGuardService.CheckEndAllowed(profile, "long-enough-correlation-value", "anything"));
+    }
+
+    [Fact]
+    public void LogInvalidEndSecret_NeverWritesSecretValuesToLogs()
+    {
+        const string configuredSecret = "configured-end-secret-must-not-leak";
+        const string presentedSecret = "presented-end-secret-must-not-leak";
+        var time = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var logs = new CapturedLogger();
+        var options = new ContextGuardOptions
+        {
+            Profiles = new Dictionary<string, ContextGuardProfileOptions>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["profile"] = EndProfile()
+            }
+        };
+        options.Profiles["profile"].EndSecret = configuredSecret;
+        var service = new ContextGuardService(
+            new InMemoryHandoffStore(time),
+            new InMemoryContextStore(time),
+            new FakeOptionsMonitor(options),
+            logs);
+
+        Assert.Equal(EndRequestStatus.InvalidSecret,
+            ContextGuardService.CheckEndAllowed(options.Profiles["profile"], "long-enough-correlation-value", presentedSecret));
+        service.LogInvalidEndSecret("profile");
+
+        Assert.NotEmpty(logs.Messages);
+        Assert.DoesNotContain(logs.Messages, message => message.Contains(configuredSecret, StringComparison.Ordinal));
+        Assert.DoesNotContain(logs.Messages, message => message.Contains(presentedSecret, StringComparison.Ordinal));
+    }
+
+    private static ContextGuardProfileOptions EndProfile(bool endEnabled = true) => new()
+    {
+        TargetUrl = "https://target.example/result",
+        AllowedFieldNames = ["correlation"],
+        CorrelationFieldName = "correlation",
+        EndEnabled = endEnabled,
+        EndSecret = "shared-secret-value"
+    };
+
     private sealed class FakeOptionsMonitor(ContextGuardOptions value) : IOptionsMonitor<ContextGuardOptions>
     {
         public ContextGuardOptions CurrentValue => value;

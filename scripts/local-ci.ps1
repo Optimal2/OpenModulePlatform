@@ -286,7 +286,7 @@ try {
                     $uiFilter = 'FullyQualifiedName~ModuleFragmentAuthorizationTests|FullyQualifiedName~ContentEditorRoundTripTests|FullyQualifiedName~ContextGuardModuleTests'
                     dotnet test $uiProject --configuration Release --nologo -v q --no-build --filter $uiFilter --logger 'trx;LogFileName=BrowserUi.trx' --results-directory $uiResults
                     if ($LASTEXITCODE -ne 0) { throw "Browser UI tests failed ($LASTEXITCODE)" }
-                    & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $uiResults -SuiteName 'Browser UI' -ShowSkipReasons -RequirePerFile -MinimumTrxFiles 1
+                    & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $uiResults -SuiteName 'Browser UI' -ShowSkipReasons -RequirePerFile -MinimumTrxFiles 1 -RequireTestClassPrefix 'OpenModulePlatform.UiTests.ContextGuardModuleTests' -MinimumClassExecuted 17
                     if ($LASTEXITCODE -ne 0) { throw "Browser UI zero-execution gate failed ($LASTEXITCODE)" }
                 }
                 finally {

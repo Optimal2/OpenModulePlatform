@@ -5,10 +5,8 @@ namespace OpenModulePlatform.Web.ContextGuardModule.Stores;
 
 public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffStore
 {
-    private const int TombstoneCapacityFactor = 2;
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-    private long _nextTombstoneSequence;
 
     public HandoffCreateResult Create(
         string profileKey,
@@ -16,34 +14,35 @@ public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffSt
         IReadOnlyList<ContextGuardField> fields,
         int droppedFieldCount,
         TimeSpan ttl,
-        int capacity)
+        int pendingCapacity,
+        int tombstoneCapacity)
     {
         lock (_gate)
         {
             var now = timeProvider.GetUtcNow();
-            PruneExpiredCore(now);
-            var pendingCount = _entries.Values.Count(entry => entry.State == HandoffEntryState.Pending);
-            if (pendingCount >= capacity)
+            PruneExpiredCore(now, tombstoneCapacity);
+            var pendingCount = 0;
+            foreach (var entry in _entries.Values)
+            {
+                if (entry.Payload is not null)
+                {
+                    pendingCount++;
+                }
+            }
+
+            if (pendingCount >= pendingCapacity)
             {
                 return new HandoffCreateResult(HandoffCreateStatus.CapacityExceeded, null, droppedFieldCount);
             }
 
-            // Leave room for the new pending entry while retaining at most 2x capacity tombstones.
-            var tombstoneCount = _entries.Count - pendingCount;
-            var tombstoneLimit = (long)capacity * TombstoneCapacityFactor;
-            while (tombstoneCount >= tombstoneLimit && EvictOldestTombstoneCore())
-            {
-                tombstoneCount--;
-            }
-
             var key = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
             var payload = new HandoffPayload(profileKey, correlationHash, fields.ToArray());
-            _entries.Add(key, new Entry(payload, now.Add(ttl)));
+            _entries.Add(key, new Entry(payload, now.Add(ttl), TerminalState.Pending, null));
             return new HandoffCreateResult(HandoffCreateStatus.Created, key, droppedFieldCount);
         }
     }
 
-    public HandoffRedemption Redeem(string key)
+    public HandoffRedemption Redeem(string key, int tombstoneCapacity)
     {
         lock (_gate)
         {
@@ -52,52 +51,56 @@ public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffSt
                 return new HandoffRedemption(HandoffRedemptionStatus.Unknown, null);
             }
 
-            if (entry.State == HandoffEntryState.Ended)
+            switch (entry.State)
             {
-                return new HandoffRedemption(HandoffRedemptionStatus.Ended, null);
+                case TerminalState.Ended:
+                    return new HandoffRedemption(HandoffRedemptionStatus.Ended, null);
+                case TerminalState.Redeemed:
+                    return new HandoffRedemption(HandoffRedemptionStatus.AlreadyRedeemed, null);
+                case TerminalState.Expired:
+                    return new HandoffRedemption(HandoffRedemptionStatus.Expired, null);
             }
 
-            if (entry.State == HandoffEntryState.Redeemed)
+            var now = timeProvider.GetUtcNow();
+            if (entry.ExpiresUtc <= now)
             {
-                return new HandoffRedemption(HandoffRedemptionStatus.AlreadyRedeemed, null);
-            }
-
-            if (entry.State == HandoffEntryState.Expired)
-            {
+                RetireCore(entry, TerminalState.Expired, now);
+                EnforceTombstoneCapCore(tombstoneCapacity);
                 return new HandoffRedemption(HandoffRedemptionStatus.Expired, null);
             }
 
-            if (entry.ExpiresUtc <= timeProvider.GetUtcNow())
-            {
-                MarkTombstone(entry, HandoffEntryState.Expired);
-                return new HandoffRedemption(HandoffRedemptionStatus.Expired, null);
-            }
-
-            var payload = entry.Payload!;
-            MarkTombstone(entry, HandoffEntryState.Redeemed);
+            var payload = entry.Payload;
+            RetireCore(entry, TerminalState.Redeemed, now);
+            EnforceTombstoneCapCore(tombstoneCapacity);
             return new HandoffRedemption(HandoffRedemptionStatus.Success, payload);
         }
     }
 
-    public int EndByCorrelation(string profileKey, string correlationHash)
+    public int EndByCorrelation(string profileKey, string correlationHash, int tombstoneCapacity)
     {
         lock (_gate)
         {
+            var now = timeProvider.GetUtcNow();
             var ended = 0;
             foreach (var entry in _entries.Values.Where(entry =>
-                         entry.State == HandoffEntryState.Pending
-                         && string.Equals(entry.Payload!.ProfileKey, profileKey, StringComparison.OrdinalIgnoreCase)
+                         entry.Payload is not null
+                         && string.Equals(entry.Payload.ProfileKey, profileKey, StringComparison.OrdinalIgnoreCase)
                          && string.Equals(entry.Payload.CorrelationHash, correlationHash, StringComparison.Ordinal)))
             {
-                MarkTombstone(entry, HandoffEntryState.Ended);
+                RetireCore(entry, TerminalState.Ended, now);
                 ended++;
+            }
+
+            if (ended > 0)
+            {
+                EnforceTombstoneCapCore(tombstoneCapacity);
             }
 
             return ended;
         }
     }
 
-    private void PruneExpiredCore(DateTimeOffset now)
+    private void PruneExpiredCore(DateTimeOffset now, int tombstoneCapacity)
     {
         foreach (var (key, entry) in _entries.ToArray())
         {
@@ -105,42 +108,50 @@ public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffSt
             {
                 _entries.Remove(key);
             }
-            else if (entry.State == HandoffEntryState.Pending && entry.ExpiresUtc <= now)
+            else if (entry.ExpiresUtc <= now && entry.State == TerminalState.Pending)
             {
                 // Keep a short payload-free tombstone so expiry is distinguishable from reuse.
-                MarkTombstone(entry, HandoffEntryState.Expired);
+                RetireCore(entry, TerminalState.Expired, now);
             }
+        }
+
+        EnforceTombstoneCapCore(tombstoneCapacity);
+    }
+
+    private void EnforceTombstoneCapCore(int tombstoneCapacity)
+    {
+        var tombstoneKeys = _entries
+            .Where(kvp => kvp.Value.Payload is null)
+            .OrderBy(kvp => kvp.Value.RetiredUtc ?? DateTimeOffset.MaxValue)
+            .ThenBy(kvp => kvp.Key, StringComparer.Ordinal)
+            .Select(kvp => kvp.Key)
+            .ToArray();
+        foreach (var key in tombstoneKeys.Take(Math.Max(0, tombstoneKeys.Length - tombstoneCapacity)))
+        {
+            _entries.Remove(key);
         }
     }
 
-    private void MarkTombstone(Entry entry, HandoffEntryState state)
+    private static void RetireCore(Entry entry, TerminalState state, DateTimeOffset now)
     {
         entry.Payload = null;
         entry.State = state;
-        entry.TombstoneSequence = ++_nextTombstoneSequence;
+        entry.RetiredUtc = now;
     }
 
-    private bool EvictOldestTombstoneCore()
+    private sealed class Entry(HandoffPayload? payload, DateTimeOffset expiresUtc, TerminalState state, DateTimeOffset? retiredUtc)
     {
-        var oldest = _entries
-            .Where(pair => pair.Value.State != HandoffEntryState.Pending)
-            .MinBy(pair => pair.Value.TombstoneSequence);
-        return oldest.Value is not null && _entries.Remove(oldest.Key);
+        public HandoffPayload? Payload { get; set; } = payload;
+        public DateTimeOffset ExpiresUtc { get; } = expiresUtc;
+        public TerminalState State { get; set; } = state;
+        public DateTimeOffset? RetiredUtc { get; set; } = retiredUtc;
     }
 
-    private enum HandoffEntryState
+    private enum TerminalState
     {
         Pending,
         Redeemed,
         Expired,
         Ended
-    }
-
-    private sealed class Entry(HandoffPayload payload, DateTimeOffset expiresUtc)
-    {
-        public HandoffPayload? Payload { get; set; } = payload;
-        public DateTimeOffset ExpiresUtc { get; } = expiresUtc;
-        public HandoffEntryState State { get; set; } = HandoffEntryState.Pending;
-        public long TombstoneSequence { get; set; }
     }
 }

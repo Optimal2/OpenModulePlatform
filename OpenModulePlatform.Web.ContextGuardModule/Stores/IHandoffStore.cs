@@ -10,9 +10,10 @@ public interface IHandoffStore
         IReadOnlyList<ContextGuardField> fields,
         int droppedFieldCount,
         TimeSpan ttl,
-        int capacity);
+        int pendingCapacity,
+        int tombstoneCapacity);
 
-    HandoffRedemption Redeem(string key);
+    HandoffRedemption Redeem(string key, int tombstoneCapacity);
 
-    int EndByCorrelation(string profileKey, string correlationHash);
+    int EndByCorrelation(string profileKey, string correlationHash, int tombstoneCapacity);
 }

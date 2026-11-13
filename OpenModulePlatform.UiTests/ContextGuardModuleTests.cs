@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 using OpenModulePlatform.TestSupport.Ui;
 using OpenModulePlatform.Web.ContextGuardModule.Hosting;
+using OpenModulePlatform.Web.ContextGuardModule.Pages;
 using OpenModulePlatform.Web.ContextGuardModule.Localization;
 using OpenModulePlatform.Web.ContextGuardModule.Options;
 using OpenModulePlatform.Web.Shared.Extensions;
@@ -96,17 +97,246 @@ public sealed class ContextGuardModuleTests
         await using var context = await browser.NewContextAsync();
         var page = await OpenHandoffAsync(context, host, "case-d-first");
 
-        var usedKey = await CreateHandoffKeyAsync(context, host, "case-d-redeemed");
-        await page.GotoAsync(host.AppAddress + usedKey);
-        await page.GotoAsync(host.AppAddress + usedKey);
+        var (redeemedPath, redeemedKey) = await ParkHandoffKeyAsync(context, host, "case-d-redeemed");
+        await page.GotoAsync(host.AppAddress + redeemedPath);
+        // The first visit consumes the parked cookie, so park the same key
+        // again: a genuine reuse must report AlreadyRedeemed, not Unknown.
+        await context.AddCookiesAsync([new Cookie
+        {
+            Name = ShowModel.HandoffKeyCookieName,
+            Value = redeemedKey,
+            Domain = new Uri(host.AppAddress).Host,
+            Path = "/guard/show"
+        }]);
+        await page.GotoAsync(host.AppAddress + redeemedPath);
         await page.Locator("[data-testid='handoff-error'][data-outcome='AlreadyRedeemed']").WaitForAsync();
 
         await using var expiredHost = await ContextGuardTestHost.StartAsync(handoffTtlSeconds: 1);
         await context.APIRequest.GetAsync(expiredHost.GuardUrl + "/auth/login?returnUrl=%2Fguard%2Fshow");
-        var expiredKey = await CreateHandoffKeyAsync(context, expiredHost, "case-d-expired");
+        var (expiredPath, _) = await ParkHandoffKeyAsync(context, expiredHost, "case-d-expired");
         await Task.Delay(1100);
-        await page.GotoAsync(expiredHost.AppAddress + expiredKey);
+        await page.GotoAsync(expiredHost.AppAddress + expiredPath);
         await page.Locator("[data-testid='handoff-error'][data-outcome='Expired']").WaitForAsync();
+    }
+
+    [Fact]
+    public async Task Handoff_key_never_appears_in_browser_urls()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        await using var browser = await LaunchBrowserAsync();
+        await using var context = await browser.NewContextAsync();
+        var seenUrls = new List<string>();
+
+        var page = await OpenHandoffAsync(context, host, "case-url-check", seenUrls);
+
+        Assert.DoesNotContain("k=", page.Url, StringComparison.Ordinal);
+        Assert.DoesNotContain(seenUrls, url => url.Contains("k=", StringComparison.Ordinal));
+        Assert.Equal("case-url-check", await page.GetByTestId("correlation-value").TextContentAsync());
+    }
+
+    [Fact]
+    public async Task Field_value_with_markup_and_script_is_rendered_inert()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        await using var browser = await LaunchBrowserAsync();
+        await using var context = await browser.NewContextAsync();
+        const string payload = """</strong><script>window.__pwned=true</script><img src="x" onerror="window.__pwned=true">""";
+        var dialogSeen = false;
+
+        var page = await OpenHandoffAsync(context, host, payload, onPage: p =>
+        {
+            p.Dialog += (_, _) => { dialogSeen = true; };
+        });
+
+        Assert.Equal(payload, await page.GetByTestId("correlation-value").TextContentAsync());
+        Assert.False(await page.EvaluateAsync<bool>("window.__pwned === true"));
+        Assert.False(dialogSeen);
+        var frame = page.FrameLocator("iframe[name='context-target']");
+        Assert.Equal(payload, await frame.GetByTestId("received-correlation").TextContentAsync());
+        var targetFrame = page.Frame(name: "context-target");
+        Assert.NotNull(targetFrame);
+        Assert.False(await targetFrame.EvaluateAsync<bool>("window.__pwned === true"));
+    }
+
+    [Fact]
+    public async Task Heartbeat_without_or_with_invalid_antiforgery_token_is_refused()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        await using var browser = await LaunchBrowserAsync();
+        await using var context = await browser.NewContextAsync();
+        var page = await OpenHandoffAsync(context, host, "case-token-check");
+
+        var contextId = await page.Locator("#context-guard").GetAttributeAsync("data-context-id");
+        Assert.False(string.IsNullOrWhiteSpace(contextId));
+        var missing = await context.APIRequest.PostAsync($"{host.GuardUrl}/context/{contextId}/heartbeat");
+        Assert.Equal(400, missing.Status);
+        var bogus = await context.APIRequest.PostAsync($"{host.GuardUrl}/context/{contextId}/heartbeat", new()
+        {
+            Headers = new Dictionary<string, string> { ["RequestVerificationToken"] = "bogus-token" }
+        });
+        Assert.Equal(400, bogus.Status);
+    }
+
+    [Fact]
+    public async Task End_with_short_correlation_is_refused()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var response = await client.PostAsync(
+            host.GuardUrl + "/handoff/strict/end",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["correlation"] = "short" }));
+
+        Assert.Equal(400, (int)response.StatusCode);
+    }
+
+    [Fact]
+    public async Task End_with_disabled_profile_returns_not_found()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var response = await client.PostAsync(
+            host.GuardUrl + "/handoff/closed/end",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["correlation"] = "long-correlation-value-123" }));
+
+        Assert.Equal(404, (int)response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null, 403)]
+    [InlineData("wrong-secret", 403)]
+    [InlineData("test-end-secret", 204)]
+    public async Task End_with_shared_secret_requires_exact_match(string? secret, int expectedStatus)
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        var fields = new Dictionary<string, string> { ["correlation"] = "long-correlation-value-123" };
+        if (secret is not null)
+        {
+            fields["endSecret"] = secret;
+        }
+
+        var response = await client.PostAsync(
+            host.GuardUrl + "/handoff/secret/end",
+            new FormUrlEncodedContent(fields));
+
+        Assert.Equal(expectedStatus, (int)response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Anonymous_endpoints_are_rate_limited_per_remote_address()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync(receiveRateLimit: 2, endRateLimit: 2);
+        await using var browser = await LaunchBrowserAsync();
+        await using var context = await browser.NewContextAsync();
+        var formHeaders = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "application/x-www-form-urlencoded"
+        };
+
+        var firstReceive = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/demo", new()
+        {
+            DataString = "correlation=case-rl-1",
+            Headers = formHeaders,
+            MaxRedirects = 0
+        });
+        var secondReceive = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/demo", new()
+        {
+            DataString = "correlation=case-rl-2",
+            Headers = formHeaders,
+            MaxRedirects = 0
+        });
+        var thirdReceive = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/demo", new()
+        {
+            DataString = "correlation=case-rl-3",
+            Headers = formHeaders,
+            MaxRedirects = 0
+        });
+
+        Assert.Equal(303, firstReceive.Status);
+        Assert.Equal(303, secondReceive.Status);
+        Assert.Equal(429, thirdReceive.Status);
+
+        var firstEnd = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/demo/end", new()
+        {
+            DataString = "correlation=case-rl-9",
+            Headers = formHeaders
+        });
+        var secondEnd = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/demo/end", new()
+        {
+            DataString = "correlation=case-rl-9",
+            Headers = formHeaders
+        });
+        var thirdEnd = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/demo/end", new()
+        {
+            DataString = "correlation=case-rl-9",
+            Headers = formHeaders
+        });
+
+        Assert.Equal(204, firstEnd.Status);
+        Assert.Equal(204, secondEnd.Status);
+        Assert.Equal(429, thirdEnd.Status);
+    }
+
+    [Theory]
+    [InlineData(null, 403)]
+    [InlineData("https://evil.example/path", 403)]
+    public async Task Handoff_with_disallowed_or_missing_origin_is_refused(string? origin, int expectedStatus)
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        await using var browser = await LaunchBrowserAsync();
+        await using var context = await browser.NewContextAsync();
+        var headers = new Dictionary<string, string>
+        {
+            ["Content-Type"] = "application/x-www-form-urlencoded"
+        };
+        if (origin is not null)
+        {
+            headers["Origin"] = origin;
+        }
+
+        var response = await context.APIRequest.PostAsync(host.GuardUrl + "/handoff/locked", new()
+        {
+            DataString = "correlation=case-origin-check",
+            Headers = headers
+        });
+
+        Assert.Equal(expectedStatus, response.Status);
+    }
+
+    [Fact]
+    public async Task Oversized_body_field_count_and_value_limits_are_refused()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+
+        var bigBody = await client.PostAsync(
+            host.GuardUrl + "/handoff/demo",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["correlation"] = "case-limit-body",
+                ["filler"] = new string('x', 70_000)
+            }));
+        Assert.Equal(413, (int)bigBody.StatusCode);
+
+        var manyFields = new Dictionary<string, string> { ["correlation"] = "case-limit-count" };
+        for (var i = 0; i < 70; i++)
+        {
+            manyFields[$"field-{i}"] = "v";
+        }
+
+        var tooMany = await client.PostAsync(host.GuardUrl + "/handoff/demo", new FormUrlEncodedContent(manyFields));
+        Assert.Equal(413, (int)tooMany.StatusCode);
+
+        var longValue = await client.PostAsync(
+            host.GuardUrl + "/handoff/demo",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["correlation"] = "case-limit-value",
+                ["contextReference"] = new string('y', 9000)
+            }));
+        Assert.Equal(413, (int)longValue.StatusCode);
     }
 
     [Fact]
@@ -131,9 +361,17 @@ public sealed class ContextGuardModuleTests
     private static async Task<IPage> OpenHandoffAsync(
         IBrowserContext context,
         ContextGuardTestHost host,
-        string correlation)
+        string correlation,
+        List<string>? seenUrls = null,
+        Action<IPage>? onPage = null)
     {
         var page = await context.NewPageAsync();
+        onPage?.Invoke(page);
+        if (seenUrls is not null)
+        {
+            page.Request += (_, request) => seenUrls.Add(request.Url);
+        }
+
         var caller = host.TargetUrl + "/calling-system"
             + "?action=" + Uri.EscapeDataString(host.GuardUrl + "/handoff/demo")
             + "&correlation=" + Uri.EscapeDataString(correlation);
@@ -154,7 +392,7 @@ public sealed class ContextGuardModuleTests
         return page;
     }
 
-    private static async Task<string> CreateHandoffKeyAsync(
+    private static async Task<(string ShowPath, string Key)> ParkHandoffKeyAsync(
         IBrowserContext context,
         ContextGuardTestHost host,
         string correlation)
@@ -166,7 +404,14 @@ public sealed class ContextGuardModuleTests
             MaxRedirects = 0
         });
         Assert.Equal(303, response.Status);
-        return response.Headers["location"];
+        var location = response.Headers["location"];
+        Assert.DoesNotContain("k=", location, StringComparison.Ordinal);
+        var setCookie = response.HeadersArray
+            .First(header => string.Equals(header.Name, "set-cookie", StringComparison.OrdinalIgnoreCase)).Value;
+        var pair = setCookie.Split(';', 2)[0].Split('=', 2);
+        Assert.Equal(ShowModel.HandoffKeyCookieName, pair[0]);
+        Assert.False(string.IsNullOrWhiteSpace(pair[1]));
+        return (location, pair[1]);
     }
 
     private static async Task<IBrowser> LaunchBrowserAsync()
@@ -202,7 +447,9 @@ public sealed class ContextGuardModuleTests
 
         public static async Task<ContextGuardTestHost> StartAsync(
             string scope = ContextGuardScopes.User,
-            int handoffTtlSeconds = 60)
+            int handoffTtlSeconds = 60,
+            int? receiveRateLimit = null,
+            int? endRateLimit = null)
         {
             PrepareStaticAssets();
             var targetBuilder = WebApplication.CreateBuilder();
@@ -220,7 +467,7 @@ public sealed class ContextGuardModuleTests
                 guardBuilder.WebHost.UseStaticWebAssets();
                 guardBuilder.WebHost.UseUrls("http://127.0.0.1:0");
                 var targetUrl = Address(target);
-                guardBuilder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                var values = new Dictionary<string, string?>
                 {
                     ["Portal:AllowAnonymous"] = "false",
                     ["Portal:DefaultCulture"] = "en-US",
@@ -239,8 +486,48 @@ public sealed class ContextGuardModuleTests
                     ["ContextGuard:Profiles:demo:Delivery"] = "embed",
                     ["ContextGuard:Profiles:demo:AllowedFieldNames:0"] = "correlation",
                     ["ContextGuard:Profiles:demo:AllowedFieldNames:1"] = "contextReference",
-                    ["ContextGuard:Profiles:demo:CorrelationFieldName"] = "correlation"
-                });
+                    ["ContextGuard:Profiles:demo:CorrelationFieldName"] = "correlation",
+                    ["ContextGuard:Profiles:demo:MinCorrelationLength"] = "4",
+                    ["ContextGuard:Profiles:demo:AllowWeakEndCorrelation"] = "true",
+                    ["ContextGuard:Profiles:strict:DisplayName"] = "Strict profile",
+                    ["ContextGuard:Profiles:strict:TargetUrl"] = targetUrl + "/target",
+                    ["ContextGuard:Profiles:strict:Method"] = "POST",
+                    ["ContextGuard:Profiles:strict:Delivery"] = "embed",
+                    ["ContextGuard:Profiles:strict:AllowedFieldNames:0"] = "correlation",
+                    ["ContextGuard:Profiles:strict:CorrelationFieldName"] = "correlation",
+                    ["ContextGuard:Profiles:closed:DisplayName"] = "Closed profile",
+                    ["ContextGuard:Profiles:closed:TargetUrl"] = targetUrl + "/target",
+                    ["ContextGuard:Profiles:closed:Method"] = "POST",
+                    ["ContextGuard:Profiles:closed:Delivery"] = "embed",
+                    ["ContextGuard:Profiles:closed:AllowedFieldNames:0"] = "correlation",
+                    ["ContextGuard:Profiles:closed:CorrelationFieldName"] = "correlation",
+                    ["ContextGuard:Profiles:closed:EndEnabled"] = "false",
+                    ["ContextGuard:Profiles:secret:DisplayName"] = "Secret profile",
+                    ["ContextGuard:Profiles:secret:TargetUrl"] = targetUrl + "/target",
+                    ["ContextGuard:Profiles:secret:Method"] = "POST",
+                    ["ContextGuard:Profiles:secret:Delivery"] = "embed",
+                    ["ContextGuard:Profiles:secret:AllowedFieldNames:0"] = "correlation",
+                    ["ContextGuard:Profiles:secret:CorrelationFieldName"] = "correlation",
+                    ["ContextGuard:Profiles:secret:EndSecret"] = "test-end-secret",
+                    ["ContextGuard:Profiles:locked:DisplayName"] = "Locked profile",
+                    ["ContextGuard:Profiles:locked:TargetUrl"] = targetUrl + "/target",
+                    ["ContextGuard:Profiles:locked:Method"] = "POST",
+                    ["ContextGuard:Profiles:locked:Delivery"] = "embed",
+                    ["ContextGuard:Profiles:locked:AllowedFieldNames:0"] = "correlation",
+                    ["ContextGuard:Profiles:locked:CorrelationFieldName"] = "correlation",
+                    ["ContextGuard:Profiles:locked:AllowedOriginHosts:0"] = "allowed.example"
+                };
+                if (receiveRateLimit.HasValue)
+                {
+                    values["ContextGuard:ReceiveMaxRequestsPerWindow"] = receiveRateLimit.Value.ToString();
+                }
+
+                if (endRateLimit.HasValue)
+                {
+                    values["ContextGuard:EndMaxRequestsPerWindow"] = endRateLimit.Value.ToString();
+                }
+
+                guardBuilder.Configuration.AddInMemoryCollection(values);
                 guardBuilder.AddOmpWebDefaults<ContextGuardModuleResource>(optionsSectionName: "Portal");
                 guardBuilder.Services.AddRazorPages()
                     .AddApplicationPart(typeof(ContextGuardModuleResource).Assembly);

@@ -13,7 +13,42 @@ public sealed class ContextGuardService(
     IOptionsMonitor<ContextGuardOptions> options,
     ILogger<ContextGuardService> logger)
 {
+    /// <summary>
+    /// Name of the form field that carries the caller-presented end secret.
+    /// It is read from the raw form fields so it never has to be allow-listed
+    /// for target delivery, and its value is never logged.
+    /// </summary>
+    public const string EndSecretFieldName = "endSecret";
+
     public ContextGuardOptions OptionsSnapshot => options.CurrentValue;
+
+    public static EndRequestStatus CheckEndAllowed(
+        ContextGuardProfileOptions profile,
+        string correlationValue,
+        string? presentedSecret)
+    {
+        if (!profile.EndEnabled)
+        {
+            return EndRequestStatus.EndDisabled;
+        }
+
+        if (correlationValue.Length < profile.MinCorrelationLength)
+        {
+            return EndRequestStatus.CorrelationTooShort;
+        }
+
+        if (!string.IsNullOrEmpty(profile.EndSecret))
+        {
+            var expected = SHA256.HashData(Encoding.UTF8.GetBytes(profile.EndSecret));
+            var presented = SHA256.HashData(Encoding.UTF8.GetBytes(presentedSecret ?? string.Empty));
+            if (!CryptographicOperations.FixedTimeEquals(expected, presented))
+            {
+                return EndRequestStatus.InvalidSecret;
+            }
+        }
+
+        return EndRequestStatus.Allowed;
+    }
 
     public HandoffCreateResult Receive(
         string profileKey,
@@ -28,7 +63,8 @@ public sealed class ContextGuardService(
             allowedFields,
             droppedFieldCount,
             TimeSpan.FromSeconds(options.CurrentValue.HandoffTtlSeconds),
-            options.CurrentValue.MaxPendingHandoffs);
+            options.CurrentValue.MaxPendingHandoffs,
+            options.CurrentValue.MaxHandoffTombstones);
 
         if (result.Status == HandoffCreateStatus.CapacityExceeded)
         {
@@ -51,7 +87,7 @@ public sealed class ContextGuardService(
 
     public RedeemResult Redeem(string key, int userId, string clientId)
     {
-        var redemption = handoffStore.Redeem(key);
+        var redemption = handoffStore.Redeem(key, options.CurrentValue.MaxHandoffTombstones);
         if (redemption.Status != HandoffRedemptionStatus.Success || redemption.Payload is null)
         {
             logger.LogInformation(
@@ -103,10 +139,18 @@ public sealed class ContextGuardService(
             userId,
             TimeSpan.FromSeconds(options.CurrentValue.HeartbeatTimeoutSeconds));
 
+    public void LogInvalidEndSecret(string profileKey)
+    {
+        // The presented and configured secrets are never logged; only the outcome is.
+        logger.LogWarning(
+            "Context Guard refused an end call with an invalid secret. ProfileKey={ProfileKey}",
+            profileKey);
+    }
+
     public int End(string profileKey, string correlationValue)
     {
         var hash = HashCorrelation(profileKey, correlationValue);
-        var pendingCount = handoffStore.EndByCorrelation(profileKey, hash);
+        var pendingCount = handoffStore.EndByCorrelation(profileKey, hash, options.CurrentValue.MaxHandoffTombstones);
         var contextCount = contextStore.EndByCorrelation(profileKey, hash);
         logger.LogInformation(
             "Context Guard processed end call. ProfileKey={ProfileKey}, PendingEndedCount={PendingEndedCount}, ContextEndedCount={ContextEndedCount}",
@@ -153,3 +197,11 @@ public sealed class ContextGuardService(
 public sealed record RedeemedContext(GuardContext Context, IReadOnlyList<ContextGuardField> Fields);
 
 public sealed record RedeemResult(HandoffRedemptionStatus Status, RedeemedContext? Redeemed);
+
+public enum EndRequestStatus
+{
+    Allowed,
+    EndDisabled,
+    CorrelationTooShort,
+    InvalidSecret
+}
