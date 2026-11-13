@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.1125",
+  "repositoryVersion": "0.3.1126",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -25,7 +25,7 @@
     },
     {
       "moduleKey": "context_guard",
-      "definitionVersion": "0.1.5",
+      "definitionVersion": "0.1.6",
       "path": "OpenModulePlatform.Web.ContextGuardModule/context_guard.module-definition.json"
     },
     {
@@ -230,7 +230,7 @@
       "appKey": "context_guard_webapp",
       "packageType": "web-app",
       "targetName": "context-guard",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "projectPath": "OpenModulePlatform.Web.ContextGuardModule",
       "relativePathTemplate": "context-guard/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ContextGuardModule.zip",
