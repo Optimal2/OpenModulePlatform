@@ -24,6 +24,11 @@
       "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
+      "moduleKey": "context_guard",
+      "definitionVersion": "0.1.0",
+      "path": "OpenModulePlatform.Web.ContextGuardModule/context_guard.module-definition.json"
+    },
+    {
       "moduleKey": "content_webapp",
       "definitionVersion": "0.3.256",
       "path": "OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json"
@@ -75,6 +80,7 @@
         "omp-auth-web",
         "content-webapp",
         "iframe-webapp",
+        "context-guard",
         "example-webapp",
         "example-webapp-blazor",
         "example-serviceapp-web",
@@ -216,6 +222,25 @@
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip",
       "minModuleDefinitionVersion": "0.3.222"
+    },
+    {
+      "componentKey": "context-guard",
+      "displayName": "Context Guard Module",
+      "moduleKey": "context_guard",
+      "appKey": "context_guard_webapp",
+      "packageType": "web-app",
+      "targetName": "context-guard",
+      "version": "0.1.0",
+      "projectPath": "OpenModulePlatform.Web.ContextGuardModule",
+      "relativePathTemplate": "context-guard/web/{version}",
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ContextGuardModule.zip",
+      "artifactConfigurationFiles": [
+        {
+          "relativePath": "appsettings.json",
+          "sourcePath": "OpenModulePlatform.Web.ContextGuardModule/Packaging/appsettings.json"
+        }
+      ],
+      "minModuleDefinitionVersion": "0.1.0"
     },
     {
       "componentKey": "example-webapp",

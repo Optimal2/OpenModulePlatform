@@ -1,0 +1,3 @@
+@page "/status/{statusCode:int}"
+@model OpenModulePlatform.Web.ContextGuardModule.Pages.StatusModel
+@await Component.InvokeAsync("OmpError", new { model = Model.Error })

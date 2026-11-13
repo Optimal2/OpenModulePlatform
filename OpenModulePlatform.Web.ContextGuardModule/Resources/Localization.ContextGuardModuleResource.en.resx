@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Context Guard" xml:space="preserve"><value>Context Guard</value></data>
+  <data name="Calling profile" xml:space="preserve"><value>Calling profile</value></data>
+  <data name="Correlation" xml:space="preserve"><value>Correlation</value></data>
+  <data name="Target application" xml:space="preserve"><value>Target application</value></data>
+  <data name="Opening the target application." xml:space="preserve"><value>Opening the target application.</value></data>
+  <data name="This context was replaced by a newer context." xml:space="preserve"><value>This context was replaced by a newer context.</value></data>
+  <data name="This context has ended." xml:space="preserve"><value>This context has ended.</value></data>
+  <data name="Hand-off unavailable" xml:space="preserve"><value>Hand-off unavailable</value></data>
+  <data name="This hand-off has expired. Ask the calling system to open the context again." xml:space="preserve"><value>This hand-off has expired. Ask the calling system to open the context again.</value></data>
+  <data name="This hand-off has already been used. Ask the calling system to open the context again." xml:space="preserve"><value>This hand-off has already been used. Ask the calling system to open the context again.</value></data>
+  <data name="This hand-off was ended by the calling system." xml:space="preserve"><value>This hand-off was ended by the calling system.</value></data>
+  <data name="This hand-off is unknown or invalid. Ask the calling system to open the context again." xml:space="preserve"><value>This hand-off is unknown or invalid. Ask the calling system to open the context again.</value></data>
+</root>

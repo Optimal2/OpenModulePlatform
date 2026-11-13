@@ -50,6 +50,7 @@ For repository and release work:
 - `worker-runtime-windows.md` - Windows-specific worker runtime notes.
 - `HOSTING_WINDOWS_IIS.md` - IIS hosting guidance.
 - `PUSH_EVENTS.md` - push event model for web apps, service apps, workers, and UI refresh hints.
+- `CONTEXT_GUARD_MODULE.md` - authenticated one-time hand-offs, live-context scopes, heartbeat/end behavior, settings and v1 deployment limits.
 - `CHANNEL_TYPE_RECONCILE.md` - contract and template for module-owned channel-type
   reconciliation (the generalization decided in ADR 0004).
 - `OPEN_DOC_VIEWER_EXAMPLES.md` - host-side CSP requirements for the OMP OpenDocViewer embed examples.

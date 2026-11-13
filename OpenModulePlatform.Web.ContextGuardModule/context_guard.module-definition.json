@@ -1,0 +1,76 @@
+{
+  "formatVersion": 1,
+  "moduleKey": "context_guard",
+  "definitionVersion": "0.1.0",
+  "module": {
+    "displayName": "Context Guard",
+    "moduleType": "WebAppModule",
+    "schemaName": "omp_context_guard",
+    "description": "Authenticated one-context hand-off gateway with server-enforced supersede and heartbeat state.",
+    "sortOrder": 340,
+    "isEnabled": true
+  },
+  "apps": [
+    {
+      "appKey": "context_guard_webapp",
+      "displayName": "Context Guard",
+      "appType": "WebApp",
+      "description": "Web app for receiving calling-system hand-offs and guarding target-application contexts.",
+      "sortOrder": 340,
+      "allowMultipleActiveInstances": false,
+      "isEnabled": true
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "appKey": "context_guard_webapp",
+      "packageType": "web-app",
+      "targetName": "context-guard",
+      "relativePathTemplate": "context-guard/web/{version}",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "artifactConfigurationFiles": [
+    {
+      "appKey": "context_guard_webapp",
+      "packageType": "web-app",
+      "targetName": "context-guard",
+      "relativePath": "appsettings.json",
+      "contentSource": "host-agent-generated",
+      "purpose": "Runtime authentication, connection and Context Guard profile configuration generated or overlaid for the target host.",
+      "requiredRootSections": [ "Portal", "OmpAuth", "ConnectionStrings", "ContextGuard", "NLog" ]
+    }
+  ],
+  "sqlScripts": [],
+  "integrity": {
+    "source": "No module-owned SQL objects; v1 runtime state is process-local.",
+    "requiredSchemas": [],
+    "requiredTables": [],
+    "requiredOmpRows": {
+      "permissions": [],
+      "modules": [
+        {
+          "moduleKey": "context_guard",
+          "schemaName": "omp_context_guard"
+        }
+      ],
+      "apps": [
+        {
+          "moduleKey": "context_guard",
+          "appKey": "context_guard_webapp",
+          "appType": "WebApp"
+        }
+      ],
+      "rolePermissions": [],
+      "appPermissions": [],
+      "moduleInstances": [],
+      "appInstances": []
+    },
+    "requiredModuleRows": {
+      "configurationDefinitions": [],
+      "portalEntries": []
+    },
+    "excludedSeedData": []
+  }
+}

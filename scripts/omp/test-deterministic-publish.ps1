@@ -10,7 +10,7 @@ installation is performed. Evidence and build logs remain under OutputRoot.
 param(
     [string]$OutputRoot = '',
     [switch]$UseIsolatedBuildRoots,
-    [ValidateSet('WorkerProcessHost', 'Portal', 'Auth', 'Content', 'Iframe', 'Example', 'Blazor', 'ServiceWeb', 'WorkerWeb')]
+    [ValidateSet('WorkerProcessHost', 'Portal', 'Auth', 'Content', 'Iframe', 'ContextGuard', 'Example', 'Blazor', 'ServiceWeb', 'WorkerWeb')]
     [string[]]$Project = @('WorkerProcessHost', 'Portal')
 )
 
@@ -54,6 +54,7 @@ try {
         Auth = 'OpenModulePlatform.Auth/OpenModulePlatform.Auth.csproj'
         Content = 'OpenModulePlatform.Web.ContentWebAppModule/OpenModulePlatform.Web.ContentWebAppModule.csproj'
         Iframe = 'OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj'
+        ContextGuard = 'OpenModulePlatform.Web.ContextGuardModule/OpenModulePlatform.Web.ContextGuardModule.csproj'
         Example = 'examples/WebAppModule/WebApp/OpenModulePlatform.Web.ExampleWebAppModule.csproj'
         Blazor = 'examples/WebAppBlazorModule/WebApp/OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj'
         ServiceWeb = 'examples/ServiceAppModule/WebApp/OpenModulePlatform.Web.ExampleServiceAppModule.csproj'

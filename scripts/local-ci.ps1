@@ -19,11 +19,16 @@ Overrides the auto-detected baseline. Rarely needed; the default matches CI.
 .PARAMETER SkipTests
 Skips build and tests, keeping only the fast validators. For a quick check while
 iterating - never as the gate before a push.
+
+.PARAMETER IncludeUi
+Also runs the database-free Chromium suites, including Context Guard, and requires
+Chromium and every selected test to execute instead of skipping.
 #>
 [CmdletBinding()]
 param(
     [string]$BaseCommit = '',
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$IncludeUi
 )
 
 Set-StrictMode -Version Latest
@@ -226,7 +231,8 @@ try {
                 # The analyzer suite used to run only in CI (through the solution
                 # filter); an analyzer regression therefore first showed up after
                 # the push, which is exactly what this gate exists to prevent.
-                'OpenModulePlatform.Web.Shared.Analyzers.Tests'
+                'OpenModulePlatform.Web.Shared.Analyzers.Tests',
+                'OpenModulePlatform.Web.ContextGuardModule.Tests'
             )
             # Remove stale TRX files so the zero-execution gate below only sees
             # the current run; old files would mask a run that produced nothing.
@@ -262,6 +268,31 @@ try {
             # got written at all, which the per-file check cannot see.
             & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $testResultsDirectory -SuiteName 'local tests' -ShowSkipReasons -RequirePerFile -MinimumTrxFiles $projects.Count
             if ($LASTEXITCODE -ne 0) { throw "zero-execution gate failed ($LASTEXITCODE)" }
+        }
+
+        if ($IncludeUi) {
+            Invoke-Step 'Browser UI tests' {
+                $previousUiRequired = $env:OMP_UITESTS_REQUIRED
+                $env:OMP_UITESTS_REQUIRED = '1'
+                try {
+                    $uiProject = Join-Path $repoRoot 'OpenModulePlatform.UiTests\OpenModulePlatform.UiTests.csproj'
+                    $uiOutput = Join-Path $repoRoot 'OpenModulePlatform.UiTests\bin\Release\net10.0'
+                    & (Join-Path $uiOutput 'playwright.ps1') install chromium
+                    if ($LASTEXITCODE -ne 0) { throw "Chromium installation failed ($LASTEXITCODE)" }
+                    $uiResults = Join-Path $localCiTrxRoot 'browser-ui'
+                    if (Test-Path -LiteralPath $uiResults) {
+                        Remove-Item -LiteralPath $uiResults -Recurse -Force
+                    }
+                    $uiFilter = 'FullyQualifiedName~ModuleFragmentAuthorizationTests|FullyQualifiedName~ContentEditorRoundTripTests|FullyQualifiedName~ContextGuardModuleTests'
+                    dotnet test $uiProject --configuration Release --nologo -v q --no-build --filter $uiFilter --logger 'trx;LogFileName=BrowserUi.trx' --results-directory $uiResults
+                    if ($LASTEXITCODE -ne 0) { throw "Browser UI tests failed ($LASTEXITCODE)" }
+                    & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $uiResults -SuiteName 'Browser UI' -ShowSkipReasons -RequirePerFile -MinimumTrxFiles 1
+                    if ($LASTEXITCODE -ne 0) { throw "Browser UI zero-execution gate failed ($LASTEXITCODE)" }
+                }
+                finally {
+                    $env:OMP_UITESTS_REQUIRED = $previousUiRequired
+                }
+            }
         }
     }
     else {

@@ -1,0 +1,66 @@
+@page "/show"
+@model OpenModulePlatform.Web.ContextGuardModule.Pages.ShowModel
+@using OpenModulePlatform.Web.ContextGuardModule.Models
+@{
+    ViewData["Title"] = Model.Guard is null ? L["Hand-off unavailable"] : L["Context Guard"];
+}
+
+@if (Model.Guard is null)
+{
+    <section class="guard-message" data-testid="handoff-error" data-outcome="@Model.Error">
+        <h1>@L["Hand-off unavailable"]</h1>
+        <p>@ErrorText(Model.Error)</p>
+    </section>
+}
+else
+{
+    <section id="context-guard"
+             class="guard-shell"
+             data-context-id="@Model.Guard.ContextId"
+             data-heartbeat-url="@Model.HeartbeatUrl"
+             data-heartbeat-interval-ms="@Model.HeartbeatIntervalMilliseconds"
+             data-heartbeat-failure-limit="@Model.HeartbeatFailureLimit"
+             data-antiforgery-token="@Model.AntiforgeryToken"
+             data-delivery="@Model.Guard.Delivery"
+             data-superseded-message="@L["This context was replaced by a newer context."]"
+             data-ended-message="@L["This context has ended."]">
+        <header class="guard-header">
+            <div>
+                <h1>@L["Context Guard"]</h1>
+                <p>@L["Calling profile"]: <strong data-testid="profile-name">@Model.Guard.ProfileDisplayName</strong></p>
+                <p>@L["Correlation"]: <strong data-testid="correlation-value">@(string.IsNullOrEmpty(Model.Guard.CorrelationValue) ? "—" : Model.Guard.CorrelationValue)</strong></p>
+            </div>
+            <p id="context-status" class="guard-status" role="status" aria-live="polite"></p>
+        </header>
+
+        <form id="context-delivery"
+              method="@Model.Guard.Method"
+              action="@Model.Guard.TargetUrl"
+              target="@(Model.Guard.Delivery == ContextGuardDelivery.Embed ? "context-target" : "_top")">
+            @foreach (var field in Model.Guard.Fields)
+            {
+                <input type="hidden" name="@field.Name" value="@field.Value" />
+            }
+        </form>
+
+        @if (Model.Guard.Delivery == ContextGuardDelivery.Embed)
+        {
+            <iframe id="context-target" name="context-target" title="@L["Target application"]" src="about:blank" referrerpolicy="no-referrer"></iframe>
+        }
+        else
+        {
+            <p class="guard-redirect-note">@L["Opening the target application."]</p>
+        }
+    </section>
+    <script src="~/js/context-guard.js"></script>
+}
+
+@functions {
+    private string ErrorText(HandoffRedemptionStatus? status) => status switch
+    {
+        HandoffRedemptionStatus.Expired => L["This hand-off has expired. Ask the calling system to open the context again."],
+        HandoffRedemptionStatus.AlreadyRedeemed => L["This hand-off has already been used. Ask the calling system to open the context again."],
+        HandoffRedemptionStatus.Ended => L["This hand-off was ended by the calling system."],
+        _ => L["This hand-off is unknown or invalid. Ask the calling system to open the context again."]
+    };
+}

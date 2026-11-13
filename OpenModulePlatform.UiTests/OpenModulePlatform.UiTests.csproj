@@ -33,6 +33,7 @@
     <ProjectReference Include="..\examples\WorkerAppModule\WebApp\OpenModulePlatform.Web.ExampleWorkerAppModule.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Web.ContentWebAppModule\OpenModulePlatform.Web.ContentWebAppModule.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Web.ContextGuardModule\OpenModulePlatform.Web.ContextGuardModule.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Web.iFrameWebAppModule\OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   </ItemGroup>
 

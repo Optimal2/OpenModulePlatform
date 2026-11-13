@@ -1,0 +1,23 @@
+:root {
+    --bg: var(--omp-bg, #f5f7fb);
+    --surface: var(--omp-surface, #fff);
+    --border: var(--omp-border, #d7deea);
+    --text: var(--omp-text, #172033);
+    --muted: var(--omp-text-muted, #5b667a);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font-family: "Segoe UI", Arial, sans-serif; }
+main { height: 100%; }
+.guard-shell { display: flex; flex-direction: column; height: 100vh; }
+.guard-header { display: flex; justify-content: space-between; gap: 1rem; padding: .65rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface); }
+.guard-header h1 { margin: 0 0 .25rem; font-size: 1.1rem; }
+.guard-header p { margin: .15rem 0; color: var(--muted); font-size: .9rem; }
+.guard-header strong { color: var(--text); }
+.guard-status { align-self: center; max-width: 24rem; font-weight: 600; }
+#context-delivery { display: none; }
+#context-target { width: 100%; flex: 1 1 auto; border: 0; background: white; }
+.guard-message { max-width: 44rem; margin: 4rem auto; padding: 2rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+.guard-message h1 { margin-top: 0; }
+.guard-redirect-note { padding: 2rem; }

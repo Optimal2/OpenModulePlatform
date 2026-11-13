@@ -1,0 +1,18 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
+<!doctype html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
+<head>
+    <meta name="omp-time-zone" content="@OmpTime.TimeZoneId" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="omp-prevent-back-cache" content="true" />
+    <title>@ViewData["Title"]</title>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-theme.js"></script>
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-theme.css" />
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <main>@RenderBody()</main>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
+</body>
+</html>
