@@ -75,6 +75,27 @@ public sealed class ContextGuardServiceTests
     }
 
     [Fact]
+    public void TryGetProfile_WithNewlineSuffixedUnknownKey_DoesNotLogRawKey()
+    {
+        var logs = new CapturedLogger();
+        var service = new ContextGuardService(
+            new InMemoryHandoffStore(TimeProvider.System),
+            new InMemoryContextStore(TimeProvider.System),
+            new FakeOptionsMonitor(new ContextGuardOptions()),
+            logs);
+        const string unsafeKey = "evil\n";
+
+        var found = service.TryGetProfile(unsafeKey, out _);
+
+        Assert.False(found);
+        var message = Assert.Single(logs.Messages);
+        Assert.DoesNotContain("evil", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n", message, StringComparison.Ordinal);
+        Assert.Contains("ProfileKey=<invalid>", message, StringComparison.Ordinal);
+        Assert.Contains($"ProfileKeyLength={unsafeKey.Length}", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CheckEndAllowed_WithDisabledEndpoint_RefusesWithoutReadingSecret()
     {
         var profile = EndProfile(endEnabled: false);

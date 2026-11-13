@@ -79,6 +79,23 @@ public sealed class ContextGuardOptionsValidatorTests
     }
 
     [Theory]
+    [InlineData("a", true)]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true)]
+    [InlineData("evil\n", false)]
+    [InlineData("evil\r\n", false)]
+    public void Validate_WithProfileKey_EnforcesAbsoluteAnchorsAndLengthBounds(string profileKey, bool expected)
+    {
+        var options = ValidOptions();
+        var profile = options.Profiles["profile"];
+        options.Profiles = new Dictionary<string, ContextGuardProfileOptions>(StringComparer.OrdinalIgnoreCase)
+        {
+            [profileKey] = profile
+        };
+
+        Assert.Equal(expected, new ContextGuardOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     public void Validate_WithNonPositiveRateLimit_Fails(int permits)

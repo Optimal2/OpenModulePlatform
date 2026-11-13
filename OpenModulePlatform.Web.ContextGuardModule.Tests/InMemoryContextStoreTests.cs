@@ -42,6 +42,23 @@ public sealed class InMemoryContextStoreTests
     }
 
     [Fact]
+    public void Heartbeat_AfterTimeoutBeforeNextMaintenance_EndsContext()
+    {
+        var context = Create();
+        _time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(ContextLifecycle.Current, _store.Heartbeat(context.ContextId, 7, Timeout).State);
+
+        _time.Advance(TimeSpan.FromSeconds(29));
+        _store.Create(8, "", "profile", "other-hash", ContextGuardScopes.User, Timeout);
+        _time.Advance(TimeSpan.FromSeconds(2));
+
+        var result = _store.Heartbeat(context.ContextId, 7, Timeout);
+
+        Assert.Equal(ContextLifecycle.Ended, result.State);
+        Assert.NotNull(result.Context);
+    }
+
+    [Fact]
     public void GetState_ForAnotherUser_DoesNotReturnContext()
     {
         var context = Create();

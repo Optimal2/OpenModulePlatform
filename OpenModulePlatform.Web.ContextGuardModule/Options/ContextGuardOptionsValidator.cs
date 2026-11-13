@@ -122,6 +122,6 @@ public sealed partial class ContextGuardOptionsValidator : IValidateOptions<Cont
 
     internal static bool IsValidProfileKey(string profileKey) => ProfileKeyRegex().IsMatch(profileKey);
 
-    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}\\z", RegexOptions.CultureInvariant)]
     private static partial Regex ProfileKeyRegex();
 }

@@ -168,6 +168,26 @@ public sealed class InMemoryHandoffStoreTests
     }
 
     [Fact]
+    public void TombstoneEviction_WithLivePendingEntry_PreservesPendingPayload()
+    {
+        const int tombstoneCapacity = 1;
+        var pending = Create(tombstoneCapacity: tombstoneCapacity);
+
+        for (var index = 0; index < 3; index++)
+        {
+            _time.Advance(TimeSpan.FromSeconds(1));
+            var cycle = Create(tombstoneCapacity: tombstoneCapacity);
+            Assert.Equal(HandoffRedemptionStatus.Success,
+                _store.Redeem(cycle.Key!, tombstoneCapacity).Status);
+        }
+
+        var result = _store.Redeem(pending.Key!, tombstoneCapacity);
+
+        Assert.Equal(HandoffRedemptionStatus.Success, result.Status);
+        Assert.Equal("allowed-value", result.Payload!.Fields.Single().Value);
+    }
+
+    [Fact]
     public void EndByCorrelation_WhenHandoffIsPending_ClearsPayloadAndPreventsRedemption()
     {
         var created = Create();
