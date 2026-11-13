@@ -50,6 +50,45 @@ $resultsXml
     [System.IO.File]::WriteAllText($Path, $trx, [System.Text.UTF8Encoding]::new($false))
 }
 
+function New-ClassTrxFile {
+    <#
+    .SYNOPSIS
+    Writes a .trx fixture with explicit UnitTestResult entries, so the
+    per-class floor (-RequireTestClassPrefix / -MinimumClassExecuted) can be
+    tested. Counters are derived the way VSTest writes them: executed counts
+    the non-NotExecuted results.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][array]$Results
+    )
+
+    $entries = foreach ($entry in $Results) {
+        $outcome = $entry.Outcome
+        $resultBody = ''
+        if ($outcome -eq 'NotExecuted') {
+            $resultBody = '<Output><ErrorInfo><Message>Skipped: fixture</Message></ErrorInfo></Output>'
+        }
+        "    <UnitTestResult testName=`"$($entry.TestName)`" outcome=`"$outcome`">$resultBody</UnitTestResult>"
+    }
+    $resultsXml = "  <Results>`n$($entries -join "`n")`n  </Results>"
+
+    $total = $Results.Count
+    $executed = @($Results | Where-Object { $_.Outcome -ne 'NotExecuted' }).Count
+
+    $trx = @"
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+$resultsXml
+  <ResultSummary outcome="Completed">
+    <Counters total="$total" executed="$executed" passed="$executed" failed="0" />
+  </ResultSummary>
+</TestRun>
+"@
+
+    [System.IO.File]::WriteAllText($Path, $trx, [System.Text.UTF8Encoding]::new($false))
+}
+
 function New-RawTrxFile {
     <#
     .SYNOPSIS
@@ -75,7 +114,9 @@ function Invoke-ExecutionGate {
         [Parameter(Mandatory = $true)][string]$ResultsDirectory,
         [Parameter(Mandatory = $false)][switch]$ShowSkipReasons,
         [Parameter(Mandatory = $false)][switch]$RequirePerFile,
-        [Parameter(Mandatory = $false)][int]$MinimumTrxFiles = 0
+        [Parameter(Mandatory = $false)][int]$MinimumTrxFiles = 0,
+        [Parameter(Mandatory = $false)][string]$RequireTestClassPrefix = '',
+        [Parameter(Mandatory = $false)][int]$MinimumClassExecuted = 0
     )
 
     $arguments = @(
@@ -86,6 +127,8 @@ function Invoke-ExecutionGate {
     if ($ShowSkipReasons) { $arguments += '-ShowSkipReasons' }
     if ($RequirePerFile) { $arguments += '-RequirePerFile' }
     if ($MinimumTrxFiles -gt 0) { $arguments += @('-MinimumTrxFiles', "$MinimumTrxFiles") }
+    if (-not [string]::IsNullOrWhiteSpace($RequireTestClassPrefix)) { $arguments += @('-RequireTestClassPrefix', $RequireTestClassPrefix) }
+    if ($MinimumClassExecuted -gt 0) { $arguments += @('-MinimumClassExecuted', "$MinimumClassExecuted") }
 
     # ErrorActionPreference 'Stop' would turn the child's redirected stderr
     # into a throwing ErrorRecord, so relax it locally for the capture.

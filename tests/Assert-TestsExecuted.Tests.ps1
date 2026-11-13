@@ -25,6 +25,9 @@ param()
       malformed .trx (no Counters node,
         missing counters attributes,
         zero-byte, or broken XML)          -> 1
+      class ran fewer than -MinimumClassExecuted -> 1
+      class ran exactly -MinimumClassExecuted    -> 0
+      class filter matched nothing, siblings ran -> 1
 
     The two-file case is the hardening added 2026-09: the directory sum lets a
     test project whose filter matched nothing hide behind a sibling project
@@ -244,6 +247,74 @@ Describe 'assert-tests-executed: malformed files never blend into the sum' {
 
             $result.ExitCode | Should -Be 1
             $result.Output | Should -Match 'expected at least 2'
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+}
+
+Describe 'assert-tests-executed: per-class execution floor' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Assert-TestsExecuted.TestHelpers.ps1')
+    }
+
+    It 'Fails when the class ran fewer tests than -MinimumClassExecuted, even though siblings ran' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-ClassTrxFile -Path (Join-Path $dir 'ui.trx') -Results @(
+                @{ TestName = 'OpenModulePlatform.UiTests.ContextGuardModuleTests.GuardA'; Outcome = 'Passed' },
+                @{ TestName = 'OpenModulePlatform.UiTests.ContextGuardModuleTests.GuardB'; Outcome = 'Passed' },
+                @{ TestName = 'OpenModulePlatform.UiTests.OtherTests.OtherA'; Outcome = 'Passed' }
+            )
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir `
+                -RequireTestClassPrefix 'OpenModulePlatform.UiTests.ContextGuardModuleTests' `
+                -MinimumClassExecuted 3
+
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'expected at least 3'
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+
+    It 'Passes when the class ran exactly -MinimumClassExecuted tests' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-ClassTrxFile -Path (Join-Path $dir 'ui.trx') -Results @(
+                @{ TestName = 'OpenModulePlatform.UiTests.ContextGuardModuleTests.GuardA'; Outcome = 'Passed' },
+                @{ TestName = 'OpenModulePlatform.UiTests.ContextGuardModuleTests.GuardB'; Outcome = 'Passed' },
+                @{ TestName = 'OpenModulePlatform.UiTests.ContextGuardModuleTests.GuardC'; Outcome = 'Passed' },
+                @{ TestName = 'OpenModulePlatform.UiTests.OtherTests.OtherA'; Outcome = 'Passed' }
+            )
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir `
+                -RequireTestClassPrefix 'OpenModulePlatform.UiTests.ContextGuardModuleTests' `
+                -MinimumClassExecuted 3
+
+            $result.ExitCode | Should -Be 0
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+
+    It 'Fails when the filter matched nothing in the class but siblings ran (the hole the floor closes)' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-ClassTrxFile -Path (Join-Path $dir 'ui.trx') -Results @(
+                @{ TestName = 'OpenModulePlatform.UiTests.OtherTests.OtherA'; Outcome = 'Passed' },
+                @{ TestName = 'OpenModulePlatform.UiTests.OtherTests.OtherB'; Outcome = 'Passed' }
+            )
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir `
+                -RequireTestClassPrefix 'OpenModulePlatform.UiTests.ContextGuardModuleTests' `
+                -MinimumClassExecuted 1
+
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'executed 0 test\(s\), expected at least 1'
         }
         finally {
             Remove-GateResultsDirectory -Path $dir

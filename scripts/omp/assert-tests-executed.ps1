@@ -44,6 +44,16 @@
 .PARAMETER RequirePerFile
     Require executed > 0 in EVERY .trx file, not just in the directory sum.
 
+.PARAMETER RequireTestClassPrefix
+    When set together with MinimumClassExecuted, require at least that many
+    executed (non-NotExecuted) results whose testName starts with this prefix.
+    A filter that silently matches nothing in one class is masked by sibling
+    classes in the same step; this floor closes that hole.
+
+.PARAMETER MinimumClassExecuted
+    Minimum executed results for RequireTestClassPrefix. 0 (default)
+    disables the check.
+
 .PARAMETER MinimumTrxFiles
     Fail when the directory contains fewer .trx files than this. 0 (default)
     disables the check. Callers that test a known list of projects should
@@ -65,7 +75,13 @@ param(
     [switch]$RequirePerFile,
 
     [Parameter(Mandatory = $false)]
-    [int]$MinimumTrxFiles = 0
+    [int]$MinimumTrxFiles = 0,
+
+    [Parameter(Mandatory = $false)]
+    [string]$RequireTestClassPrefix = '',
+
+    [Parameter(Mandatory = $false)]
+    [int]$MinimumClassExecuted = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -167,6 +183,32 @@ if ($RequirePerFile -and $zeroExecutedFiles.Count -gt 0) {
     }
     Write-Host 'A per-project zero run is masked by the directory sum without -RequirePerFile.' -ForegroundColor Red
     exit 1
+}
+
+if (-not [string]::IsNullOrWhiteSpace($RequireTestClassPrefix) -and $MinimumClassExecuted -gt 0) {
+    $classExecuted = 0
+    $classTotal = 0
+    foreach ($trxFile in $trxFiles) {
+        $classTrx = New-Object System.Xml.XmlDocument
+        $classTrx.Load($trxFile.FullName)
+        $classResults = $classTrx.SelectNodes('//*[local-name()="UnitTestResult"]')
+        foreach ($classResult in @($classResults)) {
+            $className = $classResult.GetAttribute('testName')
+            if ([string]::IsNullOrEmpty($className) -or -not $className.StartsWith($RequireTestClassPrefix, [StringComparison]::Ordinal)) {
+                continue
+            }
+            $classTotal++
+            if (-not [string]::Equals($classResult.GetAttribute('outcome'), 'NotExecuted', [StringComparison]::OrdinalIgnoreCase)) {
+                $classExecuted++
+            }
+        }
+    }
+    Write-Host "Gate [$SuiteName]: class '$RequireTestClassPrefix' executed $classExecuted of $classTotal test(s)."
+    if ($classExecuted -lt $MinimumClassExecuted) {
+        Write-Host "GATE FAIL [$SuiteName]: class '$RequireTestClassPrefix' executed $classExecuted test(s), expected at least $MinimumClassExecuted." -ForegroundColor Red
+        Write-Host 'A filter that silently matches nothing in this class is masked by sibling classes in the same step; this floor closes that hole.' -ForegroundColor Red
+        exit 1
+    }
 }
 
 if ($executedTests -eq 0) {

@@ -122,6 +122,7 @@ public static class ContextGuardEndpointExtensions
             IAntiforgery antiforgery,
             CancellationToken cancellationToken) =>
         {
+            DisableStatusPageReExecute(context);
             if (OmpUserIdentity.TryGetOmpUserId(context.User) is not int userId)
             {
                 return Results.Forbid();
@@ -145,6 +146,7 @@ public static class ContextGuardEndpointExtensions
             Guid contextId,
             ContextGuardService service) =>
         {
+            DisableStatusPageReExecute(context);
             if (OmpUserIdentity.TryGetOmpUserId(context.User) is not int userId)
             {
                 return Results.Forbid();

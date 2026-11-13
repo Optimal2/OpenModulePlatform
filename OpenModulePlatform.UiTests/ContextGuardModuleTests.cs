@@ -178,6 +178,22 @@ public sealed class ContextGuardModuleTests
     }
 
     [Fact]
+    public async Task Heartbeat_and_state_without_omp_identity_answer_forbidden()
+    {
+        await using var host = await ContextGuardTestHost.StartAsync();
+        await using var browser = await LaunchBrowserAsync();
+        await using var context = await browser.NewContextAsync();
+        var page = await context.NewPageAsync();
+        await page.GotoAsync(host.GuardUrl + "/auth/login-unidentified?returnUrl=/");
+
+        var contextId = Guid.NewGuid();
+        var heartbeat = await context.APIRequest.PostAsync($"{host.GuardUrl}/context/{contextId}/heartbeat");
+        Assert.Equal(403, heartbeat.Status);
+        var state = await context.APIRequest.GetAsync($"{host.GuardUrl}/context/{contextId}/state");
+        Assert.Equal(403, state.Status);
+    }
+
+    [Fact]
     public async Task End_with_short_correlation_is_refused()
     {
         await using var host = await ContextGuardTestHost.StartAsync();
@@ -546,6 +562,25 @@ public sealed class ContextGuardModuleTests
                 {
                     var identity = new ClaimsIdentity(
                         [new Claim(OmpAuthDefaults.UserIdClaimType, "42")],
+                        OmpAuthDefaults.AuthenticationScheme);
+                    await context.SignInAsync(
+                        OmpAuthDefaults.AuthenticationScheme,
+                        new ClaimsPrincipal(identity));
+                    var safeReturn = !string.IsNullOrWhiteSpace(returnUrl)
+                        && returnUrl.StartsWith('/')
+                        && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+                        ? returnUrl
+                        : "/";
+                    return Results.Redirect(safeReturn);
+                }).AllowAnonymous();
+                // Test-only sign-in WITHOUT the OMP user-id claim: exercises the
+                // heartbeat/state ownership refusal (403) through the shared
+                // status-page pipeline, which would otherwise re-execute a 403
+                // POST into a 400 before it reaches the caller.
+                guard.MapGet("/auth/login-unidentified", async (HttpContext context, string? returnUrl) =>
+                {
+                    var identity = new ClaimsIdentity(
+                        [new Claim(ClaimTypes.Name, "unidentified-test-user")],
                         OmpAuthDefaults.AuthenticationScheme);
                     await context.SignInAsync(
                         OmpAuthDefaults.AuthenticationScheme,
