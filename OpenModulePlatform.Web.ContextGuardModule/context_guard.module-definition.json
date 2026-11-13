@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "context_guard",
-  "definitionVersion": "0.1.0",
+  "definitionVersion": "0.1.1",
   "module": {
     "displayName": "Context Guard",
     "moduleType": "WebAppModule",
@@ -28,7 +28,7 @@
       "targetName": "context-guard",
       "relativePathTemplate": "context-guard/web/{version}",
       "minVersion": "0.1.0",
-      "maxVersion": "0.1.0"
+      "maxVersion": "0.1.1"
     }
   ],
   "artifactConfigurationFiles": [
@@ -39,7 +39,13 @@
       "relativePath": "appsettings.json",
       "contentSource": "host-agent-generated",
       "purpose": "Runtime authentication, connection and Context Guard profile configuration generated or overlaid for the target host.",
-      "requiredRootSections": [ "Portal", "OmpAuth", "ConnectionStrings", "ContextGuard", "NLog" ]
+      "requiredRootSections": [
+        "Portal",
+        "OmpAuth",
+        "ConnectionStrings",
+        "ContextGuard",
+        "NLog"
+      ]
     }
   ],
   "sqlScripts": [],
