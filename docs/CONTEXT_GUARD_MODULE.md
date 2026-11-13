@@ -27,7 +27,7 @@ Calling system                 Context Guard                  OMP Auth          
 
 The receive and end endpoints are anonymous in v1 because a cross-site form POST does not carry the `SameSite=Lax` OMP cookie. They explicitly disable antiforgery: they are inbound integration endpoints and cannot read a context or start one without an authenticated redemption. `/show`, heartbeat and state use the ordinary shared OMP authentication pipeline; heartbeat also validates the normal antiforgery token. Razor encoding is used for every rendered value.
 
-The one-time key is random (256 bits), has a short TTL and is removed from the visible URL with `history.replaceState` after redemption. Redemption clears the stored payload. A reused, expired, ended or unknown key produces a named hand-off page, never another user's data. A redeemed key remains `AlreadyRedeemed` even after its TTL until its tombstone is pruned.
+The one-time key is random (256 bits), has a short TTL and is removed from the visible URL with `history.replaceState` after redemption. Redemption clears the stored payload and records an explicit redeemed state. A reused, expired, ended or unknown key produces a named hand-off page, never another user's data. A redeemed key remains `AlreadyRedeemed` even after its TTL, and a never-redeemed expired key remains `Expired` on repeat visits, until its tombstone is pruned or evicted.
 
 ## Calling-system contract
 
@@ -64,7 +64,7 @@ The root section is `ContextGuard`. Validation runs at startup; invalid profiles
 | `HeartbeatIntervalSeconds` | `5` | Browser heartbeat interval. |
 | `HeartbeatTimeoutSeconds` | `30` | Server-side context lifetime without a successful heartbeat. Must be at least twice the interval. Expiry is evaluated on context operations, not by a background timer. |
 | `HeartbeatFailureLimit` | `3` | Consecutive failed browser heartbeats before the page blanks itself. |
-| `MaxPendingHandoffs` | `100` | Process-local capacity for all hand-off entries, including payload-free redeemed, ended and expired tombstones. Full store returns `429`. Tombstones are pruned five minutes after the one-time-key TTL expires. |
+| `MaxPendingHandoffs` | `100` | Process-local capacity for pending hand-offs that still retain a payload. A full pending store returns `429`. Payload-free redeemed, ended and expired tombstones are bounded separately at `2 × MaxPendingHandoffs`, so total entries are bounded at `3 × MaxPendingHandoffs`; the oldest tombstones are evicted first to admit new hand-offs. Tombstones are also pruned five minutes after the one-time-key TTL expires. |
 | `MaxFieldCount` | `64` | Maximum total form values, including repeated names. |
 | `MaxTotalFormBytes` | `65536` | Maximum form body size, including chunked requests where the server supports the per-request limit. |
 | `MaxFieldValueLength` | `8192` | Maximum characters in one form value. |

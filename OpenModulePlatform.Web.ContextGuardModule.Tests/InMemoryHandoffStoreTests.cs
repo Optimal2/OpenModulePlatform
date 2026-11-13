@@ -1,3 +1,4 @@
+using System.Reflection;
 using OpenModulePlatform.Web.ContextGuardModule.Models;
 using OpenModulePlatform.Web.ContextGuardModule.Stores;
 
@@ -74,15 +75,84 @@ public sealed class InMemoryHandoffStoreTests
     }
 
     [Fact]
-    public void Create_WhenEndedTombstoneFillsCapacity_ReturnsCapacityExceeded()
+    public void Create_WhenEachHandoffIsRedeemedBeforeNext_DoesNotCountTombstonesAsPending()
     {
-        var first = _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), 1);
-        Assert.Equal(1, _store.EndByCorrelation("profile", "hash"));
+        const int capacity = 2;
 
-        var second = _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), 1);
+        for (var index = 0; index < capacity * 4; index++)
+        {
+            var created = _store.Create("profile", $"hash-{index}", Fields(), 0, TimeSpan.FromSeconds(60), capacity);
 
-        Assert.Equal(HandoffCreateStatus.CapacityExceeded, second.Status);
-        Assert.Null(second.Key);
+            Assert.Equal(HandoffCreateStatus.Created, created.Status);
+            Assert.Equal(HandoffRedemptionStatus.Success, _store.Redeem(created.Key!).Status);
+        }
+    }
+
+    [Fact]
+    public void CreateAndEnd_WhenRepeated_BoundsTotalEntries()
+    {
+        const int capacity = 2;
+
+        for (var index = 0; index < 20; index++)
+        {
+            var created = _store.Create("profile", $"hash-{index}", Fields(), 0, TimeSpan.FromSeconds(60), capacity);
+
+            Assert.Equal(HandoffCreateStatus.Created, created.Status);
+            Assert.Equal(1, _store.EndByCorrelation("profile", $"hash-{index}"));
+            Assert.True(EntryCount() <= capacity * 3, $"Entry count {EntryCount()} exceeded {capacity * 3}.");
+        }
+    }
+
+    [Fact]
+    public void Create_WhenPendingHandoffsFillCapacity_ReturnsCapacityExceeded()
+    {
+        const int capacity = 3;
+
+        for (var index = 0; index < capacity; index++)
+        {
+            var created = _store.Create("profile", $"hash-{index}", Fields(), 0, TimeSpan.FromSeconds(60), capacity);
+            Assert.Equal(HandoffCreateStatus.Created, created.Status);
+        }
+
+        var next = _store.Create("profile", "hash-next", Fields(), 0, TimeSpan.FromSeconds(60), capacity);
+
+        Assert.Equal(HandoffCreateStatus.CapacityExceeded, next.Status);
+        Assert.Null(next.Key);
+    }
+
+    [Fact]
+    public void Redeem_WhenNeverRedeemedKeyExpiresAndAnotherHandoffIsCreated_RemainsExpired()
+    {
+        var expired = _store.Create("profile", "hash-expired", Fields(), 0, TimeSpan.FromSeconds(60), 10);
+        _time.Advance(TimeSpan.FromSeconds(61));
+        Assert.Equal(HandoffCreateStatus.Created, _store.Create("profile", "hash-next", Fields(), 0, TimeSpan.FromSeconds(60), 10).Status);
+
+        var firstVisit = _store.Redeem(expired.Key!);
+        var secondVisit = _store.Redeem(expired.Key!);
+
+        Assert.Equal(HandoffRedemptionStatus.Expired, firstVisit.Status);
+        Assert.Equal(HandoffRedemptionStatus.Expired, secondVisit.Status);
+    }
+
+    [Fact]
+    public void Redeem_WhenNeverRedeemedKeyExpires_RemainsExpiredOnSecondVisit()
+    {
+        var created = _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), 10);
+        _time.Advance(TimeSpan.FromSeconds(61));
+
+        var firstVisit = _store.Redeem(created.Key!);
+        var secondVisit = _store.Redeem(created.Key!);
+
+        Assert.Equal(HandoffRedemptionStatus.Expired, firstVisit.Status);
+        Assert.Equal(HandoffRedemptionStatus.Expired, secondVisit.Status);
+    }
+
+    private int EntryCount()
+    {
+        var field = typeof(InMemoryHandoffStore).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        var entries = Assert.IsAssignableFrom<System.Collections.ICollection>(field.GetValue(_store));
+        return entries.Count;
     }
 
     private static ContextGuardField[] Fields() => [new("allowed", "allowed-value")];
