@@ -82,7 +82,7 @@ The root section is `ContextGuard`. Validation runs at startup; invalid profiles
 | `HeartbeatTimeoutSeconds` | `30` | Server-side context lifetime without a successful heartbeat. Must be at least twice the interval. Expiry is evaluated on context operations, not by a background timer. |
 | `HeartbeatFailureLimit` | `3` | Consecutive failed browser heartbeats before the page blanks itself. |
 | `MaxPendingHandoffs` | `100` | Process-local capacity for hand-offs with a retained payload (staged fields). Full store returns `429`. Payload-free redeemed, ended and expired tombstones no longer consume this capacity. |
-| `MaxHandoffTombstones` | `100` | Separate bound for payload-free tombstones (redeemed, ended, naturally expired). The oldest tombstone is evicted first when the bound is exceeded, so normal successful use can never starve new hand-offs. Entries of any kind are removed five minutes after the one-time-key TTL expires. |
+| `MaxHandoffTombstones` | `100` | Separate bound for payload-free tombstones (redeemed, ended, naturally expired). The oldest tombstone is evicted first when the bound is exceeded, so normal successful use can never starve new hand-offs. Entries of any kind are removed five minutes after the one-time-key TTL expires. Create and end calls prune due entries; redeeming an expired key retires that entry and clears its payload. |
 | `MaxFieldCount` | `64` | Maximum total form values, including repeated names. |
 | `MaxTotalFormBytes` | `65536` | Maximum form body size, including chunked requests where the server supports the per-request limit. |
 | `MaxFieldValueLength` | `8192` | Maximum characters in one form value. |

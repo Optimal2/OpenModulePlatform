@@ -201,6 +201,19 @@ public sealed class InMemoryHandoffStoreTests
     }
 
     [Fact]
+    public void EndByCorrelation_AfterTtl_PrunesExpiredPayloadsEvenWithoutAMatch()
+    {
+        var created = Create();
+        _time.Advance(TimeSpan.FromSeconds(61));
+
+        var ended = _store.EndByCorrelation("profile", "another-hash", TombstoneCapacity);
+
+        Assert.Equal(0, ended);
+        Assert.Equal(0, PendingPayloadCount());
+        Assert.Equal(HandoffRedemptionStatus.Expired, _store.Redeem(created.Key!, TombstoneCapacity).Status);
+    }
+
+    [Fact]
     public void CreateAndEnd_WhenRepeated_BoundsTotalEntries()
     {
         const int pendingCapacity = 2;
@@ -223,6 +236,18 @@ public sealed class InMemoryHandoffStoreTests
         var entries = Assert.IsAssignableFrom<System.Collections.ICollection>(field.GetValue(_store));
         return entries.Count;
     }
+    private int PendingPayloadCount()
+    {
+        var field = typeof(InMemoryHandoffStore).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        var entries = Assert.IsAssignableFrom<System.Collections.IDictionary>(field.GetValue(_store));
+        return entries.Values.Cast<object>().Count(entry =>
+        {
+            var payload = entry.GetType().GetProperty("Payload")!.GetValue(entry);
+            return payload is not null;
+        });
+    }
+
     private HandoffCreateResult Create(int pendingCapacity = PendingCapacity, int tombstoneCapacity = TombstoneCapacity)
         => _store.Create("profile", "hash", Fields(), 0, TimeSpan.FromSeconds(60), pendingCapacity, tombstoneCapacity);
 

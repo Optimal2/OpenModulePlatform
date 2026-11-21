@@ -81,6 +81,7 @@ public sealed class InMemoryHandoffStore(TimeProvider timeProvider) : IHandoffSt
         lock (_gate)
         {
             var now = timeProvider.GetUtcNow();
+            PruneExpiredCore(now, tombstoneCapacity);
             var ended = 0;
             foreach (var entry in _entries.Values.Where(entry =>
                          entry.Payload is not null
