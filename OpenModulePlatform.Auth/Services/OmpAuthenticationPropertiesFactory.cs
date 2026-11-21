@@ -32,10 +32,17 @@ public sealed class OmpAuthenticationPropertiesFactory
         OmpAuthenticatedUser user,
         CancellationToken ct)
     {
-        var rawValue = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpAuthDefaults.ConfigurationCategory,
             OmpAuthSessionLifetimeDefaults.ProviderSessionLifetimesSetting,
             ct);
+        if (read.Failed)
+        {
+            throw new InvalidOperationException(
+                "The OMP auth session lifetime could not be read. No authentication ticket was issued; retry the sign-in.");
+        }
+
+        var rawValue = read.Value;
         var config = OmpAuthSessionLifetimeConfig.Parse(rawValue);
         var lifetimeMinutes = config.ResolveMinutes(user.ProviderId);
         var issuedUtc = DateTimeOffset.UtcNow;

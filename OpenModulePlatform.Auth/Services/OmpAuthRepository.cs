@@ -765,12 +765,18 @@ ORDER BY ua.user_auth_id;";
 
     private async Task<ExternalUserProvisioningMode> GetExternalUserProvisioningModeAsync(CancellationToken ct)
     {
-        var mode = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpAuthDefaults.ConfigurationCategory,
             OmpAuthDefaults.ExternalUserProvisioningModeSetting,
             ct);
+        if (read.Failed)
+        {
+            _log.LogError(
+                "The external-user provisioning mode could not be read; refusing automatic provisioning for this sign-in.");
+            return ExternalUserProvisioningMode.Manual;
+        }
 
-        var normalized = mode?.Trim();
+        var normalized = read.Value?.Trim();
         if (string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutoIfRole, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeIfRole, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(normalized, OmpAuthDefaults.ExternalUserProvisioningModeAutomaticForAuthorizedUsers, StringComparison.OrdinalIgnoreCase))

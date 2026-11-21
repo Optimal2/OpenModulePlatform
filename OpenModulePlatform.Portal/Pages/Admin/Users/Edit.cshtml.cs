@@ -400,6 +400,10 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
                 StatusMessage = T("Auth link not found.");
                 return RedirectToPage("/Admin/Users/Edit", new { userId });
 
+            case RemoveAuthLinkStatus.LastAuthLink:
+                StatusMessage = T("The last enabled sign-in link cannot be removed.");
+                return RedirectToPage("/Admin/Users/Edit", new { userId });
+
             default:
                 StatusMessage = T("The auth link could not be removed.");
                 return RedirectToPage("/Admin/Users/Edit", new { userId });

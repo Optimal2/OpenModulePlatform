@@ -59,7 +59,8 @@ not used by OMP Auth sign-in. Missing or empty values, invalid JSON, or a JSON
 value that is not an object fall back to the built-in 600-minute default.
 Invalid entries inside an otherwise valid JSON object are ignored; positive
 values below 5 minutes are clamped to 5, and values above 10080 minutes are
-clamped to 10080.
+clamped to 10080. A database read failure is not treated as a missing value:
+sign-in fails without issuing a ticket, and a later attempt retries the read.
 
 The lifetime is stamped into the OMP cookie during sign-in. Changing the setting
 affects new sign-ins only; it does not rewrite or shorten existing sessions that
@@ -524,10 +525,14 @@ RBAC is stored in:
 Use `ADGroup` for large AD groups. OMP does not need to create `omp.users` rows for every AD group member.
 Legacy `User` role-principal rows are migrated to `ADUser` by the core setup and initialization scripts.
 
-Core initialization creates two built-in baseline roles:
+Core initialization creates two built-in baseline roles in addition to the
+`PortalAdmins` administrative role:
 
 - `Everyone`, bound to `OMPSystem|Everyone`
 - `AuthenticatedUsers`, bound to `OMPSystem|AuthenticatedUsers`
+
+All three built-in roles are protected from renaming and deletion, and the role
+editor refuses to remove their last remaining principal.
 
 These roles are intended for common baseline access, not for modeling one role
 per application. For example, if an app should be visible to every authenticated
@@ -548,7 +553,9 @@ authenticated principal.
 `auth/externalUserProvisioningMode` accepts `Manual`, `AutoIfRole`, and
 `AutoIfAuthenticated`. `IfRole` and `IfAuthenticated` are accepted as shorter
 aliases. Invalid or missing values are treated as `Manual` by the
-Auth app.
+Auth app. A database read failure also fails closed to `Manual` for that
+sign-in, is logged as an error, and is retried on the next request rather than
+being confused with an unset value.
 
 ## Request Flow
 

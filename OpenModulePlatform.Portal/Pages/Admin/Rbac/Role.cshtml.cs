@@ -148,6 +148,13 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             StatusMessage = IsCreate ? T("Role created.") : T("Role updated.");
             return RedirectAfterSave(roleId);
         }
+        catch (InvalidOperationException)
+        {
+            await ReloadExistingRoleStateAsync(ct);
+            SetTitles(IsCreate ? "Create role" : "Edit role");
+            ModelState.AddModelError(string.Empty, T("Built-in roles cannot be renamed."));
+            return Page();
+        }
         catch (SqlException ex)
         {
             await ReloadExistingRoleStateAsync(ct);
@@ -264,7 +271,16 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return RedirectToSecurityRoles();
         }
 
-        await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
+        try
+        {
+            await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
+        }
+        catch (InvalidOperationException)
+        {
+            StatusMessage = T("The last principal of a built-in role cannot be removed.");
+            return RedirectToSecurityRole(Input.RoleId);
+        }
+
         await WriteRoleEventAsync("role.principal_removed", $"Removed principal '{principal}' ({principalType}) from role #{Input.RoleId}",
             data: new Dictionary<string, object?> { ["principalType"] = principalType, ["principal"] = principal },
             args: new Dictionary<string, object?> { ["principal"] = principal, ["principalType"] = principalType }, ct);
@@ -343,6 +359,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             await WriteRoleEventAsync("role.deleted", $"Deleted role #{Input.RoleId}", data: null, args: null, ct);
             StatusMessage = T("Role deleted.");
             return RedirectToSecurityRoles();
+        }
+        catch (InvalidOperationException)
+        {
+            StatusMessage = T("Built-in roles cannot be deleted.");
+            return RedirectToSecurityRole(Input.RoleId);
         }
         catch (SqlException ex)
         {

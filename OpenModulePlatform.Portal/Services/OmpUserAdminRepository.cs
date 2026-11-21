@@ -342,6 +342,21 @@ WHERE user_id = @user_id;";
                 return new RemoveAuthLinkResult(RemoveAuthLinkStatus.AuthLinkMissing);
             }
 
+            const string remainingLinksSql = @"
+SELECT COUNT(1)
+FROM omp.user_auth WITH (UPDLOCK, HOLDLOCK)
+WHERE user_id = @user_id
+  AND user_auth_id <> @user_auth_id
+  AND auth_status = N'enabled';";
+            await using var remainingLinks = new SqlCommand(remainingLinksSql, conn, tx);
+            Add(remainingLinks, "@user_id", userId);
+            Add(remainingLinks, "@user_auth_id", userAuthId);
+            if (Convert.ToInt32(await remainingLinks.ExecuteScalarAsync(ct)) == 0)
+            {
+                await tx.RollbackAsync(ct);
+                return new RemoveAuthLinkResult(RemoveAuthLinkStatus.LastAuthLink);
+            }
+
             await DeleteAuthLinkAsync(conn, tx, userAuthId, ct);
             if (string.Equals(link.Value.ProviderDisplayName, LocalPasswordIdentity.ProviderDisplayName, StringComparison.OrdinalIgnoreCase))
             {
@@ -355,6 +370,8 @@ WHERE user_id = @user_id;";
                     ct);
             }
 
+            // Removing a sign-in mechanism also ends sessions established through it.
+            await RotateSecurityStampAsync(conn, tx, userId, ct);
             await tx.CommitAsync(ct);
             return new RemoveAuthLinkResult(
                 RemoveAuthLinkStatus.Removed,
@@ -1717,7 +1734,8 @@ public sealed record RemoveAuthLinkResult(
 public enum RemoveAuthLinkStatus
 {
     Removed,
-    AuthLinkMissing
+    AuthLinkMissing,
+    LastAuthLink
 }
 
 public sealed record MigrateAdUserRoleAssignmentsResult(

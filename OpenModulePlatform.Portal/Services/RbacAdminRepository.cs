@@ -32,6 +32,11 @@ public sealed class RbacAdminRepository
     // Search terms are matched against display_name (200) or Principal (256).
     private const int SearchTermParameterLength = 256;
 
+    private static bool IsBuiltInRoleName(string? name)
+        => string.Equals(name, "PortalAdmins", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "Everyone", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "AuthenticatedUsers", StringComparison.OrdinalIgnoreCase);
+
     private readonly SqlConnectionFactory _db;
 
     public RbacAdminRepository(SqlConnectionFactory db)
@@ -598,14 +603,28 @@ UPDATE omp.Roles
 SET Name = @Name,
     Description = @Description,
     UpdatedUtc = SYSUTCDATETIME()
-WHERE RoleId = @RoleId;";
+WHERE RoleId = @RoleId
+  AND (Name NOT IN (N'PortalAdmins', N'Everyone', N'AuthenticatedUsers') OR Name = @Name);";
 
+        int affected;
         await using (var update = new SqlCommand(updateSql, conn))
         {
             update.Parameters.Add("@RoleId", SqlDbType.Int).Value = input.RoleId;
             AddNVarChar(update, "@Name", input.Name, NameColumnLength);
             AddNVarChar(update, "@Description", input.Description, DescriptionColumnLength);
-            await update.ExecuteNonQueryAsync(ct);
+            affected = await update.ExecuteNonQueryAsync(ct);
+        }
+
+        if (affected == 0)
+        {
+            const string currentNameSql = "SELECT Name FROM omp.Roles WHERE RoleId = @RoleId;";
+            await using var currentName = new SqlCommand(currentNameSql, conn);
+            currentName.Parameters.Add("@RoleId", SqlDbType.Int).Value = input.RoleId;
+            var roleName = await currentName.ExecuteScalarAsync(ct) as string;
+            if (IsBuiltInRoleName(roleName) && !string.Equals(roleName, input.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"The built-in role '{roleName}' cannot be renamed.");
+            }
         }
 
         return input.RoleId;
@@ -662,6 +681,18 @@ WHERE PermissionId = @PermissionId;";
         await using var tx = await conn.BeginTransactionAsync(ct);
         try
         {
+            var roleName = await GetRoleNameForUpdateAsync(conn, (SqlTransaction)tx, roleId, ct);
+            if (roleName is null)
+            {
+                await tx.RollbackAsync(ct);
+                return false;
+            }
+
+            if (IsBuiltInRoleName(roleName))
+            {
+                throw new InvalidOperationException($"The built-in role '{roleName}' cannot be deleted.");
+            }
+
             await DeleteByRoleAsync(
                 conn,
                 (SqlTransaction)tx,
@@ -910,13 +941,62 @@ END";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var roleName = await GetRoleNameForUpdateAsync(conn, tx, roleId, ct);
+            if (IsBuiltInRoleName(roleName))
+            {
+                const string countSql = @"
+SELECT COUNT(1)
+FROM omp.RolePrincipals WITH (UPDLOCK, HOLDLOCK)
+WHERE RoleId = @RoleId;";
+                await using var count = new SqlCommand(countSql, conn, tx);
+                count.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+                var principalCount = Convert.ToInt32(await count.ExecuteScalarAsync(ct));
 
-        await using var cmd = new SqlCommand(sql, conn);
+                const string targetExistsSql = @"
+SELECT COUNT(1)
+FROM omp.RolePrincipals WITH (UPDLOCK, HOLDLOCK)
+WHERE RoleId = @RoleId
+  AND PrincipalType = @PrincipalType
+  AND Principal = @Principal;";
+                await using var targetExists = new SqlCommand(targetExistsSql, conn, tx);
+                targetExists.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+                AddNVarChar(targetExists, "@PrincipalType", principalType, PrincipalTypeColumnLength);
+                AddNVarChar(targetExists, "@Principal", principal, PrincipalColumnLength);
+                var targetExistsCount = Convert.ToInt32(await targetExists.ExecuteScalarAsync(ct));
+                if (principalCount == 1 && targetExistsCount == 1)
+                {
+                    throw new InvalidOperationException($"The last principal of the built-in role '{roleName}' cannot be removed.");
+                }
+            }
+
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
+            AddNVarChar(cmd, "@PrincipalType", principalType, PrincipalTypeColumnLength);
+            AddNVarChar(cmd, "@Principal", principal, PrincipalColumnLength);
+
+            await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    private static async Task<string?> GetRoleNameForUpdateAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int roleId,
+        CancellationToken ct)
+    {
+        const string sql = "SELECT Name FROM omp.Roles WITH (UPDLOCK, HOLDLOCK) WHERE RoleId = @RoleId;";
+        await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.Add("@RoleId", SqlDbType.Int).Value = roleId;
-        AddNVarChar(cmd, "@PrincipalType", principalType, PrincipalTypeColumnLength);
-        AddNVarChar(cmd, "@Principal", principal, PrincipalColumnLength);
-
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
     private static async Task<int> DeleteByRoleAsync(

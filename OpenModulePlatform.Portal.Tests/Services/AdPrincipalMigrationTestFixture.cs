@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.TestSupport;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
@@ -69,6 +70,9 @@ DROP DATABASE [{DatabaseName}];",
 
     public RbacAdminRepository CreateRbacAdminRepository()
         => new(CreateConnectionFactory());
+
+    public OmpUserAdminRepository CreateUserAdminRepository()
+        => new(CreateConnectionFactory(), new LocalPasswordHasher());
 
     public async Task<int> InsertUserAsync(string displayName, bool active)
     {
@@ -144,6 +148,55 @@ VALUES(@role_id, @principal_type, @principal);",
         cmd.Parameters.AddWithValue("@principal_type", principalType);
         cmd.Parameters.AddWithValue("@principal", principal);
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<int[]> GetAuthLinkIdsAsync(int userId)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            "SELECT user_auth_id FROM omp.user_auth WHERE user_id = @user_id ORDER BY user_auth_id;",
+            conn);
+        cmd.Parameters.AddWithValue("@user_id", userId);
+        var ids = new List<int>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            ids.Add(reader.GetInt32(0));
+        }
+
+        return ids.ToArray();
+    }
+
+    public async Task<Guid> GetSecurityStampAsync(int userId)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            "SELECT security_stamp FROM omp.users WHERE user_id = @user_id;",
+            conn);
+        cmd.Parameters.AddWithValue("@user_id", userId);
+        return (Guid)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    public async Task<int> GetRoleIdAsync(string name)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand("SELECT RoleId FROM omp.Roles WHERE Name = @name;", conn);
+        cmd.Parameters.AddWithValue("@name", name);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    public async Task<bool> RoleExistsAsync(int roleId)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            "SELECT COUNT(1) FROM omp.Roles WHERE RoleId = @role_id;",
+            conn);
+        cmd.Parameters.AddWithValue("@role_id", roleId);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync()) == 1;
     }
 
     public async Task<int> CountRolePrincipalsAsync(int roleId, string principalType, string principal)
@@ -259,7 +312,16 @@ CREATE TABLE omp.RolePrincipals
     Principal nvarchar(256) NOT NULL,
     CONSTRAINT PK_omp_RolePrincipals PRIMARY KEY(RoleId, PrincipalType, Principal),
     CONSTRAINT FK_omp_RolePrincipals_Role FOREIGN KEY(RoleId) REFERENCES omp.Roles(RoleId)
-);",
+);
+
+IF OBJECT_ID(N'omp.RolePermissions', N'U') IS NULL
+CREATE TABLE omp.RolePermissions(RoleId int NOT NULL, PermissionId int NOT NULL);
+
+IF OBJECT_ID(N'omp.banner_targets', N'U') IS NULL
+CREATE TABLE omp.banner_targets(role_id int NOT NULL);
+
+IF OBJECT_ID(N'omp.config_settings', N'U') IS NULL
+CREATE TABLE omp.config_settings(ConfigRole int NULL);",
             conn);
         await cmd.ExecuteNonQueryAsync();
     }

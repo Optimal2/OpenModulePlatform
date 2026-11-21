@@ -40,8 +40,10 @@ users who should sign in through a known AD identity or through the built-in
 `lpwd` provider. Existing OMP users can still get additional AD links or a local
 login later from `/admin/users/edit/{userId}`. The edit page can remove AD links
 and local logins, and it can reset the password for an existing local login.
-Removing all authentication links is allowed, but the user cannot sign in again
-until another link is added.
+The last enabled authentication link cannot be removed, so an administrator
+cannot accidentally leave a user with no way to sign in. A successful removal
+rotates the user's security stamp and ends existing sessions at their next
+request.
 
 The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
 principal types. Existing `ADGroup` assignments still resolve, but adding new AD
@@ -53,6 +55,9 @@ For broad app access, prefer adding permissions to the built-in `Everyone` or
 roles behave like baseline permission buckets: their permissions are added to
 the user's active role at runtime, so a Portal admin can keep `PortalAdmins` as
 the active role and still inherit general app access from `AuthenticatedUsers`.
+`PortalAdmins`, `Everyone`, and `AuthenticatedUsers` cannot be renamed or
+deleted, and their last remaining principal cannot be removed. Their permission
+sets and additional principals remain editable.
 
 `AuthenticatedUsers` defaults to any authenticated principal. To restrict it to
 specific Windows account prefixes, set the `rbac/authenticatedUsersWindowsDomains`
