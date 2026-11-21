@@ -470,8 +470,8 @@ To create a universal package from an already validated object root, use:
 
 ```powershell
 .\scripts\omp\export-universal-object-root.ps1 `
-  -ObjectRoot "E:\DevInstaller\OpenModulePlatform\Universal\installer\data\global" `
-  -OutputPath "E:\Packages\omp-universal__global__verified.zip"
+  -ObjectRoot ".\artifacts\universal-object-root" `
+  -OutputPath ".\artifacts\universal-packages\omp-universal__global__verified.zip"
 ```
 
 Pass `-LatestOnly` to keep only the highest version per artifact identity
@@ -482,9 +482,10 @@ and developer packaging. Normal repository builds should still use
 `build-universal-package.cmd` or `export-universal-package.ps1`.
 
 Host scoping: without `-TargetHostProfile` both exporters produce a GLOBAL,
-host-agnostic package and always exclude `host-configs/` and `config-overlays/`
-(every host configuration and config overlay carries a host key and is
-per-host by definition). `export-universal-package.ps1` also fails the build
-when `-HostConfigurationFile`/`-ConfigOverlayFile` is passed without a target
-host profile. Pass `-TargetHostProfile` (and optionally `-HostProfilePath`) to
-build a host-specific package that includes that host's objects.
+host-agnostic package and exclude `host-configs/` and `config-overlays/` by
+policy. Host configurations are exact-host objects; config overlays can be
+exact-host or installation-wide (`AllHosts`), but global exporter mode omits both
+scopes. `export-universal-package.ps1` also fails the build when
+`-HostConfigurationFile`/`-ConfigOverlayFile` is passed without a target host
+profile. Pass `-TargetHostProfile` (and optionally `-HostProfilePath`) to build a
+host-specific package that includes that host's objects.

@@ -1,6 +1,6 @@
 # Data Access Convention
 
-This document is the result of a read-only audit of the .NET repositories in the OMP+ODV ecosystem. It maps how each repository accesses SQL Server today, highlights divergences, and recommends a single standard pattern for future work.
+This document records a read-only audit performed on 2026-07-16. The per-repository map, package versions, and line anchors are a dated snapshot, not current version references. The recommended standard remains the living guidance; use each repository's current source and manifests for current facts.
 
 > **Scope:** read-only investigation. No source code was changed. No version bumps.
 > Repositories audited:

@@ -44,7 +44,7 @@ pipeline, which is outside this regression contract. `OmpDeterministicRazor=fals
 is a diagnostic escape hatch, not a deterministic packaging configuration.
 
 Run `scripts/omp/test-deterministic-publish.ps1` for WorkerProcessHost and Portal,
-or select all web projects with `-Project Portal,Auth,Content,Iframe,Example,Blazor,ServiceWeb,WorkerWeb`.
+or select all web projects with `-Project Portal,Auth,Content,Iframe,ContextGuard,Example,Blazor,ServiceWeb,WorkerWeb`.
 CI also checks different isolated roots, both PowerShell engines and matching
 hashes on independent Windows runners. Keep SDK/runtime, dependencies, source
 bytes and build options fixed when comparing machines.

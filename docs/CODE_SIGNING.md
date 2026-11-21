@@ -13,8 +13,9 @@ exactly as before and produces unsigned developer builds.
 
 1. **Azure subscription** — use or create a subscription owned by the platform vendor.
 2. **Create the Trusted Signing account** — Azure Portal → *Trusted Signing
-   Accounts* → *Create*. Pick a nearby region (West Europe), Basic SKU
-   ($9.99/month, 5 000 signatures/month).
+   Accounts* → *Create*. Pick a nearby region and a SKU whose current price and
+   signing quota fit the expected release volume; verify both in Azure because
+   they can change independently of OMP.
 3. **Identity validation** — in the Trusted Signing account, create a new
    *Identity validation* of type *Public*. Enter the platform vendor's legal name,
    organisation number, and a verifiable company email. Validation typically

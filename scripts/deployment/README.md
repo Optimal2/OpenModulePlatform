@@ -64,9 +64,7 @@ checks the selected host folder (`data/hosts/<config-name>`) first, then
 host-local artifacts only for bootstrap repair scenarios; normal runtime
 configuration belongs in config overlays.
 
-Older `*-omp-suite*` scripts have been moved out of this public repository to
-the maintainers' private companion repository archive under
-`OpenModulePlatform/OLD/2026-05-24-public-repo-cleanup/tracked-legacy`. Do not
+Older `*-omp-suite*` scripts are retained outside this public repository. Do not
 use them for new local, test, production, or customer installs.
 
 Do not point `package-hostagent-first.ps1 -OutputRoot` at an existing universal

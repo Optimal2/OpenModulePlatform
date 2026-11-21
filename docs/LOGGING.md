@@ -1,7 +1,7 @@
 # Logging with NLog
 
 This solution uses NLog as the shared logging provider for the web hosts, the classic example worker service, and the Windows worker runtime executables.
-The guidance in this document applies to the `0.1.x` release line.
+The guidance in this document applies to the current `0.3.x` release line.
 
 ## Web applications
 
@@ -55,6 +55,18 @@ does not guarantee: one file per worker per day
 for one worker; find them by the `WorkerInstanceKey` on the first line), and it
 does not change the WorkerManager service's own log, which is one process.
 
+## Central system log
+
+Portal, Auth, HostAgent, and WorkerManager also write warnings and errors to
+`omp.SystemLog` through an asynchronous NLog database target. File logging remains
+the fallback when the database is unavailable. Portal administrators can read the
+rows at `/admin/systemlog` with permission `OMP.Portal.SystemLog.View`.
+
+HostAgent prunes rows older than `HostAgent:SystemLogRetentionDays` (90 days by
+default; `0` disables pruning). Database logging does not replace the per-process
+files described above. Module hosts can adopt the same target, but must configure
+it explicitly.
+
 ## Configuration
 
 Each executable project has an `NLog` section in `appsettings.json`.
@@ -73,8 +85,10 @@ The checked-in `appsettings.json` of a packaged web app never reaches a host: th
 artifact payload strips `appsettings*.json`, and HostAgent writes the component's
 `Packaging/appsettings.json` (merged over its built-in web-app template) instead.
 The built-in template carries no `NLog` section, so a component packaged without
-one runs with no log targets at all. The Portal, Auth and Content module therefore
-repeat their `NLog` section in `Packaging/appsettings.json`;
+one runs with no log targets at all. The Portal, Auth, Content, and Context Guard
+components therefore supply an artifact configuration file from
+`Packaging/appsettings.json`; components without such a row need another explicit
+runtime configuration source if file logging is required.
 `PackagedNLogConfigurationTests` in the Portal test project parses every packaged
 and checked-in section the way NLog does at startup. Web apps that go through
 `UseOmpWebDefaults` render the request correlation id with

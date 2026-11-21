@@ -21,8 +21,8 @@ nobody proposed it here: the `build:omp-web-shared` job lock no longer exists.**
 sections below (see "Gap confirmation" and migration consideration 5) describe it as a
 standing constraint — "the existing exclusive lock … remains unchanged". That was true when
 this ADR was written and is false now. AI Orchestrator commit `c70f6c3` removed the lock on
-2026-08-22, and `AI-Orchestrator/src/gui/jobConcurrency.ts:119` now states "There is
-intentionally NO `build:omp-web-shared` lock". Concurrent consumer builds are made safe by
+2026-08-22, and the orchestrator's job-concurrency configuration now states that
+there is intentionally no `build:omp-web-shared` lock. Concurrent consumer builds are made safe by
 output isolation instead of by serialization: the consumer's `local-ci.ps1` passes
 `-p:OmpIsolatedBuildRoot=<repo-local folder>`, which the `OmpIsolatedBuildRoot` property
 groups in `Directory.Build.props` in this repository use to redirect

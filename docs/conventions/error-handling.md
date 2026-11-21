@@ -9,7 +9,7 @@
 > drifted since. Resolve every reference by the **symbol or file name**, not by
 > the line number; the same note applies in `configuration.md`.
 
-This document summarizes how each repository currently handles errors, highlights divergences, and recommends a single standard pattern per ecosystem (.NET and JS/npm).
+This document summarizes how each repository handled errors at the audit date, highlights divergences found then, and recommends a single standard pattern per ecosystem (.NET and JS/npm). The per-repository map is a dated snapshot; current source is authoritative for later changes.
 
 ---
 

@@ -2,8 +2,9 @@
 
 ## Status
 
-Decided (2026-10-17). Scope, persistence and resolution are implemented;
-Portal CRUD and effective-source views are separate work.
+Decided (2026-10-17) and implemented. Scope, persistence, resolution, Portal
+CRUD and effective-source views are available; see
+[CONFIG_OVERLAY_ADMINISTRATION.md](../CONFIG_OVERLAY_ADMINISTRATION.md).
 
 ## Context
 
@@ -88,7 +89,8 @@ readers continue to validate paths; the sentinel never becomes a filename.
 - Equivalent hosts share one AllHosts overlay; a host exception is one
   host-specific overlay that wins per file.
 - Existing host-only overlays, imports, and universal packages are unchanged.
-- Portal authoring and effective-source views build on
-  `ConfigOverlayAdminDtos` and `GetConfigOverlaysApplicableToHostAsync`.
-  The [administration contract](../CONFIG_OVERLAY_ADMIN_CONTRACT.md) identifies
-  the available methods and the remaining service operations.
+- Portal authoring and effective-source views use `ConfigOverlayAdminDtos` and
+  `GetConfigOverlaysApplicableToHostAsync`. The
+  [administration contract](../CONFIG_OVERLAY_ADMIN_CONTRACT.md) defines the
+  service boundary and the [operator guide](../CONFIG_OVERLAY_ADMINISTRATION.md)
+  documents the implemented `/admin/configoverlays` page.

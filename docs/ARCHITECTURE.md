@@ -7,7 +7,7 @@ OpenModulePlatform is built around a small but explicit core model:
 1. **Definitions** describe what can exist.
 2. **Instances** describe what actually exists in an OMP installation.
 3. **Runtime** describes what is running, where it is running, and how it is observed.
-4. **Automation and topology** describe future desired state and how a HostAgent could later materialize it.
+4. **Automation and topology** describe desired state that HostAgent materializes into concrete runtime rows and deployed applications.
 
 The most important architectural choice in the current codebase is that `AppInstance` is treated as the runtime center instead of pushing runtime responsibility onto `App` or `Module` definitions.
 
@@ -23,16 +23,20 @@ repository also contains, without a section of their own here:
 - `OpenModulePlatform.HostAgent.Sentinel` - a standalone .NET Framework 4.8
   alarm service with a fixed service name that survives HostAgent upgrades
   (`HOST_AGENT_FIRST_INSTALL.md`).
-- `OpenModulePlatform.Bootstrapper` - the installer (`HOST_AGENT_FIRST_INSTALL.md`).
+- `OpenModulePlatform.Installation` - the shared installation engine used by both installer hosts.
+- `OpenModulePlatform.Bootstrapper` - the HostAgent-first installer for bootstrap, upgrade and maintenance (`HOST_AGENT_FIRST_INSTALL.md`).
+- `OpenModulePlatform.Installer` - the separate first-install-only WinForms installer for prepared new-server packages (`FIRST_INSTALLER.md`).
 - `OpenModulePlatform.WorkerManager.WindowsService`, `.WorkerProcessHost` and
   `.Worker.Abstractions` - the manager-driven worker runtime (`WORKER_RUNTIME.md`).
 - `OpenModulePlatform.Artifacts` - artifact package reading and writing shared
   by installer, HostAgent and Portal (`ARTIFACT_PACKAGES.md`).
 - `OpenModulePlatform.EventPublisher.Abstractions` / `.EventPublisher.Sql` -
   the push-event outbox (`PUSH_EVENTS.md`).
-- `OpenModulePlatform.Web.ContentWebAppModule` and
-  `OpenModulePlatform.Web.iFrameWebAppModule` - first-party modules shipped
-  with the platform.
+- `OpenModulePlatform.Web.ContentWebAppModule`,
+  `OpenModulePlatform.Web.iFrameWebAppModule` and
+  `OpenModulePlatform.Web.ContextGuardModule` - first-party modules shipped
+  with the platform. Context Guard has no SQL objects; its v1 pending and live
+  stores are in process memory (`CONTEXT_GUARD_MODULE.md`).
 - Four example modules under `examples/`: the three described below plus
   `WebAppBlazorModule`, the Blazor variant of the simple web app example.
 

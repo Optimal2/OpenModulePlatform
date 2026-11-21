@@ -1,10 +1,11 @@
 # Unit-testing conventions for OMP+ODV
 
-This document has one job: say what the current testing state of the OMP+ODV family is and what
-the standard is. Section 1 is the measured state (re-measured 2026-09-06 from `origin/main` of
-every repository), section 2 the standard, section 3 the work that is still open, and section 4
-the dated history of how the document got here. Do not add dated "superseded" layers to sections
-1-3 again; update the numbers in place and add a line to the changelog.
+This document has two jobs: preserve the measured ecosystem snapshot and define the testing
+standard. Section 1 is a point-in-time audit (re-measured 2026-09-06 from `origin/main` of
+every repository), section 2 the standard, section 3 the work open at that audit, and section 4
+the dated history of how the document got here. The snapshot is not a current version reference.
+For current OMP projects, pins, and gate exclusions, use `OpenModulePlatform.slnx`,
+`Directory.Packages.props`, `scripts/local-ci.ps1`, and `docs/TEST_DEBT.md`.
 
 The private consumer repositories in the OMP+ODV ecosystem are represented
 here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
@@ -15,7 +16,7 @@ private companion repository.
 Repos covered: OpenModulePlatform, Contoso, Fabrikam, Northwind, AdventureWorks,
 Tailwind, Globex, ODVGateway (.NET); OpenDocViewer, AgentDocMap (JS/npm).
 
-## 1. Current state (measured 2026-09-06)
+## 1. Measured snapshot (2026-09-06)
 
 ### 1.1 Family-wide package pins
 
@@ -34,8 +35,8 @@ Read from every repository's `Directory.Packages.props` on the same day (ODVGate
 | `vitest` | `^4.1.11` | OpenDocViewer (`package.json`) |
 | `node:test` | built in | AgentDocMap (no test dependencies at all) |
 
-`global.json` pins the SDK in every .NET repo except Tailwind. When these numbers drift again,
-fix this table first: duplicating a version in seven places is what let the document go stale.
+`global.json` pins the SDK in every .NET repo except Tailwind in this snapshot. Do not use these
+numbers as current pins; each repository's own manifest is authoritative after the audit date.
 
 ### 1.2 Per-repo state
 

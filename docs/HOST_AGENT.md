@@ -1516,8 +1516,8 @@ Sharing the ring is **by design** for the SSO family and harmful nowhere else,
 because the shared auth cookie is the whole point of the family:
 
 - **Must share the ring (SSO family):** the Portal, `OpenModulePlatform.Auth`,
-  and every module web app that accepts the shared cookie (Content/iFrame web
-  app modules, the example modules, and consumer apps such as Contoso,
+  and every module web app that accepts the shared cookie (Content, iFrame and
+  Context Guard web app modules, the example modules, and consumer apps such as Contoso,
   AdventureWorks, Northwind, Fabrikam, Tailwind). These all run with
   the same `CookieName`, `ApplicationName`, and `DataProtectionKeyPath` —
   isolation between them would break cross-app sign-in and role switching.

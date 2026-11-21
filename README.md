@@ -37,11 +37,12 @@ observed state.
   definition is gated on `definitionVersion`.
 - **A worker runtime** (`OpenModulePlatform.WorkerManager.WindowsService`,
   `OpenModulePlatform.WorkerProcessHost`, `OpenModulePlatform.Worker.Abstractions`)
-  that runs one child process per worker app instance and loads a plugin into it.
+  that runs one child process per worker instance and loads a plugin into it.
 - **First-party modules** that are usable as-is: the shared sign-in app
-  (`OpenModulePlatform.Auth`, Windows/AD and local password), content pages
-  (`OpenModulePlatform.Web.ContentWebAppModule`) and iframe embedding
-  (`OpenModulePlatform.Web.iFrameWebAppModule`).
+  (`OpenModulePlatform.Auth`, Windows/AD, local password and optional OIDC),
+  content pages (`OpenModulePlatform.Web.ContentWebAppModule`), iframe embedding
+  (`OpenModulePlatform.Web.iFrameWebAppModule`) and authenticated one-time
+  application-context hand-offs (`OpenModulePlatform.Web.ContextGuardModule`).
 - **Four example modules** under `examples/`: a plain web app, a Blazor web
   app, a web app with a Windows service, and a web app with a plugin worker.
 
@@ -70,7 +71,7 @@ flowchart LR
     subgraph iis["IIS site (created by HostAgent)"]
         portal["Portal<br/>OpenModulePlatform.Portal"]
         auth["Auth app<br/>OpenModulePlatform.Auth"]
-        webmods["Module web apps<br/>Content, iFrame, examples"]
+        webmods["Module web apps<br/>Content, iFrame, Context Guard, examples"]
     end
 
     subgraph host["Each host (Windows)"]
@@ -298,9 +299,11 @@ OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql
 ```
 
 Set `@BootstrapPortalAdminPrincipal` in both `2-initialize` scripts. Add the
-first-party modules (`OpenModulePlatform.Web.ContentWebAppModule/Sql/`,
+first-party modules with SQL (`OpenModulePlatform.Web.ContentWebAppModule/Sql/`,
 `OpenModulePlatform.Web.iFrameWebAppModule/Sql/`) and any
-`examples/<module>/sql/` scripts you want. See [sql/README.md](sql/README.md).
+`examples/<module>/Sql/` scripts you want. Context Guard has no SQL scripts; its
+metadata is imported from `context_guard.module-definition.json`. See
+[sql/README.md](sql/README.md).
 
 ## Configuration
 
@@ -338,9 +341,10 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 | `OpenModulePlatform.HostAgent.*` | HostAgent service, runtime library, Sentinel watchdog, tests |
 | `OpenModulePlatform.WorkerManager.WindowsService`, `WorkerProcessHost`, `Worker.Abstractions` | Worker runtime |
 | `OpenModulePlatform.Web.Shared` (+ `.Analyzers`) | Shared web infrastructure for the Portal and modules |
-| `OpenModulePlatform.Web.ContentWebAppModule`, `Web.iFrameWebAppModule` | First-party modules |
+| `OpenModulePlatform.Web.ContentWebAppModule`, `Web.iFrameWebAppModule`, `Web.ContextGuardModule` | First-party modules |
 | `OpenModulePlatform.Artifacts` | Package and manifest readers shared by Portal, HostAgent and installer |
-| `OpenModulePlatform.Bootstrapper` | Installer (GUI and command line) |
+| `OpenModulePlatform.Installation` | Installation engine shared by the bootstrapper and first-install installer |
+| `OpenModulePlatform.Bootstrapper`, `OpenModulePlatform.Installer` | HostAgent-first bootstrapper (GUI/CLI) and first-install-only installer |
 | `OpenModulePlatform.EventPublisher.*` | Push-event outbox (`omp.push_event_outbox`) |
 | `examples/` | Four example modules |
 | `sql/` | Core schema and bootstrap data |
@@ -373,19 +377,23 @@ dotnet test  OpenModulePlatform.slnx --configuration Release
 - Tests excluded from the CI gate, and why, are listed in
   [docs/TEST_DEBT.md](docs/TEST_DEBT.md).
 - `OpenModulePlatform.UiTests` runs Playwright invariant scans (overflow,
-  invisible text, zero-size targets, CSP) against the built Portal, Auth and
-  iFrame apps. It is excluded from CI (`Category!=Ui`); run it with
+  invisible text, zero-size targets, CSP) against the built OMP apps. The
+  general solution test gate excludes `Category=Ui`, while CI's separate
+  `module-fragment-ui` job runs the selected module-fragment, Content editor and
+  Context Guard browser tests. Run the full UI suite with
   `dotnet test OpenModulePlatform.slnx -c Release --no-build --filter "Category=Ui"`.
-  Missing prerequisites make the tests skip with a reason — a skipped UI test
-  is not a passing one.
+  Missing prerequisites make local-only tests skip with a reason — a skipped UI
+  test is not a passing one. The selected CI browser job fails rather than skips
+  when its browser or application startup fails.
 
 ### Local CI gate
 
 `scripts/local-ci.ps1` runs the same checks as CI: module-definition
 validation, module SQL guards, component-version validation, PSScriptAnalyzer,
-the Pester suites under `tests/`, the Release build, and the seven non-UI test
-projects with a zero-execution check. Activate the tracked git hooks once per
-clone so it runs on `git push`:
+the Pester suites under `tests/`, the Release build, and the ten non-UI xUnit
+test projects with a zero-execution check. It also runs the selected browser UI
+suite that CI runs in its separate `module-fragment-ui` job. Activate the tracked
+git hooks once per clone so it runs on `git push`:
 
 ```powershell
 .\scripts\setup-hooks.ps1
@@ -406,6 +414,7 @@ pages:
 - [HostAgent](docs/HOST_AGENT.md) · [HostAgent-first install](docs/HOST_AGENT_FIRST_INSTALL.md)
 - [Module definitions](docs/MODULE_DEFINITIONS.md) · [Artifact packages](docs/ARTIFACT_PACKAGES.md) · [Universal packages](docs/UNIVERSAL_MODULE_PACKAGES.md)
 - [Worker runtime](docs/WORKER_RUNTIME.md) · [Push events](docs/PUSH_EVENTS.md) · [Logging](docs/LOGGING.md)
+- [Context Guard](docs/CONTEXT_GUARD_MODULE.md) · [Configuration overlays](docs/CONFIG_OVERLAYS.md)
 - [Authentication and RBAC](docs/AUTHENTICATION_AND_RBAC.md) · [Hosting on Windows and IIS](docs/HOSTING_WINDOWS_IIS.md)
 - [Project status](docs/PROJECT_STATUS.md) · [Architecture decisions](docs/adr/)
 

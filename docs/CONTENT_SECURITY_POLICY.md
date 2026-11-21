@@ -142,7 +142,10 @@ built-in web-app template, which carries no `SecurityHeaders` section) instead.
 The Portal, Auth and Content module therefore repeat their policy in
 `Packaging/appsettings.json`, and `PortalInlineScriptGuardTests` pins the
 packaged Portal policy to the checked-in one. Keep both copies identical when a
-policy changes.
+policy changes. Context Guard currently supplies no policy override in either
+its checked-in or packaged configuration, so it uses the shared baseline
+(including `script-src 'unsafe-inline'`); do not describe it as covered by the
+Portal's stricter policy.
 
 > **The hardening lives in configuration, and losing the key un-does it silently.**
 > `OmpContentSecurityPolicy.Build` falls back to `Baseline` whenever

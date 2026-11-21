@@ -55,20 +55,19 @@ profile key. Importers treat it as operator-facing metadata; the portable
 objects themselves still carry their own identities. Host-specific objects should
 also include their host key inside the object document.
 
-**Host-scoping rule (enforced by the exporters):** a global package (no target
-host profile) must be host-agnostic. It contains module definitions, artifacts,
-global dashboard widgets, and widget data — but never `host-configs/` or
-`config-overlays/` objects, because every host configuration and config overlay
-carries a host key and is per-host by definition. This guarantees that a global
-package handed to a customer environment cannot modify any specific host's
-configuration on import. Host-specific objects belong in host-targeted packages
-only (built with a target host profile), and then only that host's objects.
+**Host-scoping rule (enforced by the repository and installer exporters):** a
+global package (no target host profile) must be host-agnostic. It contains module
+definitions, artifacts, global dashboard widgets, and widget data, but these
+exporters omit `host-configs/` and `config-overlays/`. Host configurations are
+always exact-host objects. Config overlays can instead use
+`hostScope: "AllHosts"` for installation-wide scope, but the exporters still
+omit the whole overlay folder in global mode by policy.
 `export-universal-object-root.ps1` and `export-universal-package.ps1` both
-enforce this: in global mode they exclude the host-specific folders, and
-`export-universal-package.ps1` additionally fails the build when explicit
-`-HostConfigurationFile`/`-ConfigOverlayFile` inputs are passed without a
-target host profile. The installer GUI package builder applies the same rule
-when "No target host" is selected.
+enforce this rule, and `export-universal-package.ps1` additionally fails the
+build when explicit `-HostConfigurationFile`/`-ConfigOverlayFile` inputs are
+passed without a target host profile. The installer GUI package builder applies
+the same rule when "No target host" is selected. Portal export can include
+AllHosts overlays; their scope remains explicit in the object JSON.
 
 ## Standard Folders
 
@@ -94,7 +93,10 @@ widgets/customer-test/omp-dashboard-widgets-customer-test.json
 
 No extra container folders are needed. The folder tells an operator what the
 package was built for; the object JSON is still the source of truth for host key,
-overlay key, version, and selectors.
+overlay key, version, scope, and selectors. Portal writes AllHosts overlays to
+`config-overlays/all-hosts/documents/all-hosts__<overlay-key>__overlay__<version>.json`.
+The extra path depth prevents a collision with a real host named `all-hosts`.
+See [CONFIG_OVERLAYS.md](CONFIG_OVERLAYS.md) for scope and precedence.
 
 Supported item kinds:
 
@@ -103,7 +105,7 @@ Supported item kinds:
 | `module-definition` | `module-definitions/` | `.json` | Versioned module definition document. |
 | `artifact-package` | `artifacts/` | `.zip` | Standard OMP artifact package envelope. |
 | `host-configuration` | `host-configs/` | `.json`, `.zip` | Host bootstrap/configuration object. |
-| `config-overlay` | `config-overlays/` | `.json`, `.zip` | Host-specific config files applied outside artifact hashes. |
+| `config-overlay` | `config-overlays/` | `.json`, `.zip` | Exact-host or installation-wide (`AllHosts`) config files applied outside artifact hashes. |
 | `dashboard-widget` | `widgets/` | `.json` | Versioned Portal dashboard widget package JSON. |
 | `widget-data` | `widget-data/` | `.zip` | Portal shared widget runtime data package containing `widget_data` JSON plus remappable `widget_binary_data` files. |
 

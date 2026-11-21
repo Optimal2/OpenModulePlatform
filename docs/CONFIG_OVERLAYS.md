@@ -1,20 +1,22 @@
 # Host Configurations And Config Overlays
 
-OMP keeps global deployment objects separate from host-specific configuration.
-That separation avoids duplicating module definitions and artifact binaries when
-only a server name, path, account, URL, or customer value differs.
+OMP keeps global deployment objects separate from host- and
+installation-scoped configuration. That separation avoids duplicating module
+definitions and artifact binaries when only a server name, path, account, URL,
+or customer value differs.
 
 ## Object Types
 
-There are two host-specific portable object types:
+There are two configuration-scoped portable object types:
 
 - **Host configuration** is one JSON document per host. It contains the host key
   and an opaque `values` object that generator scripts can use to create
   overlays.
-- **Config overlay** is a JSON document or zip package that targets one host and
-  optionally narrows itself to a module, app, package type, target name, or
-  artifact version. HostAgent applies matching overlay configuration files on
-  top of artifact-owned configuration files during deployment.
+- **Config overlay** is a JSON document or zip package that targets one host or
+  all hosts in the connected installation. It can optionally narrow itself to a
+  module, app, package type, target name, or minimum artifact version. HostAgent
+  applies matching overlay configuration files on top of artifact-owned
+  configuration files during deployment.
 
 Both object types can be imported through Portal or copied into an installer
 package library. For unattended HostAgent import, put the objects inside a

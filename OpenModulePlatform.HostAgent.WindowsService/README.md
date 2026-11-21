@@ -90,5 +90,5 @@ Package extraction and artifact retention/cleanup are implemented in the
 runtime; see `../docs/HOST_AGENT.md` ("Import folder" and "HostAgent job
 queue").
 
-See `../docs/HOST_AGENT_TEMPLATE_AUTOMATION.md` for the roadmap from template
-metadata to full HostAgent-driven deployment automation.
+See `../docs/HOST_AGENT_TEMPLATE_AUTOMATION.md` for the current mapping from
+installation-profile metadata to HostAgent-driven deployment automation.

@@ -5,7 +5,11 @@
 > drifted since. Resolve every reference by the **symbol or file name**, not by
 > the line number; the same note applies in `configuration.md`.
 
-This document records the dependency-injection (DI) patterns found in the
+This document records a point-in-time audit from 2026-07-16. Its per-repository
+maps are dated evidence; the conventions are the living guidance. Current source
+and project files are authoritative for hosts and registrations added later.
+
+The audit covers the dependency-injection (DI) patterns found in the
 eight OMP+ODV .NET repositories (source code only; `bin/`, `obj/`,
 `artifacts/`, `node_modules/`, `dist/` and other build output were excluded
 from the audit). It is the DI counterpart to `configuration.md`,

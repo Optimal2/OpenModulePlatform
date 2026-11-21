@@ -90,12 +90,11 @@ crash-loop failures, for the Portal. A count of WorkerInstances is therefore not
 count of running processes. Creating explicit worker rows replaces the fallback;
 even disabled explicit rows suppress it.
 
-The public Portal now includes:
-
-- `App workers` for app-level worker-runtime metadata in `omp.AppWorkerDefinitions`
-- `Worker runtime` for operational visibility into managed app instances and their latest observed runtime state
-
-These pages are schema-aware and degrade to empty lists until the database has been updated with the current SQL install script.
+The public Portal combines app-worker metadata and live worker-runtime state at
+`/admin/workers`. Metadata editing uses `/admin/appworkeredit`; the older
+`/admin/appworkers` and `/admin/workerruntime` routes redirect to the combined
+page. The page is schema-aware and degrades to empty lists until the database
+has been updated with the current SQL install script.
 
 ## Provisioning worker app instances from a module
 

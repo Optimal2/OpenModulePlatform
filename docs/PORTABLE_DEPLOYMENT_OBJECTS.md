@@ -7,8 +7,8 @@ everything that should move between installations:
 - **Artifact package objects** describe one deployable runtime package and the
   artifact-owned runtime configuration files that belong to that artifact
   version.
-- **Host configuration objects** and **config overlay objects** keep
-  host-specific configuration outside global module and artifact packages.
+- **Host configuration objects** and **config overlay objects** keep host- or
+  installation-scoped configuration outside global module and artifact packages.
 
 Together they replace module-specific installation scripts for normal
 application deployment. A new environment should first import module
@@ -103,8 +103,11 @@ service accounts, or URLs without duplicating the global module definition or
 artifact package.
 
 HostAgent applies matching overlay configuration files after artifact-owned
-configuration files. A matching overlay row therefore wins for that host when it
-uses the same relative path.
+configuration files. An overlay targets one host or, with
+`hostScope: "AllHosts"`, every host in the connected installation. Per relative
+path, the order is artifact configuration, AllHosts overlay, then exact-host
+overlay. A matching exact-host row therefore wins even when its overlay version
+is older than the AllHosts row.
 
 ## Complete Module Package
 

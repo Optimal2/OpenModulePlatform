@@ -2,7 +2,7 @@
 
 **Scope:** All `omp-odv` repositories.
 **Date:** 2026-07-16.
-**Purpose:** Document current HTTP-client usage, divergences, and the recommended standard pattern.
+**Purpose:** Preserve the dated HTTP-client audit and define the recommended standard pattern. The per-repository map is not a current-state reference after the audit date.
 **Constraint:** Read-only audit; no source changes.
 
 > **Line anchors (note added 2026-09-21).** The `file.cs:NN` references in

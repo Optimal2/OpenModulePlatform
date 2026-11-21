@@ -48,7 +48,8 @@ Module-specific checks live outside this repository. Pass one or more scripts
 with `-ModuleCheckScript`, or place them in a `module-checks` folder next to
 the diagnostics script (the folder is gitignored). Each script is dot-sourced
 with `-Config <effective appsettings>` after the shared checks, so it can call
-`Add-Check`, `Get-ConfigValue`, `Invoke-SqlRows` and the other helpers:
+`Add-Check`, `Get-ConfigValue`, `Invoke-SqlRows` and the other helper functions
+defined by `Test-OmpWebAppDiagnostics.ps1`:
 
 ```powershell
 param([System.Collections.IDictionary]$Config)

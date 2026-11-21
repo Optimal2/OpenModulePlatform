@@ -126,9 +126,11 @@ definitions, artifacts, host configs, config overlays, and widgets. See
 
 ## Config overlay
 
-Host-specific configuration that is stored separately from the artifact binary
-payload. This keeps environment-specific config out of artifact hashes and lets
-the same artifact content be used by multiple hosts.
+Configuration that is stored separately from the artifact binary payload. An
+overlay can target one host (`Host`) or every host in the connected installation
+(`AllHosts`). This keeps environment-specific config out of artifact hashes and
+lets the same artifact content be used by multiple hosts. Exact-host files take
+precedence over matching AllHosts files.
 
 ## Artifact configuration file
 

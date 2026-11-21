@@ -49,9 +49,10 @@ mirrors the root flow above, numbered prefix included:
 
 0. `0-validate-<module>.sql`
    - Verifies that the module-owned schema, tables, and required columns exist.
-     Every first-party module and every example module ships one; the only
-     module without it is `OpenModulePlatform.Auth`, which creates no schema of
-     its own (see below).
+     Every schema-owning first-party module and every example module ships one.
+     `OpenModulePlatform.Auth` and `OpenModulePlatform.Web.ContextGuardModule`
+     have no module-owned SQL scripts; Context Guard's v1 stores are in process
+     memory (see below).
 
 1. `1-setup-<module>.sql`
    - Creates only the module-owned schema and tables.
@@ -69,8 +70,8 @@ the same pattern under each module's own SQL folder. The folder name is not
 uniform: `OpenModulePlatform.Portal/sql` and `OpenModulePlatform.Auth/sql` are
 lowercase, while `OpenModulePlatform.Web.ContentWebAppModule/Sql`,
 `OpenModulePlatform.Web.iFrameWebAppModule/Sql` and the four `examples/*/Sql`
-folders are capitalized. Match the folder that already exists rather than
-assuming one casing.
+folders are capitalized. `OpenModulePlatform.Web.ContextGuardModule` has no SQL
+folder. Match the folder that already exists rather than assuming one casing.
 
 `OpenModulePlatform.Auth` is the exception to the pattern. It is platform
 infrastructure rather than a user-facing module, so it owns no schema and has
@@ -79,6 +80,11 @@ rows into the core `omp` schema. It requires the root `1-setup-*` and
 `2-initialize-*` scripts to have run first, and it is wired into installs
 through `OpenModulePlatform.Auth/omp_auth.module-definition.json` and the
 HostAgent-first packager (`scripts/deployment/package-hostagent-first.ps1`).
+
+`OpenModulePlatform.Web.ContextGuardModule` also owns no runtime SQL objects.
+Its module definition declares metadata and artifact compatibility only; v1
+keeps pending hand-offs and live contexts in process memory. See
+`docs/CONTEXT_GUARD_MODULE.md`.
 
 ## Schema names
 

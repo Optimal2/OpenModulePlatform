@@ -5,7 +5,7 @@ This project is the Windows Service host for the OMP worker runtime manager.
 Current state:
 
 - runs as a real Windows Service host
-- supervises one child process per managed `AppInstanceId`
+- supervises one child process per managed `WorkerInstanceId`; an app instance with no explicit `omp.WorkerInstances` rows retains one implicit compatibility worker
 - starts `OpenModulePlatform.WorkerProcessHost` as an external child process
 - passes runtime identity and plugin settings through command-line configuration overrides
 - applies a basic restart policy with restart delay and restart window limits

@@ -165,15 +165,13 @@ when you explicitly need a component-only bump and will reconcile the other
 version fields yourself afterwards.
 
 The HostAgent-first package script consumes the manifest directly when it
-prepares ArtifactStore payloads and SQL artifact-version overrides. Older suite
-scripts still have separate package version fields, so keep those aligned if
-you use the legacy installer.
+prepares ArtifactStore payloads and SQL artifact-version overrides.
 
 When a shared project is included in multiple publish outputs, bump every
 component whose artifact package will contain the changed binary. For example,
 changes in `OpenModulePlatform.Web.Shared` affect Portal, Auth, Content, iFrame,
-and the example web applications, even if the visible behavior changed in only
-one of those apps. Changes in shared package/import code should similarly bump
+Context Guard, and the example web applications, even if the visible behavior
+changed in only one of those apps. Changes in shared package/import code should similarly bump
 each runtime artifact that publishes that assembly.
 
 Always bump from the current post-rebase manifest values. If another branch has

@@ -1,120 +1,135 @@
 # OpenModulePlatform Documentation
 
-This folder contains the main technical documentation for OpenModulePlatform.
-Start here when you need to understand the platform model, deployment objects,
-HostAgent automation, or local development workflow.
+This folder contains the technical, operator, and development documentation for
+OpenModulePlatform. Start here when you need the platform model, deployment
+objects, HostAgent automation, installation, or local development workflow.
 
-## Recommended Reading Order
+## Recommended reading order
 
 For a quick orientation:
 
-1. `TERMINOLOGY.md`
-2. `ARCHITECTURE.md`
-3. `CODEX_DEVELOPMENT.md`
+1. [TERMINOLOGY.md](TERMINOLOGY.md)
+2. [ARCHITECTURE.md](ARCHITECTURE.md)
+3. [CODEX_DEVELOPMENT.md](CODEX_DEVELOPMENT.md)
 
 For deployment and packaging work:
 
-1. `PORTABLE_DEPLOYMENT_OBJECTS.md`
-2. `MODULE_DEFINITIONS.md`
-3. `ARTIFACT_PACKAGES.md`
-4. `CONFIG_OVERLAYS.md`
-5. `UNIVERSAL_MODULE_PACKAGES.md`
-6. `HOST_AGENT_FIRST_INSTALL.md`
-7. `HOST_AGENT.md`
+1. [PORTABLE_DEPLOYMENT_OBJECTS.md](PORTABLE_DEPLOYMENT_OBJECTS.md)
+2. [MODULE_DEFINITIONS.md](MODULE_DEFINITIONS.md)
+3. [ARTIFACT_PACKAGES.md](ARTIFACT_PACKAGES.md)
+4. [CONFIG_OVERLAYS.md](CONFIG_OVERLAYS.md)
+5. [UNIVERSAL_MODULE_PACKAGES.md](UNIVERSAL_MODULE_PACKAGES.md)
+6. [HOST_AGENT_FIRST_INSTALL.md](HOST_AGENT_FIRST_INSTALL.md)
+7. [HOST_AGENT.md](HOST_AGENT.md)
 
 For repository and release work:
 
-1. `OMP_COMPONENT_MANIFEST.md`
-2. `VERSIONING_AND_IDENTITIES.md`
-3. `CODEX_DEVELOPMENT.md`
+1. [OMP_COMPONENT_MANIFEST.md](OMP_COMPONENT_MANIFEST.md)
+2. [VERSIONING_AND_IDENTITIES.md](VERSIONING_AND_IDENTITIES.md)
+3. [CODEX_DEVELOPMENT.md](CODEX_DEVELOPMENT.md)
 
-## Platform Model
+## Platform model
 
-- `TERMINOLOGY.md` - glossary for platform, deployment, and operations terms.
-- `ARCHITECTURE.md` - platform model and request flows.
-- `AUTHENTICATION_AND_RBAC.md` - shared OMP authentication, users, role principals, and RBAC.
-- `VERSIONING_AND_IDENTITIES.md` - artifact versioning and stable identity policy.
+- [TERMINOLOGY.md](TERMINOLOGY.md) — platform, deployment, and operations glossary.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — components, data model, and request flows.
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) — current maturity, limitations, and priorities.
+- [AUTHENTICATION_AND_RBAC.md](AUTHENTICATION_AND_RBAC.md) — shared authentication, users, role principals, and RBAC.
+- [VERSIONING_AND_IDENTITIES.md](VERSIONING_AND_IDENTITIES.md) — artifact versioning and stable identity policy.
+- [TIME_ZONE.md](TIME_ZONE.md) — presentation time zone, calendar rules, and UTC boundaries.
 
-## Deployment Objects
+## Deployment objects and packages
 
-- `PORTABLE_DEPLOYMENT_OBJECTS.md` - module-definition and artifact-package object standards.
-- `MODULE_DEFINITIONS.md` - versioned module definition documents and SQL ownership.
-- `ARTIFACT_PACKAGES.md` - manifest-based artifact package envelope and configuration-file packaging.
-- `CONFIG_OVERLAYS.md` - host configuration and host-specific config overlay object standard.
-- `UNIVERSAL_MODULE_PACKAGES.md` - universal zip container for OMP portable objects.
+- [PORTABLE_DEPLOYMENT_OBJECTS.md](PORTABLE_DEPLOYMENT_OBJECTS.md) — portable-object overview and transport flow.
+- [MODULE_DEFINITIONS.md](MODULE_DEFINITIONS.md) — versioned module definitions, SQL ownership, repairs, and runtime-maintenance steps.
+- [ARTIFACT_PACKAGES.md](ARTIFACT_PACKAGES.md) — artifact package envelope and configuration-file packaging.
+- [CONFIG_OVERLAYS.md](CONFIG_OVERLAYS.md) — host configurations, exact-host and AllHosts overlay objects, selection, and precedence.
+- [CONFIG_OVERLAY_ADMINISTRATION.md](CONFIG_OVERLAY_ADMINISTRATION.md) — operator guide for `/admin/configoverlays`.
+- [CONFIG_OVERLAY_ADMIN_CONTRACT.md](CONFIG_OVERLAY_ADMIN_CONTRACT.md) — Portal administration service and authorization contract.
+- [UNIVERSAL_MODULE_PACKAGES.md](UNIVERSAL_MODULE_PACKAGES.md) — universal zip manifest, folders, import/export, and package-builder behavior.
 
-## Runtime And Hosting
+## Runtime and modules
 
-- `HOST_AGENT.md` - HostAgent runtime behavior and automation responsibilities.
-- `WORKER_RUNTIME.md` - worker runtime concepts.
-- `worker-runtime-windows.md` - Windows-specific worker runtime notes.
-- `HOSTING_WINDOWS_IIS.md` - IIS hosting guidance.
-- `PUSH_EVENTS.md` - push event model for web apps, service apps, workers, and UI refresh hints.
-- `CONTEXT_GUARD_MODULE.md` - authenticated one-time hand-offs, live-context scopes, heartbeat/end behavior, settings and v1 deployment limits.
-- `CHANNEL_TYPE_RECONCILE.md` - contract and template for module-owned channel-type
-  reconciliation (the generalization decided in ADR 0004).
-- `OPEN_DOC_VIEWER_EXAMPLES.md` - host-side CSP requirements for the OMP OpenDocViewer embed examples.
-- `LOGGING.md` - logging conventions.
+- [HOST_AGENT.md](HOST_AGENT.md) — HostAgent runtime, configuration, deployment, self-upgrade, jobs, and diagnostics.
+- [HOST_AGENT_TEMPLATE_AUTOMATION.md](HOST_AGENT_TEMPLATE_AUTOMATION.md) — installation-profile materialization and placement.
+- [WORKER_RUNTIME.md](WORKER_RUNTIME.md) — worker runtime contracts, provisioning, placement, and observed state.
+- [worker-runtime-windows.md](worker-runtime-windows.md) — Windows process and identity model.
+- [PUSH_EVENTS.md](PUSH_EVENTS.md) — SQL outbox, dispatcher, SignalR delivery, and fallback polling.
+- [CONTEXT_GUARD_MODULE.md](CONTEXT_GUARD_MODULE.md) — authenticated one-time hand-offs, live-context scopes, settings, and v1 limits.
+- [CHANNEL_TYPE_RECONCILE.md](CHANNEL_TYPE_RECONCILE.md) — module-owned channel-type reconciliation contract and template.
+- [OPEN_DOC_VIEWER_EXAMPLES.md](OPEN_DOC_VIEWER_EXAMPLES.md) — host-side CSP requirements for the OpenDocViewer embed examples.
+- [LOGGING.md](LOGGING.md) — NLog configuration, files, process separation, and the central system log.
+- [CONTENT_SECURITY_POLICY.md](CONTENT_SECURITY_POLICY.md) — CSP rollout, per-app policies, and documented exceptions.
+- [THEME_CONTRACT.md](THEME_CONTRACT.md) — light/dark tokens, stored preference, and app adoption.
 
-## Installation And Operations
+## Installation and operations
 
-- `HOST_AGENT_FIRST_INSTALL.md` - HostAgent-first package and bootstrapper flow.
-- `HOST_AGENT_TEMPLATE_AUTOMATION.md` - installation profile and host automation notes.
-- `ADMIN_CONFIGURATION.md` - Portal administration guidance.
-- `PROJECT_STATUS.md` - current project status notes.
-- `SECURITY_AUDIT_2026-05-24.md` - security audit notes from May 24, 2026.
-- `CONTENT_SECURITY_POLICY.md` - CSP rollout model, per-app policies, and documented exceptions.
-- `THEME_CONTRACT.md` - light/dark theme contract: `data-theme` attributes, stored preference, shared tokens, and how an app adopts it.
+- [HOST_AGENT_FIRST_INSTALL.md](HOST_AGENT_FIRST_INSTALL.md) — HostAgent-first package, bootstrapper, upgrade, and maintenance flow.
+- [FIRST_INSTALLER.md](FIRST_INSTALLER.md) — first-install-only installer checks, operation, and dry-run exit codes.
+- [FRESH_INSTALL.md](FRESH_INSTALL.md) — build and operate a prepared new-server package.
+- [HOSTING_WINDOWS_IIS.md](HOSTING_WINDOWS_IIS.md) — Windows, IIS, runtime, proxy, and hosting guidance.
+- [ADMIN_CONFIGURATION.md](ADMIN_CONFIGURATION.md) — Portal administration and runtime configuration guidance.
+- [CODE_SIGNING.md](CODE_SIGNING.md) — optional Azure Trusted Signing pipeline and verification.
+- [SECURITY_AUDIT_2026-05-24.md](SECURITY_AUDIT_2026-05-24.md) — dated security-audit baseline; its status note identifies superseded findings.
 
-## Development
+## Development and validation
 
-- `CODEX_DEVELOPMENT.md` - agent-friendly repository map, validation ladder, and local publish workflow.
-- `OMP_COMPONENT_MANIFEST.md` - repository component manifest and version-bump helper usage.
-- `VALIDATOR_CHECKS.md` - canonical numbered check list for
-  `scripts/omp/validate-component-versions.ps1`; the check numbers are a contract shared
-  across repositories.
-- `CODE_SIGNING.md` - signing of the installer runner and what the gate refuses.
-- `TEST_DEBT.md` - deliberately excluded or skipped tests, with the reason for each. Kept in
-  the same commit as the change that adds an entry (see `CONTRIBUTING.md`/`AGENTS.md`).
+- [CODEX_DEVELOPMENT.md](CODEX_DEVELOPMENT.md) — repository map, validation ladder, and local publish workflow.
+- [OMP_COMPONENT_MANIFEST.md](OMP_COMPONENT_MANIFEST.md) — component manifest and version-bump tooling.
+- [VALIDATOR_CHECKS.md](VALIDATOR_CHECKS.md) — canonical numbered checks for `scripts/omp/validate-component-versions.ps1`.
+- [DETERMINISTIC_BUILDS.md](DETERMINISTIC_BUILDS.md) — deterministic publish and package inputs, probes, and CI coverage.
+- [TEST_DEBT.md](TEST_DEBT.md) — deliberate test-gate exclusions, reasons, and re-enable criteria.
 
-## Subdirectories
+## `conventions/` — standards and dated audits
 
-Three folders under `docs/` hold material this index used to omit entirely. If you are
-looking for "how do we do X across the whole platform" or "why is it built this way",
-the answer is more likely here than in a top-level file.
+Each document defines a cross-cutting standard and records the ecosystem audit on
+which it was based. Audit tables and `file:line` anchors are point-in-time
+evidence, not current version references. Use the linked source files and
+manifests for current facts.
 
-### `conventions/` - one standard per cross-cutting concern
+- [conventions/README.md](conventions/README.md) — naming scheme and audit index.
+- [conventions/code-style.md](conventions/code-style.md) — editor, build, SDK, analyzer, and JS/TS conventions.
+- [conventions/configuration.md](conventions/configuration.md) — options, validation, connection strings, secrets, and overlays.
+- [conventions/data-access.md](conventions/data-access.md) — ADO.NET, factories, SQL location, transactions, and schemas.
+- [conventions/dependency-injection.md](conventions/dependency-injection.md) — registrations, lifetimes, hosted services, and options.
+- [conventions/error-handling.md](conventions/error-handling.md) — exception policy, problem details, and correlation.
+- [conventions/http-clients.md](conventions/http-clients.md) — HTTP clients, handlers, timeouts, and retries.
+- [conventions/logging.md](conventions/logging.md) — NLog layouts, scopes, sinks, and levels.
+- [conventions/unit-testing.md](conventions/unit-testing.md) — xUnit, fixtures, naming, parallelism, and test gates.
 
-Eight audit documents that map the current state (file:line) and then set ONE standard per
-cross-cutting concern across all ten repositories. Use them as the template for a new module
-and as the reference when hardening an existing one.
+## `adr/` — architecture decision records
 
-`code-style.md`, `configuration.md`, `data-access.md`, `dependency-injection.md`,
-`error-handling.md`, `http-clients.md`, `logging.md`, `unit-testing.md`.
+ADRs record why a design was chosen. Their status and linked current guides show
+whether the decision is implemented.
 
-### `adr/` - architecture decision records
+- [0001-module-configid-bridge.md](adr/0001-module-configid-bridge.md) — typed `ModuleConfigId` bridge with opt-in validation.
+- [0002-deploy-set-consistency-check.md](adr/0002-deploy-set-consistency-check.md) — HostAgent deploy-set consistency check.
+- [0003-webshared-private-consumer-cascade.md](adr/0003-webshared-private-consumer-cascade.md) — Web.Shared private-consumer cascade awareness (validator Check 14).
+- [0004-channel-type-reconcile-generalization.md](adr/0004-channel-type-reconcile-generalization.md) — generalized channel-type reconciliation.
+- [0005-artifact-ownership-database-principal.md](adr/0005-artifact-ownership-database-principal.md) — operator-gated proposal for database-principal ownership enforcement.
+- [0006-config-overlay-artifactversion-minimum.md](adr/0006-config-overlay-artifactversion-minimum.md) — overlay `artifactVersion` as a minimum.
+- [0007-config-overlay-all-hosts-scope.md](adr/0007-config-overlay-all-hosts-scope.md) — installation-wide AllHosts overlay scope.
 
-Decisions with their reasoning and status, so a later reader can tell a deliberate design
-from an accident.
+## `runbooks/` — focused incident guidance
 
-- `0001-module-configid-bridge.md` - typed `ModuleConfigId` bridge with opt-in validation.
-- `0002-deploy-set-consistency-check.md` - HostAgent deploy-set consistency check
-  (accepted and implemented).
-- `0003-webshared-private-consumer-cascade.md` - Web.Shared private-consumer cross-repo
-  cascade awareness. This is the reasoning behind Check 14.
-- `0004-channel-type-reconcile-generalization.md` - channel-type reconcile generalization.
-- `0005-artifact-ownership-database-principal.md` - moving artifact-ownership enforcement
-  from the text guard to a database principal (decision support; operator-gated).
-- `0006-config-overlay-artifactversion-minimum.md` - config overlay `artifactVersion` is a
-  minimum version (decided and implemented).
+- [schema-ligger-efter-efter-import.md](runbooks/schema-ligger-efter-efter-import.md) — diagnose and repair a schema that lags an imported module definition.
 
-### `img/` - screenshots used by the repository README
+## `quality/` — dated finding-disposition evidence
 
-Portal screenshots from a local development installation (light theme,
-1400x900). Non-public modules are removed from the page and the host name is
-masked before capture.
+These files record specific review campaigns and commits. They are historical
+evidence, not a current list of open findings.
 
-### `runbooks/` - what to do when a specific thing has gone wrong
+- `github-fynd-ai-forslag-alla-repon-omp.md`
+- `github-fynd-standardfynd-publika-repon-final-integration.md`
+- `github-fynd-standardfynd-publika-repon-wp1.md`
+- `github-fynd-standardfynd-publika-repon-wp2.md`
+- `github-fynd-standardfynd-publika-repon-wp2-console-rationale.md`
+- `github-fynd-standardfynd-publika-repon-wp3.md`
+- `github-fynd-standardfynd-publika-repon-wp4-missed-using.md`
+- `github-fynd-standardfynd-publika-repon-wp4-readonly-rationale.md`
+- `github-fynd-standardfynd-publika-repon-wp4-select.md`
+- `github-fynd-standardfynd-publika-repon-wp4-where-rationale.md`
 
-- `schema-ligger-efter-efter-import.md` - the `ConfigSchemaJson` lagging a generation behind
-  the applied module definition after an import, and how to tell it apart from a real gap.
+## `img/` — README screenshots
+
+Portal screenshots come from a local development installation. Non-public module
+rows are removed and the host name is masked before capture.

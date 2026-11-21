@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Context Guard module v1.** `OpenModulePlatform.Web.ContextGuardModule`
+  accepts a one-time hand-off from a calling system, redeems it only after OMP
+  authentication, and maintains one live target-application context per
+  configured owner scope. The module includes origin/profile validation,
+  heartbeat and end endpoints, bounded in-memory stores, and operator/integration
+  documentation. Version 1 has no SQL objects and supports one deployed instance
+  per route. See `docs/CONTEXT_GUARD_MODULE.md`.
+- **Selected browser UI gate.** CI and the local pre-push gate run the
+  module-fragment authorization, Content editor, and Context Guard browser tests
+  in Chromium with executed-test assertions. The general `Category=Ui` exclusion
+  remains for the rest of the UI suite; see `docs/TEST_DEBT.md`.
 - **Worker app instance provisioning for module admin pages.**
   `WorkerAppInstanceProvisioningService` in OpenModulePlatform.Web.Shared creates
   one host-neutral worker app instance and one worker per selected host in a
@@ -109,6 +120,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **.NET 10 servicing and runtime update advisory.** The SDK floor is
+  `10.0.404`, central Microsoft packages use the `10.0.15` runtime band, and
+  assemblies carry the recommended runtime as metadata. Portal administrators
+  see a non-blocking warning when a server runs an older `10.0.x` patch; the
+  `/runtime-versions` report includes running and recommended versions. See
+  `docs/HOSTING_WINDOWS_IIS.md`.
+- **Installation-wide configuration overlays.** Config overlays can explicitly
+  use `hostScope: "AllHosts"`. Artifact configuration applies first, then an
+  AllHosts overlay, then an exact-host overlay per relative path. Portal CRUD,
+  effective-source views, persistence, import/export, and HostAgent resolution
+  support the scope. See `docs/CONFIG_OVERLAYS.md` and
+  `docs/CONFIG_OVERLAY_ADMINISTRATION.md`.
 - **Section cards keep their distance.** On Operations and Installation the
   section cards stacked in the navigator layout's content column touched
   each other; sibling section cards now stand apart by the layout's own

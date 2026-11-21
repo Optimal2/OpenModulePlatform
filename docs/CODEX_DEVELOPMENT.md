@@ -118,17 +118,15 @@ same referenced OMP projects wrote to the same `obj`/`bin` folders and hit CS201
 locked by VBCSCompiler". It is now prevented physically rather than by scheduling.
 `scripts/local-ci.ps1` in each consumer passes
 `-p:OmpIsolatedBuildRoot=<folder inside the consumer repo>`, and
-`Directory.Build.props:78-82` redirects `BaseIntermediateOutputPath`, `BaseOutputPath` and
+`Directory.Build.props` redirects `BaseIntermediateOutputPath`, `BaseOutputPath` and
 `MSBuildProjectExtensionsPath` under that root, so two consumer builds cannot share output
 files for Web.Shared, Web.Shared.Analyzers or EventPublisher.*. When the property is unset
 the default in-tree layout applies, so OMP's own builds are unaffected.
 
 The AI Orchestrator dropped its global `build:omp-web-shared` lock in the same change; each
 repository still takes its own `repo:<toplevel>` lock, so two implementations in the SAME
-repository remain serialised. (The orchestrator lives in the maintainers' private companion repository, not in
-this repository: `AI-Orchestrator/src/gui/jobConcurrency.ts` carries the reasoning as a
-comment next to the lock list. It is named here for provenance only — it is not a path you
-can open from a clone of this repo.)
+repository remain serialised. The orchestrator is maintained outside this public repository;
+its job-concurrency configuration records the same reasoning.
 
 What still holds:
 

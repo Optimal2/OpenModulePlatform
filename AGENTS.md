@@ -27,11 +27,11 @@ The collision it guarded against was real - two sibling repositories building th
 referenced OMP projects shared `obj`/`bin` and hit CS2012 "file locked by VBCSCompiler" -
 but it is prevented physically now, not by scheduling. Each consumer's
 `scripts/local-ci.ps1` passes `-p:OmpIsolatedBuildRoot=<folder inside that repo>`, and
-`Directory.Build.props:78-82` redirects the intermediate and output paths under it, so two
+`Directory.Build.props` redirects the intermediate and output paths under it, so two
 consumer builds cannot write the same files. Unset, the default in-tree layout applies, so
 builds of this repository are unaffected. The AI Orchestrator removed its global
 `build:omp-web-shared` job lock in the same change and now states so explicitly in
-`AI-Orchestrator/src/gui/jobConcurrency.ts:119`.
+the orchestrator's job-concurrency configuration.
 
 What still holds:
 

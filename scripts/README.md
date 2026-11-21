@@ -10,8 +10,14 @@ still part of the current OMP object/installer model.
   `-AllowDeprecated` is passed, and leaves `repositoryVersion`, module-definition versions, and
   `compatibleArtifacts.maxVersion` behind. Use the canonical
   `scripts/omp/bump-version.ps1` instead (see `docs/OMP_COMPONENT_MANIFEST.md`).
-- `protect-bootstrap-config-secrets.ps1` encrypts portable bootstrap JSON
-  secrets before they are stored in private installer profiles.
+- `local-ci.ps1` is the local validation and pre-push gate;
+  `local-ci-telemetry.ps1` supplies its best-effort, non-gate-breaking counters.
+- `setup-hooks.ps1` activates the tracked Git hooks for the local gate.
+- `bootstrap-secret-fields.ps1` defines the portable bootstrap secret fields;
+  `protect-bootstrap-config-secrets.ps1` encrypts those values before they are
+  stored in private installer profiles.
+- `test-bump-version-github-findings.ps1` and
+  `test-github-findings-source.ps1` are focused regression/source-check runners.
 - `deployment/` contains HostAgent-first packaging and installer-runner tools.
 - `dev/` contains developer-only helpers for module-definition SQL embedding
   and local Content smoke-test data. `seed-content-webapp-test-pages.ps1`
@@ -36,8 +42,7 @@ still part of the current OMP object/installer model.
   another machine: it fetches, rebases when `origin/main` moved, re-runs
   `bump-version.ps1` for the component set read from the commit's own diff,
   amends, and retries a bounded number of times. Prefer it over a hand-run
-  fetch/rebase/bump/push loop. Present in this repository only; the consumer
-  repositories have not adopted it yet.
+  fetch/rebase/bump/push loop in this repository.
 - `omp/validate-component-versions.ps1` also fails the build when a component
   version moved against the base ref while `repositoryVersion` stayed put, since
   that value is the universal package's identity. See
@@ -46,11 +51,6 @@ still part of the current OMP object/installer model.
 ## Removed Legacy Scripts
 
 The old script-first installer scripts and direct local runtime installer
-scripts were moved to the maintainers' private companion repository under:
-
-```text
-OpenModulePlatform/OLD/2026-05-24-public-repo-cleanup/tracked-legacy/scripts
-```
-
-Use the public `installer/` sample or a private universal installer profile for
-new installs and upgrades.
+scripts are retained outside this public repository. Do not use them for new
+installs. Use the public `installer/` sample or a private universal installer
+profile for new installs and upgrades.

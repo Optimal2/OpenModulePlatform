@@ -55,9 +55,12 @@ an `omp-universal-package.json` based zip from selected objects in the archive.
 The package builder can target any available host profile, not only the computer
 currently running the GUI, and can combine global objects with host-specific
 `host-configs`, `config-overlays`, and `widgets`. A package built without a
-target host is global and host-agnostic: it never includes `host-configs` or
-`config-overlays` (those objects always carry a host key and are per-host by
-definition).
+target host is global and host-agnostic: this builder excludes both
+`host-configs` and `config-overlays` when no target is selected. Host
+configurations are always exact-host objects. Config overlays also support
+`hostScope: "AllHosts"`, but the builder still omits them from a global package
+by policy; Portal export can carry AllHosts overlays under
+`config-overlays/all-hosts/documents/`.
 
 Runtime configuration files such as `appsettings*.json` and
 `odv.site.config.js` must stay outside artifact payloads. They are represented

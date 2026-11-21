@@ -7,6 +7,7 @@ This helper publishes the currently publishable OMP projects and skips the share
 - OpenModulePlatform.Portal
 - OpenModulePlatform.Auth
 - OpenModulePlatform.Web.ContentWebAppModule
+- OpenModulePlatform.Web.ContextGuardModule
 - OpenModulePlatform.Web.iFrameWebAppModule
 - OpenModulePlatform.Service.ExampleServiceAppModule
 - OpenModulePlatform.Web.ExampleServiceAppModule
@@ -26,8 +27,14 @@ The list is the `$projects` array in `publish-all.ps1`.
 
 Excluded on purpose:
 
-- OpenModulePlatform.Web.Shared
-- OpenModulePlatform.Worker.Abstractions
+- Shared libraries such as `OpenModulePlatform.Web.Shared`,
+  `OpenModulePlatform.Artifacts`, `OpenModulePlatform.EventPublisher.*`,
+  `OpenModulePlatform.Installation`, and `OpenModulePlatform.Worker.Abstractions`
+  are included through their consuming applications rather than published as
+  standalone runtime folders.
+- `OpenModulePlatform.Installer` is published by
+  `scripts/deployment/build-fresh-install-package.ps1` when a first-install
+  package is built; it is not part of the HostAgent-first runtime publish set.
 
 ## What changed in this fixed version
 
@@ -50,6 +57,7 @@ For the standard local runtime layout, copy or deploy these published folders:
 OpenModulePlatform.Portal                 -> G:\OMP\Sites\Portal
 OpenModulePlatform.Auth                   -> G:\OMP\WebApps\auth
 OpenModulePlatform.Web.ContentWebAppModule -> G:\OMP\WebApps\content
+OpenModulePlatform.Web.ContextGuardModule -> G:\OMP\WebApps\context-guard
 OpenModulePlatform.Web.iFrameWebAppModule -> G:\OMP\WebApps\iFrameWebAppModule
 OpenModulePlatform.HostAgent.WindowsService -> G:\OMP\Services\HostAgent
 OpenModulePlatform.WorkerManager.WindowsService -> G:\OMP\Services\WorkerManager

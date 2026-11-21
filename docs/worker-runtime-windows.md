@@ -1,114 +1,71 @@
 # Windows worker runtime in OMP
 
-This document describes the additive Windows worker runtime track in OpenModulePlatform.
+This document summarizes the Windows-specific process model. The complete
+contract, including worker provisioning and placement rules, is in
+[`WORKER_RUNTIME.md`](WORKER_RUNTIME.md). The runtime targets `.NET 10`; the
+classic standalone Windows-service model remains supported in parallel.
 
-The current repository baseline for this track is `.NET 10`.
+## Process and identity model
 
-## Goals
+`OpenModulePlatform.WorkerManager.WindowsService` is the host-local Windows
+service. It discovers desired workers, starts one
+`OpenModulePlatform.WorkerProcessHost` process per `WorkerInstanceId`, supervises
+restarts, and requests graceful shutdown through a named OS event.
 
-The Windows worker runtime introduces a general manager-driven model where:
+`AppInstanceId` remains the module-facing runtime identity in `omp.AppInstances`.
+A `omp.WorkerInstances` row gives each supervised process its own
+`WorkerInstanceId`, `WorkerInstanceKey`, optional host and artifact binding, and
+runtime configuration. For backward compatibility, an app instance with no
+explicit worker rows receives one implicit worker whose ID equals the app
+instance ID. Creating explicit worker rows disables that fallback, including
+when the explicit rows are disabled.
 
-- one Windows Service acts as a worker manager on a host
-- the manager supervises one child process per `AppInstanceId`
-- the child host loads worker logic from a plugin assembly
-- the classic service-exe model remains valid in parallel
+The manager resolves the worker's plugin from the deployed install root and the
+`PluginRelativePath` in `omp.AppWorkerDefinitions`. The app-level metadata row
+also supplies `RuntimeKind` (`windows-worker-plugin`) and `WorkerTypeKey`, which
+the child host uses to resolve an `IWorkerModuleFactory` from the plugin.
 
-## Runtime identity
+## Discovery and placement
 
-`AppInstanceId` is the runtime identity.
+Database discovery requires enabled and allowed app/worker rows in the running
+desired state, an enabled host, a bound enabled artifact, an install path, and an
+enabled app-worker definition for the configured runtime kind.
 
-The manager discovers desired workers from `omp.AppInstances` and starts one child process for each eligible app instance.
+An explicit worker `HostId` takes precedence over the app instance's `HostId`.
+Without a concrete host pin, the selected host role must resolve to exactly one
+active, enabled assigned host. An ambiguous role placement is rejected and an
+already managed worker is stopped on reconciliation. Apps without an
+`omp.AppWorkerDefinitions` row are not selected, which keeps classic service
+apps outside this runtime.
 
-## Minimal OMP metadata contract
+## Observed state and heartbeats
 
-The first OMP-backed implementation adds `omp.AppWorkerDefinitions`.
+`omp.WorkerInstanceRuntimeStates` stores one observed row per worker instance.
+`omp.AppInstanceRuntimeStates` aggregates sibling workers to one app-level row,
+with the worst sibling state winning. Observations include lifecycle state,
+process ID, start and heartbeat times, exit information, and a status message.
 
-This table is intentionally small and generic. It answers the questions that the worker manager must know without changing the meaning of existing app instances:
+While a live process exists, the runtime rows also record the worker artifact
+and WorkerProcessHost artifact from which it was started. Those version-witness
+fields are cleared when the observation becomes stale; a null value means that
+no currently running version can be stated.
 
-- should this app be handled by the manager-driven plugin runtime?
-- which worker factory key should the child process load?
-- which plugin assembly should be loaded from the deployed install root?
+In `OmpDatabase` catalog mode, the manager also updates host heartbeat in
+`omp.Hosts.LastSeenUtc` and app heartbeat in `omp.AppInstances.LastSeenUtc` while
+a managed worker is starting or running.
 
-Suggested semantics:
+## Plugin compatibility and administration
 
-- `RuntimeKind`: identifies the runtime flavor, currently `windows-worker-plugin`
-- `WorkerTypeKey`: logical plugin key used by `IWorkerModuleFactory`
-- `PluginRelativePath`: path to the plugin assembly relative to `omp.AppInstances.InstallPath`
+A worker plugin can require a minimum WorkerProcessHost artifact version through
+`minWorkerHostVersion` in `omp-components.json`. Packaging writes the generated
+`omp-worker-plugin.json`; the child host checks that requirement before loading
+the plugin assembly.
 
-## Discovery rules in the current implementation
+Portal administration is at `/admin/workers`. It combines app-worker metadata
+with live worker-runtime observations. The older `/admin/appworkers` and
+`/admin/workerruntime` routes redirect there.
 
-The database-backed worker catalog only returns app instances that satisfy all of the following:
+The neutral implementation example is under `examples/WorkerAppModule/`:
 
-- assigned to the current host through `omp.AppInstances.HostId`
-- host is enabled
-- app is enabled
-- app instance is enabled
-- app instance is allowed
-- app instance desired state is the configured running state
-- app instance has an artifact binding
-- app instance has an install path
-- artifact is enabled
-- app definition has an enabled row in `omp.AppWorkerDefinitions` for the configured runtime kind
-
-If no worker metadata row exists for an app, the manager ignores it. This is the compatibility boundary that protects classic service apps.
-
-## Path resolution
-
-The current manager resolves the plugin assembly path as:
-
-`Path.Combine(AppInstances.InstallPath, AppWorkerDefinitions.PluginRelativePath)`
-
-This keeps runtime selection app-level while still allowing the host to use the app instance's deployed install root.
-
-## Observed runtime state
-
-The manager-driven runtime now publishes observations to `omp.AppInstanceRuntimeStates`.
-
-This table is manager-owned runtime telemetry, not desired state. It is updated additively beside `omp.AppInstances` and can evolve without changing the meaning of the core app-instance row.
-
-Current columns capture:
-
-- `ObservedState`
-- `ProcessId`
-- `StartedUtc`
-- `LastSeenUtc`
-- `LastExitUtc`
-- `LastExitCode`
-- `StatusMessage`
-
-Current observed state values are:
-
-- `0`: unknown
-- `1`: starting
-- `2`: running
-- `3`: stopping
-- `4`: stopped
-- `5`: failed
-
-## Heartbeat model
-
-When the manager runs in `OmpDatabase` mode it also publishes:
-
-- host heartbeat to `omp.Hosts.LastSeenUtc`
-- worker heartbeat to `omp.AppInstances.LastSeenUtc` while a managed worker is observed as starting or running
-
-This keeps compatibility with existing OMP views that already rely on `omp.AppInstances.LastSeenUtc`, while still adding a separate surface for manager-specific runtime details.
-
-
-## Public example module
-
-The public repository now includes a neutral reference module for this runtime track:
-
-- `OpenModulePlatform.Web.ExampleWorkerAppModule`
-- `OpenModulePlatform.Worker.ExampleWorkerAppModule`
-
-The example keeps the familiar module pattern of a web administration surface plus background processing, but the background processing runs as a worker plugin loaded by `OpenModulePlatform.WorkerProcessHost` instead of as its own service executable.
-
-## Portal administration
-
-The Portal admin area now includes two worker-runtime pages:
-
-- `App workers`: manage `omp.AppWorkerDefinitions` rows per app definition
-- `Worker runtime`: view app instances selected into the worker-runtime track together with the latest observed runtime state
-
-These pages are additive and do not change the classic service-app path.
+- `WebApp/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj`
+- `WorkerApp/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj`
