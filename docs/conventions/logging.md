@@ -5,7 +5,7 @@
 > drifted since. Resolve every reference by the **symbol or file name**, not by
 > the line number; the same note applies in `configuration.md`.
 
-This document records a point-in-time logging audit from 2026-07-16 (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded). Per-repository details, package versions, and line anchors are dated evidence, not current-state references. The conventions remain the living guidance; current source and `docs/LOGGING.md` describe later OMP changes.
+This document records a point-in-time logging audit from 2026-07-15 (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded). Per-repository details, package versions, and line anchors are dated evidence, not current-state references. The conventions remain the living guidance; current source and `docs/LOGGING.md` describe later OMP changes.
 
 The private consumer repositories in the OMP+ODV ecosystem are represented
 here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,

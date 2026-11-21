@@ -15,10 +15,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   heartbeat and end endpoints, bounded in-memory stores, and operator/integration
   documentation. Version 1 has no SQL objects and supports one deployed instance
   per route. See `docs/CONTEXT_GUARD_MODULE.md`.
-- **Selected browser UI gate.** CI and the local pre-push gate run the
-  module-fragment authorization, Content editor, and Context Guard browser tests
-  in Chromium with executed-test assertions. The general `Category=Ui` exclusion
-  remains for the rest of the UI suite; see `docs/TEST_DEBT.md`.
+- **Selected browser UI gate.** CI runs the module-fragment authorization,
+  Content editor, and Context Guard browser tests in Chromium with executed-test
+  assertions. The local pre-push gate runs them when `OMP_LOCAL_CI_INCLUDE_UI=1`
+  is set. The general `Category=Ui` exclusion remains for the rest of the UI
+  suite; see `docs/TEST_DEBT.md`.
 - **Worker app instance provisioning for module admin pages.**
   `WorkerAppInstanceProvisioningService` in OpenModulePlatform.Web.Shared creates
   one host-neutral worker app instance and one worker per selected host in a

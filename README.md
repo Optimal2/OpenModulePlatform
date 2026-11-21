@@ -391,9 +391,10 @@ dotnet test  OpenModulePlatform.slnx --configuration Release
 `scripts/local-ci.ps1` runs the same checks as CI: module-definition
 validation, module SQL guards, component-version validation, PSScriptAnalyzer,
 the Pester suites under `tests/`, the Release build, and the ten non-UI xUnit
-test projects with a zero-execution check. It also runs the selected browser UI
-suite that CI runs in its separate `module-fragment-ui` job. Activate the tracked
-git hooks once per clone so it runs on `git push`:
+test projects with a zero-execution check. When `-IncludeUi` is passed (or
+`OMP_LOCAL_CI_INCLUDE_UI=1` is set for the pre-push hook), it also runs the
+selected browser UI suite that CI runs in its separate `module-fragment-ui` job.
+Activate the tracked git hooks once per clone so it runs on `git push`:
 
 ```powershell
 .\scripts\setup-hooks.ps1

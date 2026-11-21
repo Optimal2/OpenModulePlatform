@@ -89,8 +89,9 @@ one runs with no log targets at all. The Portal, Auth, Content, and Context Guar
 components therefore supply an artifact configuration file from
 `Packaging/appsettings.json`; components without such a row need another explicit
 runtime configuration source if file logging is required.
-`PackagedNLogConfigurationTests` in the Portal test project parses every packaged
-and checked-in section the way NLog does at startup. Web apps that go through
+`PackagedNLogConfigurationTests` in the Portal test project parses the Portal,
+Auth and Content packaged and checked-in sections, plus the iFrame checked-in
+section, the way NLog does at startup. Web apps that go through
 `UseOmpWebDefaults` render the request correlation id with
 `${scopeproperty:item=CorrelationId}` in their layouts (see
 `docs/conventions/logging.md`); the Auth app has its own pipeline without that

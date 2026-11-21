@@ -134,18 +134,20 @@ inline block returns to a Portal page.
 
 ## Per-app policies
 
-The appsettings.json of each app carries its effective policy. Note that the
-checked-in `appsettings.json` of a packaged app never reaches a host: the
+The Portal, Auth and Content modules carry their configured policy in
+appsettings.json. Note that the checked-in `appsettings.json` of a packaged app
+never reaches a host: the
 artifact payload strips `appsettings*.json` (`RuntimeConfigurationFiles`), and
 HostAgent writes the component's `Packaging/appsettings.json` (merged over its
 built-in web-app template, which carries no `SecurityHeaders` section) instead.
-The Portal, Auth and Content module therefore repeat their policy in
+The Portal, Auth and Content modules therefore repeat their policy in
 `Packaging/appsettings.json`, and `PortalInlineScriptGuardTests` pins the
 packaged Portal policy to the checked-in one. Keep both copies identical when a
-policy changes. Context Guard currently supplies no policy override in either
-its checked-in or packaged configuration, so it uses the shared baseline
-(including `script-src 'unsafe-inline'`); do not describe it as covered by the
-Portal's stricter policy.
+policy changes. Context Guard instead sets its own stricter policy in
+`UseContextGuardCsp` before the shared defaults run: `script-src 'self'` (no
+`unsafe-inline` for scripts), with configured target origins added to
+`frame-src` and `form-action`. The shared baseline only fills a missing header
+and does not replace this policy.
 
 > **The hardening lives in configuration, and losing the key un-does it silently.**
 > `OmpContentSecurityPolicy.Build` falls back to `Baseline` whenever
@@ -162,8 +164,8 @@ Portal's stricter policy.
 > built-in tightened policy (`IFrameFrameSourcePolicy.ModulePolicyBaseline`, no
 > `script-src 'unsafe-inline'`) and logs a warning when the key is missing, and the
 > non-skippable `IFrameModuleInlineScriptGuardTests` fail the build if the key
-> disappears from the shipped appsettings.json. Every other app still has the silent
-> fallback described above.
+> disappears from the shipped appsettings.json. Apps without their own middleware
+> policy still have the silent fallback described above.
 
 - **Portal** — baseline plus `blob:` in `img-src`/`media-src` (webamp unzips
   skins in JS and serves sprites via `URL.createObjectURL`; track/album-art

@@ -44,6 +44,8 @@ apps outside this runtime.
 `omp.AppInstanceRuntimeStates` aggregates sibling workers to one app-level row,
 with the worst sibling state winning. Observations include lifecycle state,
 process ID, start and heartbeat times, exit information, and a status message.
+`WorkerObservedStates` defines the lifecycle values `0` Unknown, `1` Starting,
+`2` Running, `3` Stopping, `4` Stopped, `5` Failed and `6` Draining.
 
 While a live process exists, the runtime rows also record the worker artifact
 and WorkerProcessHost artifact from which it was started. Those version-witness

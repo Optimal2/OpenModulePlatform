@@ -40,7 +40,7 @@ Excluded on purpose:
 
 - Native `dotnet` commands are now executed with `$PSNativeCommandUseErrorActionPreference = $false` inside a local script block.
 - Restore and publish output are captured into log files instead of surfacing as `NativeCommandError` from stderr.
-- The script auto-detects `OpenModulePlatform.slnx` or `OpenModulePlatform.sln` in the repo root.
+- The script requires `OpenModulePlatform.slnx` in the repo root.
 - Restore now writes to `artifacts\publish\restore.log`.
 
 ## Basic usage
