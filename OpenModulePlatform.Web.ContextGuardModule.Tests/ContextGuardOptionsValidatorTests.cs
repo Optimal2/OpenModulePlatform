@@ -57,6 +57,21 @@ public sealed class ContextGuardOptionsValidatorTests
     }
 
     [Fact]
+    public void Validate_WithWeakEndCorrelationAndSecret_StillFailsAndDoesNotSuggestTheSecret()
+    {
+        // EndSecret does not lift the weak-correlation check, so the error must not offer it as a remedy.
+        var options = ValidOptions();
+        options.Profiles["profile"].MinCorrelationLength = 4;
+        options.Profiles["profile"].EndSecret = "shared-secret";
+
+        var result = new ContextGuardOptionsValidator().Validate(null, options);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("AllowWeakEndCorrelation", result.FailureMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("EndSecret", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_WithEndDisabled_AcceptsShortMinimumWithoutAcknowledgement()
     {
         var options = ValidOptions();

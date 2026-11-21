@@ -98,7 +98,7 @@ public sealed partial class ContextGuardOptionsValidator : IValidateOptions<Cont
                 && profile.MinCorrelationLength < ContextGuardProfileOptions.DefaultMinCorrelationLength
                 && !profile.AllowWeakEndCorrelation)
             {
-                errors.Add($"Profile '{profileKey}' enables the anonymous end endpoint with MinCorrelationLength {profile.MinCorrelationLength}, below the safe default {ContextGuardProfileOptions.DefaultMinCorrelationLength}. Short sequential case numbers are guessable end keys. Raise MinCorrelationLength, configure EndSecret, disable the endpoint with EndEnabled=false, or set AllowWeakEndCorrelation=true to acknowledge the weaker setting explicitly.");
+                errors.Add($"Profile '{profileKey}' enables the anonymous end endpoint with MinCorrelationLength {profile.MinCorrelationLength}, below the safe default {ContextGuardProfileOptions.DefaultMinCorrelationLength}. Short sequential case numbers are guessable end keys. Raise MinCorrelationLength, disable the endpoint with EndEnabled=false, or set AllowWeakEndCorrelation=true to acknowledge the weaker setting explicitly.");
             }
 
             if (!profile.EndEnabled && !string.IsNullOrEmpty(profile.EndSecret))
