@@ -2,8 +2,10 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Web.ContentWebAppModule.Localization;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using OpenModulePlatform.Web.ContentWebAppModule.Options;
 using OpenModulePlatform.Web.ContentWebAppModule.Services;
@@ -49,11 +51,18 @@ var queryRunner = new ServerReportQueryRunner(
     connectionFactory,
     contentOptions,
     NullLogger<ServerReportQueryRunner>.Instance);
+// Same resource layout as the web app: AddOmpWebDefaults registers
+// localization with ResourcesPath "Resources".
+var localizerFactory = new ResourceManagerStringLocalizerFactory(
+    Options.Create(new LocalizationOptions { ResourcesPath = "Resources" }),
+    NullLoggerFactory.Instance);
+var localizer = new StringLocalizer<ContentWebAppModuleResource>(localizerFactory);
 var reportRenderer = new ServerReportRenderer(
     reportLoader,
     queryRunner,
-    NullLogger<ServerReportRenderer>.Instance);
-var contentRenderer = new ContentRenderer(htmlLoader, reportRenderer);
+    NullLogger<ServerReportRenderer>.Instance,
+    localizer);
+var contentRenderer = new ContentRenderer(htmlLoader, reportRenderer, localizer);
 var repository = new ContentPageRepository(connectionFactory);
 
 const string fileKey = "content-test-file";
@@ -93,6 +102,7 @@ foreach (var expectation in expectations)
         page.Body,
         page.ContentType,
         page.ServerReportKey,
+        "/js/omp-server-report.js",
         CancellationToken.None);
     Require(html.Contains(expectation.ExpectedText, StringComparison.Ordinal),
         $"Rendered page '{expectation.Slug}' did not contain '{expectation.ExpectedText}'.");
