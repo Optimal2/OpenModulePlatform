@@ -335,6 +335,12 @@
                 return;
             }
 
+            if (!manifest.targetHostProfile && packageItems.some(item =>
+                item.kind === "host-config" || item.kind === "config-overlay")) {
+                updateStatus(labels.hostScopeRequired, true);
+                return;
+            }
+
             const entries = [];
             for (const item of packageItems) {
                 entries.push({

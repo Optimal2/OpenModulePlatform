@@ -55,8 +55,8 @@ profile key. Importers treat it as operator-facing metadata; the portable
 objects themselves still carry their own identities. Host-specific objects should
 also include their host key inside the object document.
 
-**Host-scoping rule (enforced by the repository and installer exporters):** a
-global package (no target host profile) must be host-agnostic. It contains module
+**Host-scoping rule (enforced by the repository, installer, and browser
+exporters):** a global package (no target host profile) must be host-agnostic. It contains module
 definitions, artifacts, global dashboard widgets, and widget data, but these
 exporters omit `host-configs/` and `config-overlays/`. Host configurations are
 always exact-host objects. Config overlays can instead use
@@ -66,8 +66,10 @@ omit the whole overlay folder in global mode by policy.
 enforce this rule, and `export-universal-package.ps1` additionally fails the
 build when explicit `-HostConfigurationFile`/`-ConfigOverlayFile` inputs are
 passed without a target host profile. The installer GUI package builder applies
-the same rule when "No target host" is selected. Portal export can include
-AllHosts overlays; their scope remains explicit in the object JSON.
+the same rule when "No target host" is selected. The Portal and standalone
+browser builders refuse to create the package while host configurations or
+config overlays are listed without a target host profile. Portal export can
+include AllHosts overlays; their scope remains explicit in the object JSON.
 
 ## Standard Folders
 

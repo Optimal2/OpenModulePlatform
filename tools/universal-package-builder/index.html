@@ -607,6 +607,12 @@
                 return;
             }
 
+            if (!manifest.targetHostProfile && packageItems.some(item =>
+                item.kind === "host-config" || item.kind === "config-overlay")) {
+                updateStatus("Host configurations and config overlays are host-specific. Set the target host profile or remove those objects before creating a global package.", true);
+                return;
+            }
+
             const entries = [];
             for (const item of packageItems) {
                 entries.push({

@@ -41,11 +41,13 @@ public sealed class ModuleEditModel : OmpPortalPageModel
     public InputModel Input { get; set; } = new();
 
     public IReadOnlyList<OptionItem> ModuleTypeOptions =>
-    [
-        Opt("PortalModule", T("Portal module")),
-        Opt("WebAppModule", T("Web app module")),
-        Opt("HostAppModule", T("Host app module"))
-    ];
+        IncludeCurrentModuleTypeOption(
+            [
+                Opt("PortalModule", T("Portal module")),
+                Opt("WebAppModule", T("Web app module")),
+                Opt("HostAppModule", T("Host app module"))
+            ],
+            Input.ModuleType);
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -181,6 +183,25 @@ public sealed class ModuleEditModel : OmpPortalPageModel
 
     private static OptionItem Opt(string value, string label)
         => new() { Value = value, Label = label };
+
+    internal static IReadOnlyList<OptionItem> IncludeCurrentModuleTypeOption(
+        List<OptionItem> options,
+        string? currentModuleType)
+    {
+        if (!string.IsNullOrWhiteSpace(currentModuleType)
+            && options.All(option => !string.Equals(
+                option.Value,
+                currentModuleType,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            // A definition can have a type that this simple editor does not offer
+            // for new modules. Keep that value selectable so saving an unrelated
+            // field cannot silently turn it into the first offered type.
+            options.Insert(0, new OptionItem { Value = currentModuleType, Label = currentModuleType });
+        }
+
+        return options;
+    }
 
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
