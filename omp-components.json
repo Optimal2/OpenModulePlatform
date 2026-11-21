@@ -57,7 +57,7 @@
   "sharedProjects": [
     {
       "projectPath": "shared",
-      "description": "Source-linked module SQL ownership and platform configuration migration, also shipped in the repository-versioned Bootstrapper",
+      "description": "Source-linked module SQL ownership and platform configuration migration, also linked by OpenModulePlatform.Installation and through it shipped in the repository-versioned Bootstrapper and Installer",
       "consumers": [
         "omp-portal-web",
         "omp-hostagent-service"
