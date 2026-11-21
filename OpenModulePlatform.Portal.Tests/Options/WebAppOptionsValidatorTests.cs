@@ -36,7 +36,7 @@ public sealed class WebAppOptionsValidatorTests
 
         var result = validator.Validate(
             null,
-            new WebAppOptions { PortalTopBar = new PortalTopBarOptions { PortalBaseUrl = "//elsewhere" } });
+            new WebAppOptions { PortalTopBar = new PortalTopBarOptions { PortalBaseUrl = "portal" } });
 
         Assert.True(result.Failed);
         Assert.Contains("Portal:PortalTopBar:PortalBaseUrl", result.FailureMessage, StringComparison.Ordinal);
