@@ -408,6 +408,10 @@
           "targetUrl": "/admin/modulepackageimport"
         },
         {
+          "entryKey": "portal:admin-artifacts",
+          "targetUrl": "/admin/artifacts"
+        },
+        {
           "entryKey": "portal:admin-host-resources",
           "targetUrl": "/admin/hostresources"
         }

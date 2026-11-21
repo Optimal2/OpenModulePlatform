@@ -557,6 +557,14 @@
           "configSetting": "portalName"
         },
         {
+          "configCategory": "branding",
+          "configSetting": "heroLogoUrl"
+        },
+        {
+          "configCategory": "branding",
+          "configSetting": "faviconUrl"
+        },
+        {
           "configCategory": "auth",
           "configSetting": "externalUserProvisioningMode"
         },
@@ -574,6 +582,14 @@
       "hostTemplates": [
         {
           "templateKey": "default-host",
+          "source": "sql/2-initialize-openmoduleplatform.sql"
+        },
+        {
+          "templateKey": "IISHost",
+          "source": "sql/2-initialize-openmoduleplatform.sql"
+        },
+        {
+          "templateKey": "ServiceHost",
           "source": "sql/2-initialize-openmoduleplatform.sql"
         }
       ],
