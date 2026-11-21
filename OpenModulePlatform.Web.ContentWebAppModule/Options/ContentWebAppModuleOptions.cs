@@ -11,11 +11,6 @@ public sealed class ContentWebAppModuleOptions
     public Guid AppInstanceId { get; set; }
 
     /// <summary>
-    /// Optional fallback slug used when the root page does not exist.
-    /// </summary>
-    public string HomeSlug { get; set; } = "home";
-
-    /// <summary>
     /// Whitelisted server-side directory for JSON server report definitions.
     /// Relative paths are resolved from the web app content root.
     /// If this points to a Data/ContentReports directory, the parent Data

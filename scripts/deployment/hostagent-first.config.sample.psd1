@@ -86,7 +86,6 @@
 
     ContentWebApp = @{
         AppInstanceId = '11111111-1111-1111-1111-111111111232'
-        HomeSlug = 'home'
         # Content reads from these paths inside the IIS app. Keep App_Data for
         # HostAgent-managed deployments so runtime content stays outside the
         # immutable app artifact.
