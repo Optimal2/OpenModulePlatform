@@ -1,8 +1,10 @@
+using System.Reflection;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Auth.Services;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 
 namespace OpenModulePlatform.Portal.Tests.Security;
@@ -68,11 +70,16 @@ public sealed class OmpAuthSessionLifetimeConfigTests
     }
 
     [Fact]
-    public async Task CreateAsync_WhenConfigCannotBeRead_UsesBuiltInDefaultSessionLifetime()
+    public async Task CreateAsync_WhenConfigIsMissing_UsesBuiltInDefaultSessionLifetime()
     {
         var configuration = new ConfigurationBuilder().Build();
         var db = new SqlConnectionFactory(configuration);
         using var cache = new MemoryCache(new MemoryCacheOptions());
+        SeedGlobalSetting(
+            cache,
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthSessionLifetimeDefaults.ProviderSessionLifetimesSetting,
+            null);
         var configurationService = new OmpConfigurationService(
             db,
             cache,
@@ -111,6 +118,11 @@ public sealed class OmpAuthSessionLifetimeConfigTests
         var configuration = new ConfigurationBuilder().Build();
         var db = new SqlConnectionFactory(configuration);
         using var cache = new MemoryCache(new MemoryCacheOptions());
+        SeedGlobalSetting(
+            cache,
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthSessionLifetimeDefaults.ProviderSessionLifetimesSetting,
+            null);
         var configurationService = new OmpConfigurationService(
             db,
             cache,
@@ -129,5 +141,19 @@ public sealed class OmpAuthSessionLifetimeConfigTests
         var properties = await factory.CreateAsync(user, CancellationToken.None);
 
         Assert.Equal(false, properties.AllowRefresh);
+    }
+
+    private static void SeedGlobalSetting(
+        IMemoryCache cache,
+        string category,
+        string setting,
+        string? value)
+    {
+        var keyFactory = typeof(OmpConfigurationService).GetMethod(
+            "CreateGlobalCacheKey",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(keyFactory);
+        var key = Assert.IsType<string>(keyFactory.Invoke(null, [category, setting]));
+        cache.Set(key, value);
     }
 }
