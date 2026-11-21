@@ -382,9 +382,11 @@ Example non-secret local placeholder configuration:
 `Authority` and `MetadataAddress` are mutually alternative ways to point the
 middleware at local discovery metadata. With `Enabled` set to `true`, OMP Auth
 requires one of those values, `ClientId`, `ClientSecret`, and
-`ResponseType: "code"`. If the required values are incomplete, OMP Auth logs
-that OIDC sign-in is disabled, hides the provider on the login page, and does
-not register the OIDC challenge endpoint.
+`ResponseType: "code"`. If the required values are incomplete, OMP Auth fails
+startup with the configuration error instead of hiding a partially configured
+provider and continuing with weaker sign-in availability. The same rules are
+registered through `OmpAuthOptionsValidator` and `ValidateOnStart`, and the OIDC
+registration also fails fast when called directly.
 
 For HostAgent-managed installations, keep these settings in an Auth app
 `appsettings.json` config overlay or another protected runtime configuration

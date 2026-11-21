@@ -23,16 +23,21 @@ public static class OmpOidcAuthenticationExtensions
         var oidcOptions = authOptions.Oidc;
         var displayName = ResolveDisplayName(oidcOptions);
         var validationError = Validate(oidcOptions);
-        if (!oidcOptions.Enabled || validationError is not null)
+        if (validationError is not null)
+        {
+            // AddOmpCookieAuthentication registers the same rules with
+            // ValidateOnStart. Keep direct callers fail-fast too instead of
+            // maintaining a second, unreachable warn-and-disable startup path.
+            throw new InvalidOperationException(validationError);
+        }
+
+        if (!oidcOptions.Enabled)
         {
             services.AddSingleton(new OmpOidcProviderStatus
             {
                 IsEnabled = false,
                 DisplayName = displayName
             });
-
-            services.AddSingleton<IStartupFilter>(
-                new OmpOidcStartupLoggingFilter(oidcOptions.Enabled, validationError));
 
             return new OmpOidcProviderStatus
             {
@@ -313,33 +318,5 @@ public static class OmpOidcAuthenticationExtensions
     {
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes.AsSpan(0, 8));
-    }
-
-    private sealed class OmpOidcStartupLoggingFilter : IStartupFilter
-    {
-        private readonly bool _enabled;
-        private readonly string? _validationError;
-
-        public OmpOidcStartupLoggingFilter(bool enabled, string? validationError)
-        {
-            _enabled = enabled;
-            _validationError = validationError;
-        }
-
-        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
-            => app =>
-            {
-                if (_enabled && !string.IsNullOrWhiteSpace(_validationError))
-                {
-                    var logger = app.ApplicationServices
-                        .GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("OpenModulePlatform.Auth.Oidc");
-                    logger.LogWarning(
-                        "OIDC sign-in is disabled due to invalid configuration: {ValidationError}",
-                        _validationError);
-                }
-
-                next(app);
-            };
     }
 }

@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.Shared/Options/WebAppOptionsValidator.cs
 using Microsoft.Extensions.Options;
+using System.Globalization;
 
 namespace OpenModulePlatform.Web.Shared.Options;
 
@@ -20,6 +21,27 @@ public sealed class WebAppOptionsValidator : IValidateOptions<WebAppOptions>
         {
             return ValidateOptionsResult.Fail(
                 "WebApp:PortalTopBar:PortalBaseUrl must be an absolute URL or an app-root-relative path starting with '/'.");
+        }
+
+        foreach (var cultureName in options.SupportedCultures ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(cultureName))
+            {
+                continue;
+            }
+
+            try
+            {
+                _ = new CultureInfo(cultureName);
+            }
+            catch (CultureNotFoundException)
+            {
+                // Request-cookie parsing deliberately ignores invalid culture names,
+                // but invalid startup configuration must not be silently filtered by
+                // CultureSelectionService while RequestLocalization throws elsewhere.
+                return ValidateOptionsResult.Fail(
+                    $"WebApp:SupportedCultures contains invalid culture name '{cultureName}'.");
+            }
         }
 
         return ValidateOptionsResult.Success;

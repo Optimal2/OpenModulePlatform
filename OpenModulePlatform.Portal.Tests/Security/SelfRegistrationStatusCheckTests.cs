@@ -1,3 +1,4 @@
+using OpenModulePlatform.Auth.Pages;
 using OpenModulePlatform.Auth.Services;
 using OpenModulePlatform.Web.Shared.Services;
 
@@ -11,6 +12,17 @@ namespace OpenModulePlatform.Portal.Tests.Security;
 /// </summary>
 public sealed class SelfRegistrationStatusCheckTests
 {
+    [Fact]
+    public void LoginModel_SelfRegistrationStartsOptIn()
+    {
+        // Construction only stores these dependencies; no request services are needed
+        // to pin the property's pre-request default.
+        var model = new LoginModel(
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!);
+
+        Assert.False(model.SelfRegistrationEnabled);
+    }
+
     [Fact]
     public void Evaluate_EnabledValue_ReportsEnabledWithWarning()
     {

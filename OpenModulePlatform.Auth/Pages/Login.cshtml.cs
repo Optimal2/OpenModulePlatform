@@ -107,7 +107,7 @@ public sealed class LoginModel : PageModel
 
     public bool ShowOtherSignInOptions { get; private set; }
 
-    public bool SelfRegistrationEnabled { get; private set; } = true;
+    public bool SelfRegistrationEnabled { get; private set; }
 
     public IReadOnlyList<LoginCultureOption> LanguageOptions { get; private set; } = [];
 
