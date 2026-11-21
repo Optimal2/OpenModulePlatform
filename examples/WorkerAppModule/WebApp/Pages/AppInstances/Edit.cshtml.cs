@@ -91,7 +91,7 @@ public sealed class EditModel : ExampleWorkerAppModulePageModel
             }, User, CancellationToken.None);
         }
 
-        StatusMessage = "App instance updated.";
+        StatusMessage = T("App instance updated.");
         return Page();
     }
 

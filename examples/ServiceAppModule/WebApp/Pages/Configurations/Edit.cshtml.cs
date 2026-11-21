@@ -78,7 +78,7 @@ public sealed class EditModel : ExampleServiceAppModulePageModel
             }, User, CancellationToken.None);
         }
 
-        StatusMessage = "Configuration updated.";
+        StatusMessage = T("Configuration updated.");
         return Page();
     }
 
