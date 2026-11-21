@@ -1000,6 +1000,19 @@ public static class OmpWebHostingExtensions
             .GetSection($"{optionsSectionName}:SecurityHeaders:ContentSecurityPolicy")
             .Get<ContentSecurityPolicyOptions>() ?? new ContentSecurityPolicyOptions();
 
+        if (cspOptions.Enabled && string.IsNullOrWhiteSpace(cspOptions.Policy))
+        {
+            app.ApplicationServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("OpenModulePlatform.Web.Shared.Security.CspConfiguration")
+                .LogWarning(
+                    "No Content-Security-Policy policy is configured for section {OptionsSection}. " +
+                    "The shared baseline is in use and permits inline scripts through script-src 'unsafe-inline'. " +
+                    "Configure {OptionsSection}:SecurityHeaders:ContentSecurityPolicy:Policy to retain a stricter policy.",
+                    optionsSectionName,
+                    optionsSectionName);
+        }
+
         return app.Use(async (context, next) =>
         {
             context.Response.OnStarting(static state =>

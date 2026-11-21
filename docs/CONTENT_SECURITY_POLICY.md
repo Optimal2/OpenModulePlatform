@@ -149,15 +149,20 @@ policy changes. Context Guard instead sets its own stricter policy in
 `frame-src` and `form-action`. The shared baseline only fills a missing header
 and does not replace this policy.
 
-> **The hardening lives in configuration, and losing the key un-does it silently.**
+> **The hardening lives in configuration, and losing the key selects the weaker baseline.**
 > `OmpContentSecurityPolicy.Build` falls back to `Baseline` whenever
 > `ContentSecurityPolicy:Policy` is null, empty, or whitespace
 > (`OpenModulePlatform.Web.Shared/Security/OmpContentSecurityPolicy.cs`), and that baseline
 > still carries `script-src 'self' 'unsafe-inline'`. So an app whose `Policy` key is dropped —
 > by a hand-edited `appsettings.json`, or by a config file copied forward from an older
-> artifact version — silently returns to allowing inline script. There is no warning and no
-> failed startup: the header is simply weaker. When you change an app's configuration, assert
-> the emitted `Content-Security-Policy` header rather than assuming the key survived.
+> artifact version — returns to allowing inline script. `UseOmpSecurityHeaders` now logs a
+> startup warning under `OpenModulePlatform.Web.Shared.Security.CspConfiguration` whenever an
+> enabled CSP configuration uses this fallback. The warning names the missing configuration
+> key and explicitly states that the baseline permits inline scripts. The baseline cannot yet
+> drop that permission because the Content module editor and the example viewer pages still
+> have executable inline blocks (see the migration plan below). When you change an app's
+> configuration, assert the emitted `Content-Security-Policy` header rather than assuming the
+> key survived.
 >
 > Exception since 2026-09-05 (campaign iframe-csp-grinden-ar-inte-deterministisk): the
 > iFrame module's `UseIFrameFrameSourceCsp` middleware falls back to the module's own

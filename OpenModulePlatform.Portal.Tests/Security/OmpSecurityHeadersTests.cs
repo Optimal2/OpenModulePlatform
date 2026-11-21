@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.Security;
 using System.Net;
@@ -22,10 +23,16 @@ public sealed class OmpSecurityHeadersTests
     private static async Task<(WebApplication app, HttpClient client)> StartAppAsync(
         Dictionary<string, string?>? config = null,
         string optionsSectionName = "WebApp",
-        Action<WebApplication>? configure = null)
+        Action<WebApplication>? configure = null,
+        ILoggerProvider? loggerProvider = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        if (loggerProvider is not null)
+        {
+            builder.Logging.AddProvider(loggerProvider);
+        }
+
         if (config is not null)
         {
             builder.Configuration.AddInMemoryCollection(config);
@@ -56,6 +63,40 @@ public sealed class OmpSecurityHeadersTests
         Assert.Contains($"report-uri {OmpContentSecurityPolicy.ReportPath}", policy);
         // The other security headers still come along unchanged.
         Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
+    }
+
+    [Fact]
+    public async Task MissingPolicy_LogsThatTheWeakerBaselineIsInUse()
+    {
+        var loggerProvider = new CapturingLoggerProvider();
+
+        var (app, client) = await StartAppAsync(loggerProvider: loggerProvider);
+        await using var _ = app;
+        using var response = await client.GetAsync("/");
+
+        var warning = Assert.Single(loggerProvider.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Category == "OpenModulePlatform.Web.Shared.Security.CspConfiguration");
+        Assert.Contains("script-src 'unsafe-inline'", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("WebApp:SecurityHeaders:ContentSecurityPolicy:Policy", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConfiguredPolicy_DoesNotLogBaselineFallbackWarning()
+    {
+        var loggerProvider = new CapturingLoggerProvider();
+
+        var (app, client) = await StartAppAsync(
+            new Dictionary<string, string?>
+            {
+                ["WebApp:SecurityHeaders:ContentSecurityPolicy:Policy"] = "default-src 'none'"
+            },
+            loggerProvider: loggerProvider);
+        await using var _ = app;
+        using var response = await client.GetAsync("/");
+
+        Assert.DoesNotContain(loggerProvider.Entries, entry =>
+            entry.Category == "OpenModulePlatform.Web.Shared.Security.CspConfiguration");
     }
 
     [Fact]
@@ -172,4 +213,46 @@ public sealed class OmpSecurityHeadersTests
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName)
+            => new CapturingLogger(categoryName, Entries);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class CapturingLogger(
+        string category,
+        List<LogEntry> entries) : ILogger
+    {
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+            => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => entries.Add(new LogEntry(logLevel, category, formatter(state, exception)));
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Category, string Message);
 }
