@@ -62,12 +62,13 @@ WHERE NOT EXISTS
       AND idx.name = required.IndexName
 );
 
+-- Only the Portal target (id 1) is required. The example targets (ids 2 and 3)
+-- are excludedSeedData in iframe_webapp.module-definition.json: an installation
+-- without the examples is healthy.
 IF OBJECT_ID(N'omp_iframe.urls', N'U') IS NOT NULL
 BEGIN
     SELECT @Missing = @Missing + CASE
         WHEN EXISTS (SELECT 1 FROM omp_iframe.urls WHERE id = 1)
-         AND EXISTS (SELECT 1 FROM omp_iframe.urls WHERE id = 2)
-         AND EXISTS (SELECT 1 FROM omp_iframe.urls WHERE id = 3)
         THEN 0 ELSE 1 END;
 END;
 
