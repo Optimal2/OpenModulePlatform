@@ -427,6 +427,21 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- HostAgent self-upgrade no longer trusts a database-selected install root when
+  no local root is configured, all known WorkerManager names are protected during
+  rename cleanup, and manual HostAgent installation preserves Sentinel and writes
+  credential-store paths for the final rather than staging directory.
+- Portal refuses removal of a user's last enabled sign-in link, rotates the
+  security stamp after a successful removal, and protects built-in roles from
+  deletion, renaming, and removal of their last principal. Template artifact
+  upgrades and profile-image removal now keep their multi-step database writes
+  in one transaction.
+- Auth distinguishes configuration read failures from unset values: session
+  ticket creation retries instead of assuming 600 minutes, and external-user
+  provisioning fails closed to Manual with an error log.
+- Portal, Bootstrapper, and HostAgent directory hashes all skip reparse points
+  and use ordinal relative-path ordering. Context Guard end calls now prune
+  expired hand-off payloads even when no correlation matches.
 - Selective installer builds of document-viewer artifacts now inject the default
   runtime configuration integrity hash, matching repository-script builds.
 - Renew the WorkerManager artifact identity after its published binary content changed.
