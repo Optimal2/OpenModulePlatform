@@ -825,33 +825,39 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
         // pointer moves: rows the target lacks entirely, and operator edits on
         // the current artifact where the target row is still a pristine package
         // baseline. Same rule as the import-time auto-apply paths.
-        string? configurationCarryMessage = null;
-        await using (var conn = _db.Create())
-        {
-            await conn.OpenAsync(ct);
-            var carry = await CarryConfigurationRowsOnPointerMoveAsync(conn, artifactId, [currentArtifactId], ct);
-            configurationCarryMessage = carry.Message;
-        }
-
         const string updateSql = @"
 UPDATE omp.InstanceTemplateAppInstances
 SET DesiredArtifactId = @ArtifactId,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
 
+        string? configurationCarryMessage;
+        ArtifactConfigurationCarryForwardResult carryForward;
         await using (var conn = _db.Create())
         {
             await conn.OpenAsync(ct);
-            await using var update = new SqlCommand(updateSql, conn);
-            Add(update, "@InstanceTemplateAppInstanceId", instanceTemplateAppInstanceId);
-            Add(update, "@ArtifactId", artifactId);
-            await update.ExecuteNonQueryAsync(ct);
-        }
+            await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+            try
+            {
+                var carry = await CarryConfigurationRowsOnPointerMoveAsync(conn, artifactId, [currentArtifactId], ct, tx);
+                configurationCarryMessage = carry.Message;
 
-        // Carry operator edits from the superseded version forward to the new
-        // desired version. Previously carry-forward ran only at artifact import,
-        // so a version bump stranded edits made to the old version (R5-F11).
-        var carryForward = await CarryForwardArtifactConfigurationFilesAsync(artifactId, ct);
+                await using var update = new SqlCommand(updateSql, conn, tx);
+                Add(update, "@InstanceTemplateAppInstanceId", instanceTemplateAppInstanceId);
+                Add(update, "@ArtifactId", artifactId);
+                await update.ExecuteNonQueryAsync(ct);
+
+                // Carry operator edits from the superseded version forward to the new
+                // desired version in the same transaction as the pointer move.
+                carryForward = await CarryForwardArtifactConfigurationFilesCoreAsync(conn, tx, artifactId, ct);
+                await tx.CommitAsync(ct);
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct);
+                throw;
+            }
+        }
 
         return (targetVersion, carryForward, configurationCarryMessage);
     }
@@ -3834,7 +3840,8 @@ WHERE ai.AppId = @AppId
         SqlConnection conn,
         int artifactId,
         IReadOnlyList<int> sourceArtifactIds,
-        CancellationToken ct)
+        CancellationToken ct,
+        SqlTransaction? tx = null)
     {
         var valuesList = string.Join(",", sourceArtifactIds.Distinct().Select(static id => "(" + id + ")"));
         var sql = ArtifactConfigurationFileImportSql.CarryConfigurationRowsOnPointerMove.Replace(
@@ -3844,7 +3851,7 @@ WHERE ai.AppId = @AppId
         var copied = new List<string>();
         var carriedEdits = new List<string>();
         var skipped = new List<string>();
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@ArtifactId", artifactId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))

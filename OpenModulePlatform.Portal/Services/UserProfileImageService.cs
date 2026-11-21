@@ -232,17 +232,28 @@ SELECT @old_storage_key;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-
-        var oldStorageKey = await cmd.ExecuteScalarAsync(ct) as string;
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        string? oldStorageKey;
         try
         {
-            await DisableProfileImageBinaryDataAsync(conn, tx: null, userId, oldStorageKey, ct);
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+            oldStorageKey = await cmd.ExecuteScalarAsync(ct) as string;
+            try
+            {
+                await DisableProfileImageBinaryDataAsync(conn, tx, userId, oldStorageKey, ct);
+            }
+            catch (SqlException ex) when (IsProfileImageSchemaError(ex))
+            {
+                _log.LogWarning(ex, "Profile image binary storage is not available while removing an image for user {UserId}.", userId);
+            }
+
+            await tx.CommitAsync(ct);
         }
-        catch (SqlException ex) when (IsProfileImageSchemaError(ex))
+        catch
         {
-            _log.LogWarning(ex, "Profile image binary storage is not available while removing an image for user {UserId}.", userId);
+            await RollbackBestEffortAsync(tx, ct);
+            throw;
         }
 
         DeleteStorageKeyBestEffort(oldStorageKey);
