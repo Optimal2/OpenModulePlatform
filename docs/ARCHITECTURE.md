@@ -576,8 +576,10 @@ flowchart LR
   (`UseOmpSecurityHeaders`).
 - Proxy to web app: `X-Forwarded-For` is trusted only from configured proxies
   or networks.
-- Package to host: SHA-256 against `omp.Artifacts.Sha256`; reparse points are
-  refused; HostAgent refuses to write its own control paths through overlays
+- Package to host: SHA-256 against `omp.Artifacts.Sha256`; directory hashing in
+  the Portal, Bootstrapper and HostAgent refuses a linked root, skips linked
+  descendants, and orders relative paths with the ordinal comparer on every
+  platform. HostAgent refuses to write its own control paths through overlays
   (`ArtifactProvisioner.cs`, `ArtifactZipImportService.cs`, `CanonicalRelativePath.cs`, `ArtifactConfigurationFileWriter.cs`).
 - Process to database: each process uses its own connection string. The
   Bootstrapper grants runtime accounts `db_datareader` and `db_datawriter`

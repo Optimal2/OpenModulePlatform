@@ -614,9 +614,10 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
     private static async Task<string> ComputeDirectorySha256Async(string path, CancellationToken ct)
     {
+        OmpReparsePointGuard.EnsureNotReparsePoint(path, "Artifact path");
         using var sha = SHA256.Create();
-        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.OrdinalIgnoreCase)
+        var files = Directory.EnumerateFiles(path, "*", OmpReparsePointGuard.RecursiveNoFollow)
+            .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.Ordinal)
             .ToList();
 
         foreach (var file in files)

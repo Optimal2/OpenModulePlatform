@@ -982,9 +982,10 @@ SELECT COUNT(1) FROM @changes;
 
     internal static string ComputeDirectorySha256(string path)
     {
+        OmpReparsePointGuard.EnsureNotReparsePoint(path, "Artifact path");
         using var sha = SHA256.Create();
-        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.OrdinalIgnoreCase)
+        var files = Directory.EnumerateFiles(path, "*", OmpReparsePointGuard.RecursiveNoFollow)
+            .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.Ordinal)
             .ToList();
 
         foreach (var file in files)
