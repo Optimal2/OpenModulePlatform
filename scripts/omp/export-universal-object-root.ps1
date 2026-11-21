@@ -431,8 +431,10 @@ if (-not (Test-Path -LiteralPath $objectRootPath -PathType Container)) {
 
 $outputPathFull = Resolve-FullPath -Path $OutputPath
 New-Item -ItemType Directory -Path (Split-Path -Parent $outputPathFull) -Force | Out-Null
-if (Test-Path -LiteralPath $outputPathFull -PathType Leaf) {
-    Remove-Item -LiteralPath $outputPathFull -Force
+# An existing package is never overwritten, as in export-universal-package.ps1:
+# the same output name must not silently change content.
+if (Test-Path -LiteralPath $outputPathFull) {
+    throw "$outputPathFull already exists and was not replaced. An existing package is never overwritten; choose another package version or output file."
 }
 
 $isGlobalPackage = [string]::IsNullOrWhiteSpace($TargetHostProfile)

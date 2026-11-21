@@ -474,6 +474,9 @@ To create a universal package from an already validated object root, use:
   -OutputPath ".\artifacts\universal-packages\omp-universal__global__verified.zip"
 ```
 
+Like `export-universal-package.ps1`, the helper refuses an output file that
+already exists instead of replacing it.
+
 Pass `-LatestOnly` to keep only the highest version per artifact identity
 (`module__app__type__target`) and per dashboard widget identity, matching the
 installer GUI export when "include historical artifacts" is unchecked. Without
