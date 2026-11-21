@@ -193,8 +193,10 @@ This is a mandatory gate beside module-definition and component-version
 validation in `scripts/local-ci.ps1`, the pre-push hook and GitHub CI.
 Universal export and HostAgent-first packaging also run the SQL and version
 validators, including when reusing existing artifacts. The three
-`ModuleDefinitionSqlSafetyTests` suites carry the same configuration matrix;
-an initial run recorded 53 failures and four passing controls in each suite
+`ModuleDefinitionSqlSafetyTests` suites (Portal, HostAgent and Bootstrapper,
+one per copy of the guard) are thin subclasses of one shared contract,
+`tests/shared/ModuleDefinitionSqlSafetyContract.cs`, so every copy runs the
+same matrix; an initial run recorded 53 failures and four passing controls in each suite
 before implementation. The PowerShell probe initially accepted a configuration
 UPDATE and now rejects it with `OMP-MODULE-SQL-CONFIG-OWNERSHIP`.
 

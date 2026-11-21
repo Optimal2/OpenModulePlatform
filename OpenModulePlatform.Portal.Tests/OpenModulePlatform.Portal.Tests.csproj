@@ -45,6 +45,7 @@
     <Compile Include="..\tests\shared\OmpTestCleanupLog.cs" Link="TestSupport\OmpTestCleanupLog.cs" />
     <Compile Include="..\tests\shared\OmpRepositoryFiles.cs" Link="TestSupport\OmpRepositoryFiles.cs" />
     <Compile Include="..\tests\shared\PlatformConfigurationImportContract.cs" Link="TestSupport\PlatformConfigurationImportContract.cs" />
+    <Compile Include="..\tests\shared\ModuleDefinitionSqlSafetyContract.cs" Link="TestSupport\ModuleDefinitionSqlSafetyContract.cs" />
     <Compile Include="..\tests\shared\OmpTestGates.cs" Link="TestSupport\OmpTestGates.cs" />
   </ItemGroup>
   <ItemGroup>
