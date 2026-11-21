@@ -23,6 +23,7 @@ public sealed class MessageService
     private const long MinConfiguredAttachmentBytes = 1024;
     private const long MaxConfiguredAttachmentBytes = 100 * 1024 * 1024;
     private const int MaxFileNameLength = 260;
+    private const int MaxContentLength = 4000;
     private const int MaxPreviewLength = 160;
     private const int MaxMessageBatchSize = 100;
     private const string AttachmentHandlerName = "Attachment";
@@ -468,7 +469,7 @@ ORDER BY cp.joined_at, cp.user_id;";
         }
 
         await RequireEnabledAsync(ct);
-        var cleanedContent = CleanOptional(content, maxLength: 4000);
+        var cleanedContent = CleanMessageContent(content);
         if (string.IsNullOrWhiteSpace(cleanedContent))
         {
             throw new ArgumentException("An edited message must still contain text.", nameof(content));
@@ -1407,7 +1408,7 @@ ORDER BY m.message_id DESC;";
 
         await RequireEnabledAsync(ct);
 
-        var cleanedContent = CleanOptional(content, maxLength: 4000);
+        var cleanedContent = CleanMessageContent(content);
         var normalizedAttachments = attachments
             .Where(file => file.Length > 0)
             .Take(MaxAttachmentCount + 1)
@@ -2390,6 +2391,26 @@ ORDER BY a.message_id, a.attachment_id;";
         return nameWithoutExtension.Length <= maxNameLength
             ? nameWithoutExtension + extension
             : nameWithoutExtension[..maxNameLength] + extension;
+    }
+
+    /// <summary>
+    /// Trims message text and refuses text over the limit instead of cutting it: a
+    /// sender who is not told would believe the whole message went out.
+    /// </summary>
+    private static string? CleanMessageContent(string? content)
+    {
+        var cleaned = content?.Trim();
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return null;
+        }
+
+        if (cleaned.Length > MaxContentLength)
+        {
+            throw new ArgumentException("A message can contain at most 4000 characters.", nameof(content));
+        }
+
+        return cleaned;
     }
 
     private static string? CleanOptional(string? value, int maxLength)

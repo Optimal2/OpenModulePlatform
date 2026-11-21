@@ -3257,6 +3257,9 @@
   <data name="You left the group." xml:space="preserve"><value>You left the group.</value></data>
   <data name="{0} was removed from the group." xml:space="preserve"><value>{0} was removed from the group.</value></data>
   <data name="An edited message must still contain text." xml:space="preserve"><value>An edited message must still contain text.</value></data>
+  <data name="A message can contain at most 4000 characters." xml:space="preserve"><value>A message can contain at most 4000 characters.</value></data>
+  <data name="OMP banners table is not installed." xml:space="preserve"><value>OMP banners table is not installed.</value></data>
+  <data name="The selected dashboard widget was not found." xml:space="preserve"><value>The selected dashboard widget was not found.</value></data>
   <data name="Only the sender can edit a text message." xml:space="preserve"><value>Only the sender can edit a text message.</value></data>
   <data name="Only group conversations have participants to remove." xml:space="preserve"><value>Only group conversations have participants to remove.</value></data>
   <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Only the group's creator can remove other participants.</value></data>

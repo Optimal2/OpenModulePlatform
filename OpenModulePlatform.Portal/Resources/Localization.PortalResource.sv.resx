@@ -3176,6 +3176,9 @@
   <data name="You left the group." xml:space="preserve"><value>Du lämnade gruppen.</value></data>
   <data name="{0} was removed from the group." xml:space="preserve"><value>{0} togs bort ur gruppen.</value></data>
   <data name="An edited message must still contain text." xml:space="preserve"><value>Ett redigerat meddelande måste fortfarande innehålla text.</value></data>
+  <data name="A message can contain at most 4000 characters." xml:space="preserve"><value>Ett meddelande får innehålla högst 4000 tecken.</value></data>
+  <data name="OMP banners table is not installed." xml:space="preserve"><value>OMP:s bannertabell är inte installerad.</value></data>
+  <data name="The selected dashboard widget was not found." xml:space="preserve"><value>Den valda dashboard-widgeten hittades inte.</value></data>
   <data name="Only the sender can edit a text message." xml:space="preserve"><value>Bara avsändaren kan redigera ett textmeddelande.</value></data>
   <data name="Only group conversations have participants to remove." xml:space="preserve"><value>Bara gruppkonversationer har deltagare som kan tas bort.</value></data>
   <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Bara gruppens skapare kan ta bort andra deltagare.</value></data>

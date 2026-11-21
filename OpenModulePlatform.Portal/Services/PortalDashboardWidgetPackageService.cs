@@ -132,7 +132,7 @@ WHERE widget_id = @widget_id;";
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
         cmd.Parameters.Add("@is_enabled", SqlDbType.Bit).Value = isEnabled;
-        await cmd.ExecuteNonQueryAsync(ct);
+        ThrowWhenWidgetMissing(await cmd.ExecuteNonQueryAsync(ct));
     }
 
     public async Task UpdateWidgetDescriptionAsync(
@@ -153,7 +153,17 @@ WHERE widget_id = @widget_id;";
         cmd.Parameters.Add("@widget_id", SqlDbType.Int).Value = widgetId;
         cmd.Parameters.Add("@description", SqlDbType.NVarChar, 1000).Value =
             cleanedDescription is null ? DBNull.Value : cleanedDescription;
-        await cmd.ExecuteNonQueryAsync(ct);
+        ThrowWhenWidgetMissing(await cmd.ExecuteNonQueryAsync(ct));
+    }
+
+    // An UPDATE that matched no row must not read as success: the widget was removed or the
+    // id never existed, and the page would otherwise report a change that did not happen.
+    private static void ThrowWhenWidgetMissing(int affectedRows)
+    {
+        if (affectedRows == 0)
+        {
+            throw new InvalidOperationException("The selected dashboard widget was not found.");
+        }
     }
 
     public async Task<(byte[] Content, string FileName, string PackageVersion)> ExportAsync(

@@ -156,7 +156,10 @@ public sealed class BannersModel : OmpPortalPageModel
             StatusMessage = P("Banner created.");
             return RedirectToPage("/Admin/Banners", new { bannerId });
         }
-        catch (ArgumentException ex)
+        // ArgumentException: rejected input. InvalidOperationException: the banners
+        // table is not installed, which BannerService.CreateAsync reports with a
+        // prepared message instead of failing in SQL.
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(_portalLocalizer, ex.Message));
             return Page();

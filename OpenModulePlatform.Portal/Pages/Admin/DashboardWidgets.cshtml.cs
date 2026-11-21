@@ -76,10 +76,17 @@ public sealed class DashboardWidgetsModel : OmpPortalPageModel
             return guard;
         }
 
-        await _widgets.SetWidgetEnabledAsync(widgetId, isEnabled, ct);
-        StatusMessage = isEnabled
-            ? T("Dashboard widget enabled.")
-            : T("Dashboard widget disabled.");
+        try
+        {
+            await _widgets.SetWidgetEnabledAsync(widgetId, isEnabled, ct);
+            StatusMessage = isEnabled
+                ? T("Dashboard widget enabled.")
+                : T("Dashboard widget disabled.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
+        }
 
         return RedirectToPage("/Admin/DashboardWidgets");
     }

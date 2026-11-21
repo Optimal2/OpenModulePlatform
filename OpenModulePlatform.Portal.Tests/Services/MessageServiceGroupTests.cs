@@ -49,6 +49,31 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
     }
 
     [Fact]
+    public async Task Text_over_the_limit_is_refused_instead_of_cut()
+    {
+        var (service, _) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Length test", CancellationToken.None);
+        var atLimit = new string('a', 4000);
+        var tooLong = new string('b', 4001);
+
+        // Surrounding whitespace is trimmed before the limit applies.
+        var messageId = await service.SendMessageAsync(anna, conversationId, "  " + atLimit + "  ", [], CancellationToken.None);
+
+        var sendError = await Assert.ThrowsAsync<ArgumentException>(
+            () => service.SendMessageAsync(anna, conversationId, tooLong, [], CancellationToken.None));
+        Assert.StartsWith("A message can contain at most 4000 characters.", sendError.Message, StringComparison.Ordinal);
+        var editError = await Assert.ThrowsAsync<ArgumentException>(
+            () => service.EditMessageAsync(anna, messageId, tooLong, CancellationToken.None));
+        Assert.StartsWith("A message can contain at most 4000 characters.", editError.Message, StringComparison.Ordinal);
+
+        var row = Assert.Single(await service.GetMessagesAsync(bertil, conversationId, 10, null, CancellationToken.None));
+        Assert.Equal(atLimit, row.Content);
+        Assert.Null(row.EditedAt);
+    }
+
+    [Fact]
     public async Task Only_the_sender_deletes_and_a_placeholder_without_text_or_files_remains()
     {
         var (service, pushes) = _fixture.CreateService();

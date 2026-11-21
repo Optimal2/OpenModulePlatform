@@ -1,6 +1,8 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/Maintenance.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
@@ -110,10 +112,19 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return Page();
         }
 
-        var jobId = await _repo.QueueArtifactRetentionCleanupAsync(
-            Input.MaxVersionsToKeep,
-            User.Identity?.Name,
-            ct);
+        long jobId;
+        try
+        {
+            jobId = await _repo.QueueArtifactRetentionCleanupAsync(
+                Input.MaxVersionsToKeep,
+                User.Identity?.Name,
+                ct);
+        }
+        catch (SqlException ex) when (IsPreparedSchemaMessage(ex))
+        {
+            return RedirectWithSchemaMessage(ex);
+        }
+
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "artifact_retention.cleanup_queued",
@@ -154,7 +165,16 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return guard;
         }
 
-        var result = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
+        MaintenanceScanQueueResult result;
+        try
+        {
+            result = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
+        }
+        catch (SqlException ex) when (IsPreparedSchemaMessage(ex))
+        {
+            return RedirectWithSchemaMessage(ex);
+        }
+
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "maintenance_scan.queued",
@@ -187,10 +207,19 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             return Page();
         }
 
-        var result = await _repo.QueueMaintenanceCleanupAsync(
-            SelectedMaintenanceFindingIds,
-            User.Identity?.Name,
-            ct);
+        MaintenanceCleanupQueueResult result;
+        try
+        {
+            result = await _repo.QueueMaintenanceCleanupAsync(
+                SelectedMaintenanceFindingIds,
+                User.Identity?.Name,
+                ct);
+        }
+        catch (SqlException ex) when (IsPreparedSchemaMessage(ex))
+        {
+            return RedirectWithSchemaMessage(ex);
+        }
+
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "maintenance_findings.cleanup_queued",
@@ -257,6 +286,17 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     private IActionResult RedirectToMaintenancePage()
         => RedirectToPage("/Admin/Maintenance", new { maxVersionsToKeep = Input.MaxVersionsToKeep });
+
+    // The queue statements THROW 51000 with an operator message ("... Apply the core OMP
+    // schema ...") when the HostAgent job queue or the findings table is missing. Show that
+    // message, localized, instead of the general error page. Other SQL errors are unchanged.
+    private static bool IsPreparedSchemaMessage(SqlException ex) => ex.Number >= 50000;
+
+    private IActionResult RedirectWithSchemaMessage(SqlException ex)
+    {
+        StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
+        return RedirectToMaintenancePage();
+    }
 
     private async Task LoadPageDataAsync(CancellationToken ct)
     {

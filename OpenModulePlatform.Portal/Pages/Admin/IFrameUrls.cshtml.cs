@@ -101,8 +101,17 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
             return guard;
         }
 
-        await _iframeAdmin.SetUrlEnabledAsync(urlId, enabled, ct);
-        StatusMessage = enabled ? T("iFrame URL enabled.") : T("iFrame URL disabled.");
+        try
+        {
+            await _iframeAdmin.SetUrlEnabledAsync(urlId, enabled, ct);
+            StatusMessage = enabled ? T("iFrame URL enabled.") : T("iFrame URL disabled.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The iFrame tables are not installed; say so instead of the error page.
+            StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
+        }
+
         return RedirectToPage("/Admin/IFrameUrls", new { tab = "urls" });
     }
 
@@ -155,8 +164,17 @@ public sealed class IFrameUrlsModel : OmpPortalPageModel
             return guard;
         }
 
-        await _iframeAdmin.SetUrlSetEnabledAsync(urlSetId, enabled, ct);
-        StatusMessage = enabled ? T("iFrame URL set enabled.") : T("iFrame URL set disabled.");
+        try
+        {
+            await _iframeAdmin.SetUrlSetEnabledAsync(urlSetId, enabled, ct);
+            StatusMessage = enabled ? T("iFrame URL set enabled.") : T("iFrame URL set disabled.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The iFrame tables are not installed; say so instead of the error page.
+            StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
+        }
+
         return RedirectToPage("/Admin/IFrameUrls", new { tab = "sets" });
     }
 

@@ -73,6 +73,7 @@ public static partial class PortalTextLocalizer
             "OMP user does not exist or is not active." => localizer["OMP user does not exist or is not active."],
             "Attachment content type is not allowed." => localizer["Attachment content type is not allowed."],
             "An edited message must still contain text." => localizer["An edited message must still contain text."],
+            "A message can contain at most 4000 characters." => localizer["A message can contain at most 4000 characters."],
             "Only group conversations have participants to remove." => localizer["Only group conversations have participants to remove."],
             "The participant is not part of this conversation." => localizer["The participant is not part of this conversation."],
             "The conversation was not found." => localizer["The conversation was not found."],
@@ -80,6 +81,11 @@ public static partial class PortalTextLocalizer
             "The new admin must be a participant of the group." => localizer["The new admin must be a participant of the group."],
             "You are already the group admin." => localizer["You are already the group admin."],
             "Select users." => localizer["Select users."],
+            // Admin service exception texts shown by the Banners, iFrame URLs and
+            // Dashboard widgets pages.
+            "OMP banners table is not installed." => localizer["OMP banners table is not installed."],
+            "The iFrame URL tables are not installed." => localizer["The iFrame URL tables are not installed."],
+            "The selected dashboard widget was not found." => localizer["The selected dashboard widget was not found."],
             // Dashboard widget upload service exception texts (music player
             // and blank widget JSON handlers on the dashboard).
             "Upload one MP3 file." => localizer["Upload one MP3 file."],

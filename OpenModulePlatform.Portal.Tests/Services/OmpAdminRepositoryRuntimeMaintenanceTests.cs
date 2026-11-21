@@ -104,6 +104,31 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
     }
 
     [Fact]
+    public async Task DeleteRuntimeHandler_WhenModuleReportsBlockingRows_ShowsTheRefusalInsteadOfFailing()
+    {
+        // The App instances page removes runtime rows through DeleteRuntimeAppInstanceRowAsync.
+        // Its refusal is an InvalidOperationException; the handler caught only SqlException,
+        // so the operator got the general error page instead of what to remove first.
+        await _fixture.InsertExampleDefinitionAsync(isApplied: true);
+        var appInstanceId = Guid.NewGuid();
+        await _fixture.InsertBindingAsync(appInstanceId, artifactId: null);
+        await _fixture.InsertBindingAsync(appInstanceId, artifactId: null);
+        await _fixture.InsertLeaseAsync(appInstanceId);
+
+        var model = OpenModulePlatform.Portal.Tests.Pages.PageHandlerHarness.Prepare(
+            new OpenModulePlatform.Portal.Pages.Admin.AppInstancesModel(
+                OpenModulePlatform.Portal.Tests.Pages.PageHandlerHarness.AnonymousOptions(),
+                null!,
+                _fixture.CreatePortalRepository()));
+
+        var result = await model.OnPostDeleteRuntime(appInstanceId, CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.RedirectToPageResult>(result);
+        Assert.Contains("2 example runtime binding(s)", model.StatusMessage, StringComparison.Ordinal);
+        Assert.Equal(1, await _fixture.CountLeasesAsync(appInstanceId));
+    }
+
+    [Fact]
     public async Task DeleteAppInstanceAsync_WhenNothingBlocks_RunsDeclaredAppInstanceRemovedStep()
     {
         await _fixture.InsertExampleDefinitionAsync(isApplied: true);

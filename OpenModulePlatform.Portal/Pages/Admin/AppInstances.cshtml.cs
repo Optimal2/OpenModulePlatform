@@ -61,6 +61,15 @@ public sealed class AppInstancesModel : OmpPortalPageModel
                 duplicateMessage: null,
                 foreignKeyMessage: "The runtime row could not be deleted. Delete or update dependent rows first."));
         }
+        // The repository refuses with InvalidOperationException when module or content rows
+        // still own the app instance, or when module runtime maintenance stops the delete.
+        // Those carry the operator's next step; without this they reached the error page.
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = ex is OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceException
+                ? DeleteBlockedMessage(ex, "The runtime row could not be deleted.")
+                : PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
+        }
 
         return RedirectToPage("/Admin/AppInstances");
     }
