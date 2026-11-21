@@ -16,7 +16,8 @@ Describe 'Manual HostAgent installation service and path guards' {
             'Resolve-ReferenceServiceName',
             'Stop-ServiceIfRunning',
             'Invoke-ScChecked',
-            'Disable-OtherServices')) {
+            'Disable-OtherServices',
+            'Test-BuiltInServiceAccount')) {
             $function = $ast.Find({ param($node)
                 $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
             }, $true)
@@ -63,6 +64,23 @@ Describe 'Manual HostAgent installation service and path guards' {
     It 'rejects Sentinel as an explicit account reference service' {
         { Resolve-ReferenceServiceName -ExplicitName 'OMP.HostAgent.Sentinel' -Prefix 'OMP.HostAgent' -TargetName 'OMP.HostAgent.1.2.3' } |
             Should -Throw '*Sentinel*reference*'
+    }
+
+    It 'recognizes built-in service account alias <AccountName> without a password' -ForEach @(
+        @{ AccountName = 'LocalSystem' },
+        @{ AccountName = '.\LocalSystem' },
+        @{ AccountName = 'NT AUTHORITY\SYSTEM' },
+        @{ AccountName = 'NT AUTHORITY\LocalService' },
+        @{ AccountName = '.\LocalService' },
+        @{ AccountName = 'NT AUTHORITY\NetworkService' },
+        @{ AccountName = '.\NetworkService' },
+        @{ AccountName = 'nt authority\system' }
+    ) {
+        Test-BuiltInServiceAccount -AccountName $AccountName | Should -BeTrue
+    }
+
+    It 'still requires credentials for a non-built-in service account' {
+        Test-BuiltInServiceAccount -AccountName 'EXAMPLE\ServiceAccount' | Should -BeFalse
     }
 
     It 'writes the credential-store setting for the final path rather than staging' {

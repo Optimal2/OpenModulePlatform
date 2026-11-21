@@ -59,6 +59,13 @@ OMP metadata; it does not infer the latest version from file or folder names.
 
 `omp.WorkerInstances` introduces process-level desired state below an `omp.AppInstances` row. This supports modules where one app instance needs multiple isolated worker processes, for example one process per channel.
 
+A null `omp.WorkerInstances.ArtifactId` is an inheritance marker, not an unfilled
+pointer: desired-state resolution uses `COALESCE(wi.ArtifactId, ai.ArtifactId)`,
+so the worker uses its app instance's artifact. Artifact auto-apply deliberately
+fills null app-instance and template pointers, and updates non-null worker
+overrides, but leaves null worker pointers null so they continue inheriting when
+the app instance moves to a newer artifact.
+
 ## HostAgent job queue
 
 Portal and other trusted platform components can enqueue host-specific or

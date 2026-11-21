@@ -250,9 +250,16 @@ function Test-BuiltInServiceAccount {
     }
 
     $normalized = $AccountName.Trim()
-    return $normalized -eq 'LocalSystem' -or
-        $normalized -eq 'NT AUTHORITY\LocalService' -or
-        $normalized -eq 'NT AUTHORITY\NetworkService'
+    $builtInAccounts = @(
+        'LocalSystem',
+        '.\LocalSystem',
+        'NT AUTHORITY\SYSTEM',
+        'NT AUTHORITY\LocalService',
+        '.\LocalService',
+        'NT AUTHORITY\NetworkService',
+        '.\NetworkService'
+    )
+    return $builtInAccounts -contains $normalized
 }
 
 function Copy-DirectoryContents {

@@ -2041,6 +2041,10 @@ WHERE AppInstanceId = @rowId;",
             target.AppId,
             ct);
 
+        // A NULL worker pointer means "inherit the app instance artifact": desired-state
+        // queries use COALESCE(wi.ArtifactId, ai.ArtifactId). Moving the app pointer above
+        // therefore updates inheriting workers without creating a worker-specific override.
+        // Only an existing worker override needs its own auto-apply update here.
         var workerRowsUpdated = await ApplyArtifactToGuidRowsAsync(
             conn,
             artifactId,
