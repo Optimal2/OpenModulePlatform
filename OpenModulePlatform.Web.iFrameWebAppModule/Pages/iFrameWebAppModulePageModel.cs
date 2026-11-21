@@ -22,7 +22,4 @@ public abstract class iFrameWebAppModulePageModel : OmpSecurePageModel<IFrameWeb
             ct,
             IFrameWebAppModulePermissions.View,
             IFrameWebAppModulePermissions.Admin);
-
-    protected Task<IActionResult?> RequireAdminAsync(CancellationToken ct)
-        => RequireAnyAsync(ct, IFrameWebAppModulePermissions.Admin);
 }
