@@ -467,7 +467,14 @@ function Get-PortableObjectVersion {
                 }
             )
 
-            $latestWidgetVersion = @($widgetVersions | Sort-Object -Descending | Select-Object -First 1)
+            # Order by version, not by text: a string sort ranks 0.9.0 above
+            # 0.10.0. A suffix is ignored and an unparsable text ranks lowest,
+            # as in ArtifactVersionComparer.
+            $versionKey = {
+                $parsed = $null
+                if ([Version]::TryParse(($_ -split '[-+]', 2)[0], [ref]$parsed)) { $parsed } else { [Version]'0.0' }
+            }
+            $latestWidgetVersion = @($widgetVersions | Sort-Object -Descending -Property $versionKey, { $_ } | Select-Object -First 1)
             return [string]($latestWidgetVersion | Select-Object -First 1)
         }
         catch {
