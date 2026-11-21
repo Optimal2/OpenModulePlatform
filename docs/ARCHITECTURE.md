@@ -453,8 +453,9 @@ Details: `ARTIFACT_PACKAGES.md`, `UNIVERSAL_MODULE_PACKAGES.md`,
 
 - IIS binding defaults to `http` on port 80 (`HostAgentSettings.IisBindingPort`).
   The sample bootstrap uses port 8088 (`installer/hosts/sample/bootstrap.json`).
-- Local development: Portal on `http://localhost:5070`, iFrame on 5075, examples
-  on 5071 and 5072 (`Properties/launchSettings.json`).
+- Local development: Portal on `http://localhost:5070`, iFrame on 5075, and the
+  examples on their own ports: WebApp 5071, WebAppBlazor 5072, ServiceApp 5073
+  and WorkerApp 5074 (`Properties/launchSettings.json`).
 - HostAgent RPC uses a local named pipe, not a network port.
 
 ## 6. Configuration

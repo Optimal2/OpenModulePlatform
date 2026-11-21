@@ -4,7 +4,7 @@
     "OpenModulePlatform.Web.ExampleServiceAppModule": {
       "commandName": "Project",
       "launchBrowser": true,
-      "applicationUrl": "http://localhost:5072",
+      "applicationUrl": "http://localhost:5073",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
