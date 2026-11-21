@@ -465,6 +465,16 @@ Web.Shared, Fabrikam and Tailwind:
    defaults (localhost/LocalDB dev connection strings or empty placeholders);
    `appsettings.Development.json` holds personal dev overrides. NLog stays as
    an embedded JSON section. No `.env` files; no user-secrets.
+
+   The committed OMP localhost connection strings deliberately use
+   `TrustServerCertificate=true` so a local SQL Server development certificate
+   works without extra machine setup. This is a development default, not the
+   installation default: `SqlBootstrapOptions.TrustServerCertificate` defaults
+   to `false`, so installations validate the server certificate unless an
+   operator explicitly opts out. Deployed connection strings should retain
+   certificate validation and provision a trusted certificate; do not copy the
+   localhost development setting into a host configuration merely to suppress
+   a certificate error.
 2. **Options classes:** one `XxxOptions` class per config section with a
    `public const string SectionName`; nested option types for lists/children.
    `XxxSettings` remains acceptable for OMP-style Windows services/workers.
