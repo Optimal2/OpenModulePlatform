@@ -128,6 +128,13 @@ dispatcher by calling `AddOmpPushEventDispatcher` and setting
 the dispatcher automatically, so module web apps that call `AddOmpWebDefaults`
 do not compete for leases unless they explicitly opt in.
 
+`AddOmpPushEventDispatcher` reads `Enabled` once, at startup, to decide whether
+to register the dispatcher at all. A process that starts with it `false` has no
+dispatcher, and setting it to `true` later takes effect only after a restart. A
+process that starts with it `true` re-reads the value on every polling cycle, so
+setting it to `false` while running pauses dispatch and cleanup without a
+restart, and setting it back to `true` resumes them.
+
 The dispatcher leases pending rows atomically from `omp.push_event_outbox`,
 ordered by `push_event_id`, sends a lightweight SignalR envelope with method
 `pushEvent`, and then marks the row `dispatched`. The same authorized hub is
