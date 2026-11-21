@@ -26,4 +26,44 @@ public sealed class WebAppOptionsValidatorTests
 
         Assert.True(result.Succeeded);
     }
+
+    [Fact]
+    public void Validate_InvalidPortalBaseUrl_NamesTheBoundSection()
+    {
+        // The Portal and the example apps bind WebAppOptions from "Portal", not "WebApp";
+        // the failure must name the key the operator actually has to change.
+        var validator = new WebAppOptionsValidator("Portal");
+
+        var result = validator.Validate(
+            null,
+            new WebAppOptions { PortalTopBar = new PortalTopBarOptions { PortalBaseUrl = "//elsewhere" } });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Portal:PortalTopBar:PortalBaseUrl", result.FailureMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("WebApp:", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_InvalidSupportedCulture_NamesTheBoundSection()
+    {
+        var validator = new WebAppOptionsValidator("Portal");
+
+        var result = validator.Validate(
+            null,
+            new WebAppOptions { SupportedCultures = ["not_a_culture"] });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Portal:SupportedCultures", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_DefaultConstructor_NamesTheWebAppSection()
+    {
+        var result = _validator.Validate(
+            null,
+            new WebAppOptions { PortalTopBar = new PortalTopBarOptions { PortalBaseUrl = "relative" } });
+
+        Assert.True(result.Failed);
+        Assert.Contains("WebApp:PortalTopBar:PortalBaseUrl", result.FailureMessage, StringComparison.Ordinal);
+    }
 }

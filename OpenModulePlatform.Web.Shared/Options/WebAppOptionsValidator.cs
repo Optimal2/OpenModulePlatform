@@ -9,6 +9,24 @@ namespace OpenModulePlatform.Web.Shared.Options;
 /// </summary>
 public sealed class WebAppOptionsValidator : IValidateOptions<WebAppOptions>
 {
+    private readonly string _sectionName;
+
+    public WebAppOptionsValidator()
+        : this(WebAppOptions.DefaultSectionName)
+    {
+    }
+
+    /// <param name="sectionName">
+    /// The configuration section the options are bound from, so failure messages name the
+    /// key the operator must change (for example "Portal" for apps that bind that section).
+    /// </param>
+    public WebAppOptionsValidator(string sectionName)
+    {
+        _sectionName = string.IsNullOrWhiteSpace(sectionName)
+            ? WebAppOptions.DefaultSectionName
+            : sectionName;
+    }
+
     public ValidateOptionsResult Validate(string? name, WebAppOptions options)
     {
         if (options is null)
@@ -20,7 +38,7 @@ public sealed class WebAppOptionsValidator : IValidateOptions<WebAppOptions>
         if (!IsValidPortalBaseUrl(portalBaseUrl))
         {
             return ValidateOptionsResult.Fail(
-                "WebApp:PortalTopBar:PortalBaseUrl must be an absolute URL or an app-root-relative path starting with '/'.");
+                $"{_sectionName}:PortalTopBar:PortalBaseUrl must be an absolute URL or an app-root-relative path starting with '/'.");
         }
 
         foreach (var cultureName in options.SupportedCultures ?? [])
@@ -40,7 +58,7 @@ public sealed class WebAppOptionsValidator : IValidateOptions<WebAppOptions>
                 // but invalid startup configuration must not be silently filtered by
                 // CultureSelectionService while RequestLocalization throws elsewhere.
                 return ValidateOptionsResult.Fail(
-                    $"WebApp:SupportedCultures contains invalid culture name '{cultureName}'.");
+                    $"{_sectionName}:SupportedCultures contains invalid culture name '{cultureName}'.");
             }
         }
 

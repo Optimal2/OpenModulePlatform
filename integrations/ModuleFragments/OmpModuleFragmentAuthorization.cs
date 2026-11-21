@@ -129,8 +129,9 @@ internal sealed class OmpModuleFragmentStartupFilter : IStartupFilter
 }
 
 /// <summary>
-/// The WebApp:AllowAnonymous development bypass: honored in the Development environment
-/// only, unless WebApp:AllowAnonymousOutsideDevelopment explicitly opts in.
+/// The AllowAnonymous development bypass of <see cref="WebAppOptions"/> (bound from the host's
+/// web app section, WebApp or Portal): honored in the Development environment only, unless
+/// AllowAnonymousOutsideDevelopment in the same section explicitly opts in.
 /// </summary>
 internal static class OmpModuleFragmentBypass
 {
@@ -166,7 +167,7 @@ internal sealed class FragmentAuthorizationHandler(
         }
 
         // The explicit development bypass: honored in Development only, and outside
-        // Development only when WebApp:AllowAnonymousOutsideDevelopment opts in. Elsewhere
+        // Development only when AllowAnonymousOutsideDevelopment opts in. Elsewhere
         // it is refused (never an enforced mode) and permissions are checked for real;
         // startup logged which of the two applies.
         if (OmpModuleFragmentBypass.IsHonored(options.Value, environment))

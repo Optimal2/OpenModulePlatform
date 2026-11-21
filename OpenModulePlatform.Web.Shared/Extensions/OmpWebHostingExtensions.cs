@@ -65,7 +65,7 @@ public static class OmpWebHostingExtensions
         builder.AddOmpWebLogging();
         builder.Services.AddOmpTime(builder.Configuration);
 
-        builder.Services.AddSingleton<IValidateOptions<WebAppOptions>, WebAppOptionsValidator>();
+        builder.Services.AddSingleton<IValidateOptions<WebAppOptions>>(new WebAppOptionsValidator(optionsSectionName));
 
         builder.Services.AddOptions<WebAppOptions>()
             .Bind(builder.Configuration.GetSection(optionsSectionName))
