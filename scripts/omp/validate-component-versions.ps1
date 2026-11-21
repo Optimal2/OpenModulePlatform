@@ -287,6 +287,7 @@ $moduleMappingCount = 0
 $minModuleVersionErrorCount = 0
 $cascadeCheckCount = 0
 $cascadeErrorCount = 0
+$cascadeDocumentationOnlyCount = 0
 
 foreach ($component in @($manifest.components)) {
     if ($null -eq $component) {
@@ -558,6 +559,155 @@ function Get-ConsistentSetBumpHint {
 }
 
 # ---------------------------------------------------------------------------
+# Check 7 documentation-only exemption.
+# ---------------------------------------------------------------------------
+# A Markdown file in a shared project folder is not part of any consumer's build
+# output: the SDK default globs make it a plain None item (no CopyToOutputDirectory,
+# no Pack), so a README edit changes no consumer artifact. Before this exemption a
+# README-only change in OpenModulePlatform.Worker.Abstractions demanded a bump of all
+# four consumers and blocked a documentation push.
+#
+# The exemption is derived from the MSBuild files, not assumed: it is withdrawn for
+# a shared project as soon as any tracked .csproj/.props/.targets item names a
+# Markdown file inside that project folder, or a wildcard that can match one there
+# (for example <None Update="README.md" CopyToOutputDirectory="..." /> or
+# <Content Include="**\*" />), or an Include/Update that cannot be resolved
+# statically ($(...) properties). Files below wwwroot/ never qualify, because the
+# Razor SDK ships everything there as static web assets.
+$script:msBuildItemSpecsCache = $null
+
+function Get-RepositoryMsBuildItemSpecs {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    if ($null -ne $script:msBuildItemSpecsCache) {
+        return $script:msBuildItemSpecsCache
+    }
+
+    $specs = [System.Collections.Generic.List[object]]::new()
+    $listing = Invoke-GitCapture -Arguments @('-C', $RepositoryRoot, 'ls-files', '--cached', '--others', '--exclude-standard', '--', '*.csproj', '*.props', '*.targets')
+    if ($listing.ExitCode -ne 0) {
+        # Unknown build inputs: report "unresolvable" so no file is exempted.
+        $specs.Add([pscustomobject]@{ Unresolvable = $true; Pattern = ''; Source = "git ls-files exited with $($listing.ExitCode)" })
+        $script:msBuildItemSpecsCache = $specs
+        return $specs
+    }
+
+    foreach ($relativeFile in @($listing.Lines | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -ne '' })) {
+        $fullPath = Join-Path $RepositoryRoot $relativeFile
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+            continue
+        }
+
+        $document = [System.Xml.XmlDocument]::new()
+        try {
+            $document.Load($fullPath)
+        }
+        catch {
+            $specs.Add([pscustomobject]@{ Unresolvable = $true; Pattern = ''; Source = $relativeFile })
+            continue
+        }
+
+        $fileDirectory = Split-Path -Parent ($relativeFile.Replace('\', '/'))
+        foreach ($element in @($document.SelectNodes('//*'))) {
+            foreach ($attributeName in @('Include', 'Update')) {
+                $value = $element.GetAttribute($attributeName)
+                if ([string]::IsNullOrWhiteSpace($value)) {
+                    continue
+                }
+
+                foreach ($segment in ($value -split ';')) {
+                    $item = $segment.Trim()
+                    if ($item -eq '') {
+                        continue
+                    }
+
+                    $mayMatchMarkdown = $item.EndsWith('.md', [StringComparison]::OrdinalIgnoreCase) -or $item.EndsWith('*')
+                    if (-not $mayMatchMarkdown) {
+                        continue
+                    }
+
+                    if ($item.Contains('$(') -or $item.Contains('@(') -or $item.Contains('%(')) {
+                        $specs.Add([pscustomobject]@{ Unresolvable = $true; Pattern = $item; Source = $relativeFile })
+                        continue
+                    }
+
+                    # Resolve relative to the declaring file, normalised to forward slashes.
+                    $combined = if ([string]::IsNullOrEmpty($fileDirectory)) { $item.Replace('\', '/') } else { "$fileDirectory/$($item.Replace('\', '/'))" }
+                    $resolved = [System.Collections.Generic.List[string]]::new()
+                    foreach ($part in ($combined -split '/')) {
+                        if ($part -eq '' -or $part -eq '.') { continue }
+                        if ($part -eq '..') {
+                            if ($resolved.Count -gt 0) { $resolved.RemoveAt($resolved.Count - 1) }
+                            continue
+                        }
+                        $resolved.Add($part)
+                    }
+
+                    $specs.Add([pscustomobject]@{ Unresolvable = $false; Pattern = ($resolved -join '/'); Source = $relativeFile })
+                }
+            }
+        }
+    }
+
+    $script:msBuildItemSpecsCache = $specs
+    return $specs
+}
+
+function Test-SharedProjectBuildsMarkdown {
+    <#
+    .SYNOPSIS
+    Returns the MSBuild item (file and pattern) that can pull a Markdown file from
+    the shared project folder into a build, or $null when none does.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$ProjectDirectory
+    )
+
+    $directory = $ProjectDirectory.Replace('\', '/').Trim('/')
+    foreach ($spec in @(Get-RepositoryMsBuildItemSpecs -RepositoryRoot $RepositoryRoot)) {
+        if ($spec.Unresolvable) {
+            return "$($spec.Source): $($spec.Pattern)"
+        }
+
+        # Literal prefix of the pattern up to the first wildcard segment.
+        $literalParts = [System.Collections.Generic.List[string]]::new()
+        foreach ($part in ($spec.Pattern -split '/')) {
+            if ($part.Contains('*') -or $part.Contains('?')) { break }
+            $literalParts.Add($part)
+        }
+        $literalPrefix = $literalParts -join '/'
+        $hasWildcard = $literalParts.Count -lt @($spec.Pattern -split '/').Count
+
+        $insideProject = [string]::IsNullOrEmpty($directory) -or
+            $spec.Pattern.StartsWith("$directory/", [StringComparison]::OrdinalIgnoreCase)
+        # A wildcard rooted above the project folder (for example **/*.md at the
+        # repository root) can reach into it too.
+        $coversProject = $hasWildcard -and (
+            [string]::IsNullOrEmpty($literalPrefix) -or
+            [string]::Equals($literalPrefix, $directory, [StringComparison]::OrdinalIgnoreCase) -or
+            $directory.StartsWith("$literalPrefix/", [StringComparison]::OrdinalIgnoreCase))
+
+        if ($insideProject -or $coversProject) {
+            return "$($spec.Source): $($spec.Pattern)"
+        }
+    }
+
+    return $null
+}
+
+function Test-SharedProjectFileIsDocumentationOnly {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+
+    $normalized = $RelativePath.Replace('\', '/')
+    if (-not $normalized.EndsWith('.md', [StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+
+    return -not ($normalized -match '(^|/)wwwroot/')
+}
+
+# ---------------------------------------------------------------------------
 # Check 7: Shared project cascade version bumps.
 # ---------------------------------------------------------------------------
 # Normalize to a null-free array once so every loop below (Checks 7, 11 and the
@@ -583,6 +733,21 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
         $changedFiles = Get-GitChangedFiles -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $diffPath -Errors $errors -CheckDescription "Check 7 (shared project cascade) for '$projectPath'"
         if ($null -eq $changedFiles -or [string]::IsNullOrWhiteSpace($changedFiles)) {
             continue
+        }
+
+        # Documentation-only change: no consumer artifact changes, so no bump is
+        # required (see "Check 7 documentation-only exemption" above).
+        $changedFileList = @(($changedFiles -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' } | Sort-Object -Unique)
+        $buildRelevantFiles = @($changedFileList | Where-Object { -not (Test-SharedProjectFileIsDocumentationOnly -RelativePath $_) })
+        if ($buildRelevantFiles.Count -eq 0) {
+            $markdownBuildItem = Test-SharedProjectBuildsMarkdown -RepositoryRoot $repositoryRoot -ProjectDirectory $diffPath
+            if ($null -eq $markdownBuildItem) {
+                Write-Host "Check 7: shared project '$projectPath' changed only in documentation outside the build output ($($changedFileList -join ', ')); no consumer bump required."
+                $cascadeDocumentationOnlyCount++
+                continue
+            }
+
+            Write-Host "Check 7: shared project '$projectPath' changed only in Markdown, but MSBuild item '$markdownBuildItem' can include Markdown from it in a build; treating the change as build-relevant."
         }
 
         # R8-P4-17. The cascade rule stopped at the repository boundary: this loop
@@ -2034,6 +2199,10 @@ if ($consistentSetCount -gt 0) {
 
 if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCount -gt 0)) {
     Write-Host "$checkMark $cascadeCheckCount of $sharedProjectCount changed shared project(s) passed cascade bump validation ($cascadeErrorCount error(s))"
+}
+
+if ($cascadeDocumentationOnlyCount -gt 0) {
+    Write-Host "$checkMark $cascadeDocumentationOnlyCount shared project(s) changed only in documentation outside the build output; no consumer bump required"
 }
 
 if (-not [string]::IsNullOrWhiteSpace($webSharedBinaryCheckMessage)) {

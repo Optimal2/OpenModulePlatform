@@ -65,6 +65,15 @@ own `version`, and that value is the version that belongs in
   the in-repository `consumers` a change must cascade to. Each entry also
   carries an `externalConsumers` array for components in other repositories;
   the public manifest keeps it empty and fills it from the local overlay below.
+  The cascade check (Check 7 in `scripts/omp/validate-component-versions.ps1`)
+  compares the shared project folder against the baseline commit. A change
+  limited to Markdown files (`*.md`, not below `wwwroot/`) needs no consumer
+  bump, because the SDK keeps them as plain `None` items outside the build
+  output. The validator withdraws that exemption for a project when any tracked
+  `.csproj`, `.props` or `.targets` item names a Markdown file in its folder or a
+  wildcard that can match one there, for example
+  `<None Update="README.md" CopyToOutputDirectory="PreserveNewest" />`. Any
+  other changed file, the project file included, still requires the bump.
 
 ## Local external-consumer overlay
 

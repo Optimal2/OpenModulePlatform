@@ -238,6 +238,71 @@ function Invoke-ValidatorWithOutput {
     }
 }
 
+function New-SharedProjectCascadeTestRepository {
+    <#
+    .SYNOPSIS
+    Creates a temporary repository whose manifest declares one shared project
+    (SharedLib, with Shared.cs and README.md) consumed by 'test_app', commits it,
+    and returns the validator path and that commit as the Check 7 baseline. The
+    caller then changes files under SharedLib and commits.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RootPath,
+        [Parameter(Mandatory = $false)][string]$SharedProjectItems = ''
+    )
+
+    $validatorPath = New-TemporaryTestRepository -RootPath $RootPath
+
+    $sharedDir = Join-Path $RootPath 'SharedLib'
+    $null = New-Item -ItemType Directory -Path $sharedDir -Force
+    $csprojContent = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <PropertyGroup>`r`n    <TargetFramework>net8.0</TargetFramework>`r`n  </PropertyGroup>`r`n$SharedProjectItems</Project>`r`n"
+    [System.IO.File]::WriteAllText((Join-Path $sharedDir 'SharedLib.csproj'), $csprojContent, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText((Join-Path $sharedDir 'Shared.cs'), 'class Shared { }', [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText((Join-Path $sharedDir 'README.md'), "# SharedLib`n", [System.Text.Encoding]::UTF8)
+
+    $manifestPath = Join-Path $RootPath 'omp-components.json'
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $manifest | Add-Member -NotePropertyName sharedProjects -NotePropertyValue @(
+        [pscustomobject]@{
+            projectPath = 'SharedLib/SharedLib.csproj'
+            consumers = @('test_app')
+            externalConsumers = @()
+        }
+    )
+    [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
+
+    & git -C $RootPath add -A
+    if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
+    & git -C $RootPath commit -m 'Add shared project' --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+    $baseCommit = (& git -C $RootPath rev-parse HEAD).Trim()
+
+    return [pscustomobject]@{
+        ValidatorPath = $validatorPath
+        BaseCommit = $baseCommit
+        SharedDirectory = $sharedDir
+    }
+}
+
+function Write-AndCommitTestFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$RootPath,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+        $null = New-Item -ItemType Directory -Path $directory -Force
+    }
+
+    [System.IO.File]::WriteAllText($Path, $Content, [System.Text.Encoding]::UTF8)
+    & git -C $RootPath add -A
+    if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
+    & git -C $RootPath commit -m 'Change shared project' --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+}
+
 function New-OverlayTestRepository {
     <#
     .SYNOPSIS

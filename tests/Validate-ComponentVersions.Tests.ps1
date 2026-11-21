@@ -333,6 +333,122 @@ Describe 'Local external-consumer overlay (omp-components.external.json)' {
     }
 }
 
+Describe 'Check 7: documentation-only changes in a shared project' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-ComponentVersions.TestHelpers.ps1')
+    }
+
+    BeforeEach {
+        $script:repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+    }
+
+    AfterEach {
+        Remove-TemporaryTestRepository -RootPath $script:repoRoot
+    }
+
+    It 'Requires no consumer bump when only README.md changed' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'README.md') -Content "# SharedLib`n`nMore text.`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "'SharedLib/SharedLib\.csproj' changed only in documentation outside the build output"
+        $result.Output | Should -Not -Match 'were not bumped'
+    }
+
+    It 'Requires no consumer bump for a new Markdown file in a subfolder' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'docs\NOTES.md') -Content "Notes`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match 'were not bumped'
+    }
+
+    It 'Still requires a consumer bump when a source file changed' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'Shared.cs') -Content 'class Shared { int x; }'
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match "'SharedLib/SharedLib\.csproj' changed but the following consumers were not bumped: test_app"
+    }
+
+    It 'Still requires a consumer bump when the project file changed' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        $csproj = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <PropertyGroup>`r`n    <TargetFramework>net8.0</TargetFramework>`r`n    <Nullable>enable</Nullable>`r`n  </PropertyGroup>`r`n</Project>`r`n"
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'SharedLib.csproj') -Content $csproj
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
+    It 'Still requires a consumer bump when README.md and a source file changed together' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        [System.IO.File]::WriteAllText((Join-Path $repo.SharedDirectory 'README.md'), "# Changed`n", [System.Text.Encoding]::UTF8)
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'Shared.cs') -Content 'class Shared { int y; }'
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
+    It 'Still requires a consumer bump when the project copies README.md to the output' {
+        $items = "  <ItemGroup>`r`n    <None Update=`"README.md`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n"
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot -SharedProjectItems $items
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'README.md') -Content "# Changed`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match "MSBuild item 'SharedLib/SharedLib\.csproj: SharedLib/README\.md'"
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
+    It 'Still requires a consumer bump when a wildcard item in the project can include Markdown' {
+        $items = "  <ItemGroup>`r`n    <Content Include=`"docs\**\*`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n"
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot -SharedProjectItems $items
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'docs\GUIDE.md') -Content "Guide`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
+    It 'Still requires a consumer bump when another project links Markdown from the shared folder' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        $consumerCsproj = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <ItemGroup>`r`n    <EmbeddedResource Include=`"..\SharedLib\README.md`" />`r`n  </ItemGroup>`r`n</Project>`r`n"
+        [System.IO.File]::WriteAllText((Join-Path $script:repoRoot 'TestApp\TestApp.csproj'), $consumerCsproj, [System.Text.Encoding]::UTF8)
+        & git -C $script:repoRoot add -A
+        & git -C $script:repoRoot commit -m 'Embed shared README' --quiet
+        $baseCommit = (& git -C $script:repoRoot rev-parse HEAD).Trim()
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'README.md') -Content "# Changed`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $baseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match "MSBuild item 'TestApp/TestApp\.csproj: SharedLib/README\.md'"
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
+    It 'Still requires a consumer bump for Markdown below wwwroot' {
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'wwwroot\help.md') -Content "Help`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+}
+
 Describe 'Checks 14 and 15: finding the platform checkout from a consumer (Resolve-PlatformCheckScript)' {
     # A consumer validator that cannot find the OpenModulePlatform checkout
     # used to skip Checks 14 and 15 with a warning and exit 0 -- green for a
