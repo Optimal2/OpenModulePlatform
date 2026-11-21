@@ -31,7 +31,7 @@ For repository and release work:
 ## Platform model
 
 - [TERMINOLOGY.md](TERMINOLOGY.md) — platform, deployment, and operations glossary.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — components, data model, and request flows.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the architecture description: scope, components, runtime flows, data, integrations, configuration, security, build and deployment, operations, and known limits.
 - [PROJECT_STATUS.md](PROJECT_STATUS.md) — current maturity, limitations, and priorities.
 - [AUTHENTICATION_AND_RBAC.md](AUTHENTICATION_AND_RBAC.md) — shared authentication, users, role principals, and RBAC.
 - [VERSIONING_AND_IDENTITIES.md](VERSIONING_AND_IDENTITIES.md) — artifact versioning and stable identity policy.

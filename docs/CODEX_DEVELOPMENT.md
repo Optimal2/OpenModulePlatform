@@ -16,7 +16,7 @@ Use these files as the main map:
 - `README.md` - human project overview and quick start.
 - `docs/README.md` - documentation index and recommended reading order.
 - `docs/TERMINOLOGY.md` - platform, deployment, and operations glossary.
-- `docs/ARCHITECTURE.md` - platform model and request flows.
+- `docs/ARCHITECTURE.md` - architecture description: components, runtime flows, data, security, deployment and operations.
 - `docs/AUTHENTICATION_AND_RBAC.md` - shared OMP authentication, users, role principals, and RBAC.
 - `docs/ADMIN_CONFIGURATION.md` - manual Portal administration guidance.
 - `docs/VERSIONING_AND_IDENTITIES.md` - artifact versioning and stable identity policy.
