@@ -601,7 +601,8 @@ The exact set of runtime configuration file names is defined canonically by
   `payload/artifact.zip`. A reused pre-built artifact is validated before it
   is bundled, so a stale artifact that predates the strip fails loudly instead
   of being shipped. Run `scripts/omp/test-runtime-configuration-guard.ps1` to
-  verify the build-time mirror stays in parity with the canonical C# list.
+  verify the build-time mirror stays in parity with the canonical C# list;
+  the Pester gate runs it through `tests/RuntimeConfigurationGuard.Tests.ps1`.
 - At installer GUI export time the Bootstrapper universal package builder
   validates every selected artifact package against the same canonical C# rule
   (including the nested `payload/artifact.zip`) and fails the export instead of

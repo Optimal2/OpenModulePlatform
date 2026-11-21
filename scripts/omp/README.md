@@ -224,7 +224,8 @@ build fails when a runtime configuration file is found. A reused pre-built
 artifact that predates the strip therefore fails loudly instead of being
 bundled. Run `test-runtime-configuration-guard.ps1` to verify the mirror stays
 in parity with the C# list and that the fail-fast guard and exporter wiring
-work on both Windows PowerShell 5.1 and PowerShell 7+.
+work on both Windows PowerShell 5.1 and PowerShell 7+. The Pester gate
+(`run-script-tests.ps1`) runs it through `tests/RuntimeConfigurationGuard.Tests.ps1`.
 
 Use this script when a module repository needs to publish objects for Portal,
 HostAgent import folders, or installer package libraries. Runtime or
