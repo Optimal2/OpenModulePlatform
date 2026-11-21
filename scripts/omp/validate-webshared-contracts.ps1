@@ -8,7 +8,7 @@ Reads omp-components.json to discover the sharedProjects consumers of
 OpenModulePlatform.Web.Shared and checks that each consumer:
 
 * Registers Web.Shared integration calls in Program.cs or Startup.cs
-  (AddOmpWebDefaults / AddOmpAuthDefaults and UseOmpWebDefaults).
+  (AddOmpWebDefaults and UseOmpWebDefaults).
 * Imports OpenModulePlatform.Web.Shared namespaces in _ViewImports.cshtml
   or _Imports.razor.
 * References the shared OMP topbar (PortalTopBar) in its layout file.
@@ -227,8 +227,7 @@ foreach ($sharedProject in $sharedProjects) {
         $startupFile = Find-StartupFile -ProjectDir $projectDir
         $hasAddDefaults = $false
         if ($null -ne $startupFile) {
-            $hasAddDefaults = (Test-FileContainsPattern -Path $startupFile -Pattern 'AddOmpWebDefaults' -SimpleMatch) -or
-                (Test-FileContainsPattern -Path $startupFile -Pattern 'AddOmpAuthDefaults' -SimpleMatch)
+            $hasAddDefaults = Test-FileContainsPattern -Path $startupFile -Pattern 'AddOmpWebDefaults' -SimpleMatch
         }
 
         if (-not $hasAddDefaults) {
@@ -236,7 +235,7 @@ foreach ($sharedProject in $sharedProjects) {
                 [void]$warnings.Add('No Program.cs or Startup.cs found.')
             }
             else {
-                [void]$warnings.Add('Missing AddOmpWebDefaults/AddOmpAuthDefaults registration.')
+                [void]$warnings.Add('Missing AddOmpWebDefaults registration.')
             }
         }
 
