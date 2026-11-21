@@ -422,6 +422,28 @@ Describe 'Check 7: documentation-only changes in a shared project' {
         $result.Output | Should -Match 'consumers were not bumped: test_app'
     }
 
+    It 'Still requires a consumer bump when an item path cannot be resolved statically' {
+        $items = "  <ItemGroup>`r`n    <None Include=`"`$(SharedDocumentation)`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n"
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot -SharedProjectItems $items
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'README.md') -Content "# Changed`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
+    It 'Still requires a consumer bump when a single-character wildcard can include Markdown' {
+        $items = "  <ItemGroup>`r`n    <None Update=`"README.m?`" CopyToOutputDirectory=`"PreserveNewest`" />`r`n  </ItemGroup>`r`n"
+        $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot -SharedProjectItems $items
+        Write-AndCommitTestFile -RootPath $script:repoRoot -Path (Join-Path $repo.SharedDirectory 'README.md') -Content "# Changed`n"
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $repo.ValidatorPath -BaseCommit $repo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'consumers were not bumped: test_app'
+    }
+
     It 'Still requires a consumer bump when another project links Markdown from the shared folder' {
         $repo = New-SharedProjectCascadeTestRepository -RootPath $script:repoRoot
         $consumerCsproj = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <ItemGroup>`r`n    <EmbeddedResource Include=`"..\SharedLib\README.md`" />`r`n  </ItemGroup>`r`n</Project>`r`n"

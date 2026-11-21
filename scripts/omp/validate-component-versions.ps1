@@ -621,13 +621,19 @@ function Get-RepositoryMsBuildItemSpecs {
                         continue
                     }
 
-                    $mayMatchMarkdown = $item.EndsWith('.md', [StringComparison]::OrdinalIgnoreCase) -or $item.EndsWith('*')
-                    if (-not $mayMatchMarkdown) {
+                    $mayMatchMarkdown = $item.EndsWith('.md', [StringComparison]::OrdinalIgnoreCase) -or $item.EndsWith('*') -or $item.Contains('?')
+                    $isUnresolvable = $item.Contains('$(') -or $item.Contains('@(') -or $item.Contains('%(')
+                    if ($isUnresolvable -and ($mayMatchMarkdown -or $element.LocalName -ne 'ProjectReference')) {
+                        # A dynamic content item can resolve to Markdown even when its
+                        # unevaluated text has no Markdown suffix. ProjectReference is
+                        # the exception: repository targets routinely root those paths
+                        # with MSBuildThisFileDirectory, and a non-Markdown project
+                        # reference cannot pull documentation into a consumer artifact.
+                        $specs.Add([pscustomobject]@{ Unresolvable = $true; Pattern = $item; Source = $relativeFile })
                         continue
                     }
 
-                    if ($item.Contains('$(') -or $item.Contains('@(') -or $item.Contains('%(')) {
-                        $specs.Add([pscustomobject]@{ Unresolvable = $true; Pattern = $item; Source = $relativeFile })
+                    if (-not $mayMatchMarkdown) {
                         continue
                     }
 
