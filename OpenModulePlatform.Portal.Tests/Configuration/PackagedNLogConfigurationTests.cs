@@ -22,6 +22,8 @@ public sealed class PackagedNLogConfigurationTests
     [InlineData("OpenModulePlatform.Auth", "Packaging/appsettings.json", false)]
     [InlineData("OpenModulePlatform.Web.ContentWebAppModule", "appsettings.json", true)]
     [InlineData("OpenModulePlatform.Web.ContentWebAppModule", "Packaging/appsettings.json", true)]
+    [InlineData("OpenModulePlatform.Web.ContextGuardModule", "appsettings.json", true)]
+    [InlineData("OpenModulePlatform.Web.ContextGuardModule", "Packaging/appsettings.json", true)]
     [InlineData("OpenModulePlatform.Web.iFrameWebAppModule", "appsettings.json", true)]
     public void NLogSection_ParsesWithFileAndConsoleTargets(string project, string relativePath, bool rendersCorrelationId)
     {
@@ -36,6 +38,9 @@ public sealed class PackagedNLogConfigurationTests
         var fileTarget = Assert.IsType<NLog.Targets.FileTarget>(nlogConfiguration.FindTargetByName("logfile"));
         Assert.NotNull(nlogConfiguration.FindTargetByName("console"));
         Assert.NotEmpty(nlogConfiguration.LoggingRules);
+
+        // Without maxArchiveDays a day file is never removed and the log folder grows forever.
+        Assert.Equal(14, fileTarget.MaxArchiveDays);
 
         var layout = fileTarget.Layout.ToString() ?? string.Empty;
         Assert.Equal(rendersCorrelationId, layout.Contains("${scopeproperty:item=CorrelationId}", StringComparison.Ordinal));

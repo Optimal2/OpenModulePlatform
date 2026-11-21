@@ -79,6 +79,9 @@ By default logs are written to:
 
 The log directory is ignored by Git through `.gitignore`.
 
+Every platform file target sets `maxArchiveDays` to 14, so NLog removes a
+process's own day files older than 14 days when it rolls over to a new day.
+
 ### Packaged web apps
 
 The checked-in `appsettings.json` of a packaged web app never reaches a host: the
@@ -90,8 +93,9 @@ components therefore supply an artifact configuration file from
 `Packaging/appsettings.json`; components without such a row need another explicit
 runtime configuration source if file logging is required.
 `PackagedNLogConfigurationTests` in the Portal test project parses the Portal,
-Auth and Content packaged and checked-in sections, plus the iFrame checked-in
-section, the way NLog does at startup. Web apps that go through
+Auth, Content and Context Guard packaged and checked-in sections, plus the iFrame
+checked-in section, the way NLog does at startup, and checks that each file
+target keeps 14 days. Web apps that go through
 `UseOmpWebDefaults` render the request correlation id with
 `${scopeproperty:item=CorrelationId}` in their layouts (see
 `docs/conventions/logging.md`); the Auth app has its own pipeline without that
