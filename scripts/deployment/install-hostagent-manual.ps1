@@ -186,8 +186,9 @@ function Get-ExistingHostAgentServices {
     $trimmedPrefix = $Prefix.Trim().TrimEnd('.')
     Get-CimInstance Win32_Service |
         Where-Object {
-            $_.Name -eq $trimmedPrefix -or
-            $_.Name.StartsWith($trimmedPrefix + '.', [StringComparison]::OrdinalIgnoreCase)
+            $_.Name -ne 'OMP.HostAgent.Sentinel' -and (
+                $_.Name -eq $trimmedPrefix -or
+                $_.Name.StartsWith($trimmedPrefix + '.', [StringComparison]::OrdinalIgnoreCase))
         } |
         Sort-Object @{ Expression = { if ($_.State -eq 'Running') { 0 } else { 1 } } }, Name
 }
@@ -200,7 +201,12 @@ function Resolve-ReferenceServiceName {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($ExplicitName)) {
-        return $ExplicitName.Trim()
+        $referenceName = $ExplicitName.Trim()
+        if ($referenceName -eq 'OMP.HostAgent.Sentinel') {
+            throw 'OMP.HostAgent.Sentinel cannot be used as the HostAgent account reference service.'
+        }
+
+        return $referenceName
     }
 
     $service = Get-ExistingHostAgentServices -Prefix $Prefix |
@@ -665,7 +671,7 @@ try {
     Update-HostAgentSettings `
         -SourceSettingsPath $settingsSourceFile `
         -TargetSettingsPath $targetSettingsPath `
-        -TargetInstallPath $stagingPath `
+        -TargetInstallPath $targetInstallPath `
         -TargetServiceName $targetServiceName `
         -TargetVersion $Version `
         -Prefix $servicePrefix `

@@ -136,9 +136,11 @@ internal static class ServiceAppDeploymentNaming
                 $"The old runtime name '{oldServiceName}' matches the HostAgent service name.");
         }
 
-        // WorkerManager does not live in HostAgentSettings, but the guardrail needs a known
-        // constant name. The default OMP WorkerManager service name is OMP.WorkerManager.
-        if (string.Equals(oldServiceName, "OMP.WorkerManager", StringComparison.OrdinalIgnoreCase))
+        // WorkerManager does not live in HostAgentSettings, so use the same known-prefix
+        // guard as the disabled-instance removal path.
+        if (HostAgentJobProcessor.IsServiceNameWithKnownPrefix(
+            oldServiceName,
+            HostAgentJobProcessor.KnownWorkerManagerServiceNamePrefixes))
         {
             return RenameCleanupEvaluation.SkipEverything(
                 oldServiceName,

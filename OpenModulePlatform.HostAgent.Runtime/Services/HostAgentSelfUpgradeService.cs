@@ -489,11 +489,9 @@ public sealed class HostAgentSelfUpgradeService
             return requestedRoot;
         }
 
-        var configuredRoot = new[] { localRoot, requestedRoot }
-            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
-        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        if (!string.IsNullOrWhiteSpace(localRoot))
         {
-            return configuredRoot;
+            return localRoot;
         }
 
         // (R5-D10) No InstallRoot/ServicesRoot is configured, so the install root

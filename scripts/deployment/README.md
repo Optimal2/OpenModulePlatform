@@ -20,7 +20,9 @@ The supported deployment flow is the HostAgent-first installer:
   package, or universal package when automatic HostAgent self-upgrade cannot be
   trusted. It copies existing production settings and credential-store data,
   installs the service in normal runtime mode, and disables self-upgrade by
-  default.
+  default. Its service enumeration and account-reference selection exclude the
+  independent `OMP.HostAgent.Sentinel` watchdog; disabling other HostAgent
+  services leaves Sentinel running and enabled.
 - `hostagent-first.config.sample.psd1` is the neutral package-build config.
   Copy it to `hostagent-first.local.psd1` for local source-package experiments
   that should not be committed.

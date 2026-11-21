@@ -424,14 +424,16 @@ public sealed class ServiceAppDeploymentNamingTests
         Assert.Contains("HostAgent service name", result.ServiceSkipReason);
     }
 
-    [Fact]
-    public void EvaluateRenameCleanup_Skips_WhenOldNameMatchesWorkerManagerService()
+    [Theory]
+    [InlineData("OMP.WorkerManager")]
+    [InlineData("OpenModulePlatform.WorkerManager")]
+    public void EvaluateRenameCleanup_Skips_WhenOldNameMatchesWorkerManagerService(string workerManagerServiceName)
     {
         var settings = CreateSettings();
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
             installationName: "OMP.xSample2.Backend",
-            deployedRuntimeName: "OMP.WorkerManager");
+            deployedRuntimeName: workerManagerServiceName);
         var resolved = new Dictionary<Guid, string>
         {
             [deployment.AppInstanceId] = "OMP.xSample2.Backend"
@@ -448,7 +450,7 @@ public sealed class ServiceAppDeploymentNamingTests
 
         Assert.False(result.ShouldRemoveOldService);
         Assert.False(result.ShouldDeleteOldDirectory);
-        Assert.Equal("OMP.WorkerManager", result.OldServiceName);
+        Assert.Equal(workerManagerServiceName, result.OldServiceName);
         Assert.NotNull(result.ServiceSkipReason);
         Assert.Contains("WorkerManager service name", result.ServiceSkipReason);
     }
