@@ -49,4 +49,39 @@ Describe 'Universal exporters: dashboard-widget fallback version' -ForEach @(
     It '<ScriptName> ranks an unparsable text below every version' {
         Get-WidgetFallbackVersion -WidgetVersions @('not-a-version', '0.0.1') | Should -Be '0.0.1'
     }
+
+    # The cases below are where a plain sort on (numeric part, text) went wrong, and
+    # where this choice deliberately differs from ArtifactVersionComparer.
+
+    It '<ScriptName> ranks an unparsable text below version 0.0 too, whatever the input order' {
+        Get-WidgetFallbackVersion -WidgetVersions @('not-a-version', '0.0') | Should -Be '0.0'
+        Get-WidgetFallbackVersion -WidgetVersions @('0.0', 'not-a-version') | Should -Be '0.0'
+    }
+
+    It '<ScriptName> prefers the release over a suffixed version with the same numbers: <Suffixed>' -ForEach @(
+        @{ Suffixed = '1.0.0-beta' }
+        @{ Suffixed = '1.0.0+build.7' }
+    ) {
+        Get-WidgetFallbackVersion -WidgetVersions @('1.0.0', $Suffixed) | Should -Be '1.0.0'
+        Get-WidgetFallbackVersion -WidgetVersions @($Suffixed, '1.0.0') | Should -Be '1.0.0'
+    }
+
+    It '<ScriptName> still ranks a higher suffixed version above a lower release' {
+        Get-WidgetFallbackVersion -WidgetVersions @('1.0.0', '1.0.1-beta') | Should -Be '1.0.1-beta'
+    }
+
+    It '<ScriptName> chooses between equal numbers with different suffixes the same way in either order' {
+        Get-WidgetFallbackVersion -WidgetVersions @('1.0.0-alpha', '1.0.0-beta') | Should -Be '1.0.0-beta'
+        Get-WidgetFallbackVersion -WidgetVersions @('1.0.0-beta', '1.0.0-alpha') | Should -Be '1.0.0-beta'
+    }
+
+    It '<ScriptName> chooses between two unparsable texts by ordinal order, not by culture' {
+        # A culture-aware sort puts 'a' before 'B'; ordinal order puts 'B' (0x42) first.
+        Get-WidgetFallbackVersion -WidgetVersions @('a-text', 'B-text') | Should -Be 'a-text'
+        Get-WidgetFallbackVersion -WidgetVersions @('B-text', 'a-text') | Should -Be 'a-text'
+    }
+
+    It '<ScriptName> returns nothing for a package whose widgets carry no version' {
+        Get-WidgetFallbackVersion -WidgetVersions @('   ') | Should -BeNullOrEmpty
+    }
 }

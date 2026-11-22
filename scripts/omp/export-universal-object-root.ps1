@@ -191,15 +191,43 @@ function Get-PortableObjectVersion {
                 }
             )
 
-            # Order by version, not by text: a string sort ranks 0.9.0 above
-            # 0.10.0. A suffix is ignored and an unparsable text ranks lowest,
-            # as in ArtifactVersionComparer.
-            $versionKey = {
+            # Pick ONE version to stand for the package, by version and not by
+            # text: a string sort ranks 0.9.0 above 0.10.0. The numeric part is
+            # read as ArtifactVersionComparer reads it (a '-' or '+' suffix is
+            # left out), but picking a winner needs rules that comparer does
+            # not have, and deliberately differs from it in two places:
+            #  - a text that is not a version never wins over one that is
+            #    (the comparer falls back to comparing the texts, which ranks
+            #    'not-a-version' above '0.0.1');
+            #  - equal numeric parts are not a tie: the version without a
+            #    suffix wins over 1.0.0-beta, and between two suffixed ones
+            #    the ordinal order of the text decides, so the result does
+            #    not depend on input order or on the culture.
+            $latestWidgetVersion = ''
+            $latestKey = $null
+            foreach ($candidate in $widgetVersions) {
+                $core = ($candidate -split '[-+]', 2)[0]
                 $parsed = $null
-                if ([Version]::TryParse(($_ -split '[-+]', 2)[0], [ref]$parsed)) { $parsed } else { [Version]'0.0' }
+                $isVersion = [Version]::TryParse($core, [ref]$parsed)
+                $key = [pscustomobject]@{
+                    IsVersion = $isVersion
+                    Version = if ($isVersion) { $parsed } else { [Version]'0.0' }
+                    HasNoSuffix = ($candidate -ceq $core)
+                    Text = $candidate
+                }
+                $wins = $null -eq $latestKey
+                if (-not $wins) {
+                    if ($key.IsVersion -ne $latestKey.IsVersion) { $wins = $key.IsVersion }
+                    elseif ($key.Version -ne $latestKey.Version) { $wins = $key.Version -gt $latestKey.Version }
+                    elseif ($key.HasNoSuffix -ne $latestKey.HasNoSuffix) { $wins = $key.HasNoSuffix }
+                    else { $wins = [string]::CompareOrdinal($key.Text, $latestKey.Text) -gt 0 }
+                }
+                if ($wins) {
+                    $latestKey = $key
+                    $latestWidgetVersion = $candidate
+                }
             }
-            $latestWidgetVersion = @($widgetVersions | Sort-Object -Descending -Property $versionKey, { $_ } | Select-Object -First 1)
-            return [string]($latestWidgetVersion | Select-Object -First 1)
+            return [string]$latestWidgetVersion
         }
         catch {
             return ''
