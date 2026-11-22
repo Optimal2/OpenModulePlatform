@@ -8,6 +8,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Module validator cache identity.** Module repositories can call
+  `scripts/omp/get-module-sql-validator-identity.ps1` to bind a cached green
+  local-CI run to the resolved platform checkout, its HEAD and the actual
+  validator working-tree content, including uncommitted guard changes.
+
 - **Context Guard module v1.** `OpenModulePlatform.Web.ContextGuardModule`
   accepts a one-time hand-off from a calling system, redeems it only after OMP
   authentication, and maintains one live target-application context per

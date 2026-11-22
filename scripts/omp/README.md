@@ -108,6 +108,24 @@ If you did not change module-definition source SQL, validation alone is enough:
 .\scripts\omp\validate-module-definitions.ps1
 ```
 
+A module repository that caches a green local-CI run must key that cache by the
+validators that actually ran, not only by a neighbouring checkout's HEAD. Call
+`get-module-sql-validator-identity.ps1` from the same resolved platform checkout
+as `validate-module-definitions.ps1` and `Test-ModuleSqlGuards.ps1`:
+
+```powershell
+$validatorIdentity = & (Join-Path $PlatformRoot 'scripts\omp\get-module-sql-validator-identity.ps1') | ConvertFrom-Json
+# Include this value in the local-CI pass-stamp key:
+$validatorIdentity.cacheKey
+```
+
+The JSON object contains `platformRoot`, `headCommit`, `contentSha256` and
+`cacheKey`. The content hash covers both validator scripts and every source file
+under `tools/ModuleSqlGuard/`, including uncommitted and untracked changes;
+generated `bin/` and `obj/` content is excluded. `cacheKey` also binds the
+resolved checkout and HEAD. A missing input or unreadable git answer is an
+error, never an empty identity.
+
 Use `validate-component-versions.ps1` in CI or before packaging to catch
 manifest drift that would produce mismatched or unbuildable artifacts. It
 validates the `omp-components.json` manifest only; it does **not** enforce

@@ -366,11 +366,12 @@ try {
     if ($failures.Count -eq 0) {
         Write-Host "LOCAL CI PASSED"
 
-        # Known limitation (deliberate, do not "fix"): the consumer stamp keys
-        # carry a neighbour-HEAD leg with a documented caveat (a stamp can
-        # survive the neighbour's tree going dirty, losing the validator's
-        # shared-project warning). OMP IS the neighbour, so that leg drops out
-        # of this key and the caveat cannot occur here.
+        # Consumer stamps must include get-module-sql-validator-identity.ps1's
+        # cacheKey from the checkout whose validators actually ran: a neighbour
+        # HEAD alone misses uncommitted guard edits and an explicitly selected
+        # checkout. OMP IS the neighbour here, its own HEAD tree is already the
+        # first key leg, and a dirty tree never writes a stamp, so this gate's
+        # existing key does not have that consumer-side gap.
         # Gate cache: stamp this green run so the pre-push hook can skip an
         # identical rerun. Key: (HEAD tree, resolved baseline). Never for
         # -SkipTests ("never as the gate"), never from a dirty tree, and never
