@@ -432,6 +432,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Concurrent module SQL guards no longer share build output.**
+  `Test-ModuleSqlGuards.ps1` builds with a per-consumer absolute
+  `OmpIsolatedBuildRoot`, keeping intermediate and output folders outside the
+  shared platform checkout. `-NoBuild` continues to use the solution-built DLL.
+
+
 - HostAgent self-upgrade no longer trusts a database-selected install root when
   no local root is configured, all known WorkerManager names are protected during
   rename cleanup, and manual HostAgent installation preserves Sentinel and writes

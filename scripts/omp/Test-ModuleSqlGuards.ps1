@@ -10,9 +10,11 @@ Unknown encodings, missing payloads, parse errors and blocked writes fail the co
 .PARAMETER Path
 SQL files or module-definition JSON files to validate.
 .PARAMETER RepositoryRoot
-Repository containing omp-components.json. Defaults to this repository.
+Repository containing omp-components.json. Defaults to this repository. A normal
+build uses this root to give each calling repository its own isolated tool output.
 .PARAMETER NoBuild
-Use the Release validator already built by the solution build.
+Use the Release validator already built by the solution build in this checkout.
+If that DLL does not exist, reuse the caller's isolated DLL from an earlier call.
 .PARAMETER SelfTest
 Run ownership regression probes against temporary SQL files before validating inputs.
 #>
@@ -29,10 +31,42 @@ $ErrorActionPreference = 'Stop'
 $ompRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $project = Join-Path $ompRoot 'tools\ModuleSqlGuard\ModuleSqlGuard.csproj'
 $validator = Join-Path $ompRoot 'tools\ModuleSqlGuard\bin\Release\net10.0\ModuleSqlGuard.dll'
+$validationRepositoryRoot = $ompRoot
+if (-not [string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    $validationRepositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\', '/')
+}
+
+# Every consumer gate uses the platform sources in this checkout, but their
+# obj/bin output must not be shared. OmpIsolatedBuildRoot enforces an absolute
+# root outside the platform checkout and redirects every referenced project. The
+# caller-root hash makes concurrent consumer gates disjoint without putting
+# generated files in either source tree. A single consumer reuses its own current
+# build; builds within one repository remain serial.
+$callerRootBytes = [System.Text.Encoding]::UTF8.GetBytes($validationRepositoryRoot.ToLowerInvariant())
+$sha = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $callerKey = ([System.BitConverter]::ToString($sha.ComputeHash($callerRootBytes))).Replace('-', '').ToLowerInvariant()
+}
+finally {
+    $sha.Dispose()
+}
+$buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-module-sql-guard\' + $callerKey)
+$isolatedValidator = Join-Path $buildRoot 'bin\ModuleSqlGuard\Release\net10.0\ModuleSqlGuard.dll'
 
 if (-not $NoBuild) {
-    & dotnet build $project --configuration Release --nologo -v q
+    Write-Verbose "Module SQL validator isolated build root: $buildRoot"
+    $isolationProperty = '-p:OmpIsolatedBuildRoot=' + $buildRoot
+    & dotnet build $project --configuration Release --nologo -v q $isolationProperty
     if ($LASTEXITCODE -ne 0) { throw "Module SQL validator build failed ($LASTEXITCODE)." }
+    $validator = $isolatedValidator
+}
+elseif (-not (Test-Path -LiteralPath $validator -PathType Leaf) -and
+    (Test-Path -LiteralPath $isolatedValidator -PathType Leaf)) {
+    # Packaging builds once above, then validates individual generated SQL files
+    # with -NoBuild. A clean checkout has no in-tree DLL, so reuse the isolated
+    # DLL built by that first call. An existing solution-built DLL retains the
+    # original -NoBuild precedence.
+    $validator = $isolatedValidator
 }
 if (-not (Test-Path -LiteralPath $validator -PathType Leaf)) { throw 'Module SQL validator is missing. Build it first.' }
 
@@ -252,8 +286,7 @@ if ($Path.Count -gt 0) {
     $arguments = $Path
 }
 else {
-    if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) { $RepositoryRoot = $ompRoot }
-    $arguments = @('--repository', $RepositoryRoot)
+    $arguments = @('--repository', $validationRepositoryRoot)
 }
 
 & dotnet $validator @arguments

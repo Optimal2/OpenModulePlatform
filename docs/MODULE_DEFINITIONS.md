@@ -188,6 +188,12 @@ in `omp-components.json`; `-Path` accepts SQL or module-definition JSON.
 The SQL source header is normalized exactly as during embedding, while source
 line numbers are preserved. Analysis needs no database, VPN or network; normal
 SDK/NuGet restoration is needed when building the tool on a fresh machine.
+Normal builds pass an absolute `OmpIsolatedBuildRoot` derived from the calling
+repository, below the temporary root, so concurrent consumer gates never share
+`obj/` or `bin/` in the platform checkout. `-NoBuild` prefers the Release DLL
+already built in the checkout by the solution build, and otherwise reuses the
+caller's isolated DLL from an earlier guard call (the package-export path relies
+on this reuse in a clean checkout).
 
 This is a mandatory gate beside module-definition and component-version
 validation in `scripts/local-ci.ps1`, the pre-push hook and GitHub CI.

@@ -776,7 +776,7 @@ try {
     # artifact payload may contain runtime configuration files.
     foreach ($file in $files) {
         if ($file.Kind.Equals('module-definition', [StringComparison]::OrdinalIgnoreCase)) {
-            & (Join-Path $scriptDirectory 'Test-ModuleSqlGuards.ps1') -NoBuild -Path $file.FullName
+            & (Join-Path $scriptDirectory 'Test-ModuleSqlGuards.ps1') -NoBuild -RepositoryRoot $repositoryRoot -Path $file.FullName
         }
         if ($file.Kind.Equals('artifact-package', [StringComparison]::OrdinalIgnoreCase)) {
             Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
