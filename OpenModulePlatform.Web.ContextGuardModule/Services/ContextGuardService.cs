@@ -70,14 +70,14 @@ public sealed class ContextGuardService(
         {
             logger.LogWarning(
                 "Context Guard rejected hand-off because the pending store is full. ProfileKey={ProfileKey}, DroppedFieldCount={DroppedFieldCount}",
-                profileKey,
+                GetLogSafeProfileKey(profileKey),
                 droppedFieldCount);
         }
         else
         {
             logger.LogInformation(
                 "Context Guard accepted hand-off. ProfileKey={ProfileKey}, FieldCount={FieldCount}, DroppedFieldCount={DroppedFieldCount}",
-                profileKey,
+                GetLogSafeProfileKey(profileKey),
                 allowedFields.Count,
                 droppedFieldCount);
         }
@@ -144,7 +144,7 @@ public sealed class ContextGuardService(
         // The presented and configured secrets are never logged; only the outcome is.
         logger.LogWarning(
             "Context Guard refused an end call with an invalid secret. ProfileKey={ProfileKey}",
-            profileKey);
+            GetLogSafeProfileKey(profileKey));
     }
 
     public int End(string profileKey, string correlationValue)
@@ -154,7 +154,7 @@ public sealed class ContextGuardService(
         var contextCount = contextStore.EndByCorrelation(profileKey, hash);
         logger.LogInformation(
             "Context Guard processed end call. ProfileKey={ProfileKey}, PendingEndedCount={PendingEndedCount}, ContextEndedCount={ContextEndedCount}",
-            profileKey,
+            GetLogSafeProfileKey(profileKey),
             pendingCount,
             contextCount);
         return pendingCount + contextCount;
@@ -168,9 +168,7 @@ public sealed class ContextGuardService(
         var found = options.CurrentValue.Profiles.TryGetValue(profileKey, out var configured);
         if (!found)
         {
-            var logProfileKey = ContextGuardOptionsValidator.IsValidProfileKey(profileKey)
-                ? profileKey
-                : "<invalid>";
+            var logProfileKey = GetLogSafeProfileKey(profileKey);
             logger.LogWarning(
                 "Context Guard rejected an unknown profile. ProfileKey={ProfileKey}, ProfileKeyLength={ProfileKeyLength}",
                 logProfileKey,
@@ -188,6 +186,14 @@ public sealed class ContextGuardService(
             field.Name,
             profile.CorrelationFieldName,
             StringComparison.Ordinal))?.Value ?? string.Empty;
+
+    private static string GetLogSafeProfileKey(string profileKey)
+    {
+        // Keep explicit replacements for CodeQL even though validation already rejects line breaks.
+        return ContextGuardOptionsValidator.IsValidProfileKey(profileKey)
+            ? profileKey.Replace("\r", string.Empty).Replace("\n", string.Empty)
+            : "<invalid>";
+    }
 
     private static string HashCorrelation(string profileKey, string correlationValue)
         => Convert.ToHexString(SHA256.HashData(

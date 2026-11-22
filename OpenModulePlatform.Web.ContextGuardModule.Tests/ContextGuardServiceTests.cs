@@ -95,6 +95,61 @@ public sealed class ContextGuardServiceTests
         Assert.Contains($"ProfileKeyLength={unsafeKey.Length}", message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(ContextGuardLogPath.ReceiveAccepted)]
+    [InlineData(ContextGuardLogPath.ReceiveCapacityExceeded)]
+    [InlineData(ContextGuardLogPath.InvalidEndSecret)]
+    [InlineData(ContextGuardLogPath.End)]
+    [InlineData(ContextGuardLogPath.UnknownProfile)]
+    public void CallerControlledProfileKey_WithForgedLineBreaks_IsSafeInEveryLogPath(ContextGuardLogPath logPath)
+    {
+        const string forgedLine = "FORGED LOG ENTRY";
+        var unsafeKey = "profile\r\n" + forgedLine;
+        var logs = new CapturedLogger();
+        var options = new ContextGuardOptions();
+        if (logPath is ContextGuardLogPath.ReceiveAccepted or ContextGuardLogPath.ReceiveCapacityExceeded)
+        {
+            options.Profiles.Add(unsafeKey, EndProfile());
+            options.MaxPendingHandoffs = logPath == ContextGuardLogPath.ReceiveCapacityExceeded ? 0 : 1;
+        }
+
+        var service = new ContextGuardService(
+            new InMemoryHandoffStore(TimeProvider.System),
+            new InMemoryContextStore(TimeProvider.System),
+            new FakeOptionsMonitor(options),
+            logs);
+
+        switch (logPath)
+        {
+            case ContextGuardLogPath.ReceiveAccepted:
+                Assert.Equal(HandoffCreateStatus.Created, service.Receive(unsafeKey, [], 0).Status);
+                break;
+            case ContextGuardLogPath.ReceiveCapacityExceeded:
+                Assert.Equal(HandoffCreateStatus.CapacityExceeded, service.Receive(unsafeKey, [], 0).Status);
+                break;
+            case ContextGuardLogPath.InvalidEndSecret:
+                service.LogInvalidEndSecret(unsafeKey);
+                break;
+            case ContextGuardLogPath.End:
+                service.End(unsafeKey, "correlation-value");
+                break;
+            case ContextGuardLogPath.UnknownProfile:
+                Assert.False(service.TryGetProfile(unsafeKey, out _));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(logPath));
+        }
+
+        var message = Assert.Single(logs.Messages);
+        Assert.DoesNotContain(unsafeKey, message, StringComparison.Ordinal);
+        Assert.DoesNotContain(forgedLine, message, StringComparison.Ordinal);
+        Assert.Contains("ProfileKey=<invalid>", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(logs.Messages, entry => entry.Contains('\r') || entry.Contains('\n'));
+        Assert.DoesNotContain(
+            logs.Arguments.SelectMany(arguments => arguments).Select(argument => argument.Value).OfType<string>(),
+            value => value.Contains('\r') || value.Contains('\n'));
+    }
+
     [Fact]
     public void CheckEndAllowed_WithDisabledEndpoint_RefusesWithoutReadingSecret()
     {
@@ -166,6 +221,15 @@ public sealed class ContextGuardServiceTests
         Assert.DoesNotContain(logs.Messages, message => message.Contains(presentedSecret, StringComparison.Ordinal));
     }
 
+    public enum ContextGuardLogPath
+    {
+        ReceiveAccepted,
+        ReceiveCapacityExceeded,
+        InvalidEndSecret,
+        End,
+        UnknownProfile
+    }
+
     private static ContextGuardProfileOptions EndProfile(bool endEnabled = true) => new()
     {
         TargetUrl = "https://target.example/result",
@@ -185,9 +249,18 @@ public sealed class ContextGuardServiceTests
     private sealed class CapturedLogger : ILogger<ContextGuardService>
     {
         public List<string> Messages { get; } = [];
+        public List<IReadOnlyList<KeyValuePair<string, object?>>> Arguments { get; } = [];
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state is IEnumerable<KeyValuePair<string, object?>> values)
+            {
+                Arguments.Add(values.ToArray());
+            }
+
+            Messages.Add(formatter(state, exception));
+        }
     }
 }
