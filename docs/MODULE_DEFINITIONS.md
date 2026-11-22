@@ -190,10 +190,23 @@ line numbers are preserved. Analysis needs no database, VPN or network; normal
 SDK/NuGet restoration is needed when building the tool on a fresh machine.
 Normal builds pass an absolute `OmpIsolatedBuildRoot` derived from the calling
 repository, below the temporary root, so concurrent consumer gates never share
-`obj/` or `bin/` in the platform checkout. `-NoBuild` prefers the Release DLL
-already built in the checkout by the solution build, and otherwise reuses the
-caller's isolated DLL from an earlier guard call (the package-export path relies
-on this reuse in a clean checkout).
+`obj/` or `bin/` in the platform checkout. `-NoBuild` uses the isolated DLL the
+same caller built in an earlier guard call (the package export builds once and
+then validates each generated definition this way), and falls back to the
+Release DLL a solution build left in the checkout only when the caller has no
+isolated build. It prints which validator it used, and fails instead of
+validating when that build is older than the sources it is made from.
+
+Each normal run marks its isolated build folder as used and removes the folders
+of other callers that are no longer used: those whose repository root no longer
+exists (a test fixture) after an hour, and any folder not used for seven days.
+Only hash-named folders directly below the temporary `omp-module-sql-guard`
+root are considered, links are never followed, and a folder with an open file
+is left alone. `scripts/omp/get-module-sql-validator-identity.ps1` derives the
+validator's cache identity from every file it is built from, following
+`ModuleSqlGuard.csproj` and its project references, so a changed rule under
+`shared/` or in the HostAgent runtime changes the key
+(`scripts/omp/module-sql-validator-support.ps1` holds both lists).
 
 This is a mandatory gate beside module-definition and component-version
 validation in `scripts/local-ci.ps1`, the pre-push hook and GitHub CI.

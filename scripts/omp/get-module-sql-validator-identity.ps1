@@ -5,10 +5,13 @@ Returns a cache identity for the module validators in this checkout.
 
 .DESCRIPTION
 Writes one JSON object with the resolved platform checkout, its HEAD commit, a
-SHA-256 over the validator scripts and ModuleSqlGuard source files, and a
-cacheKey that combines those values. The content hash reads the working tree,
-so committed, unstaged, staged and untracked source changes all produce a new
-identity. Build output below tools/ModuleSqlGuard/bin and obj is excluded.
+SHA-256 over the validator scripts and every file the validator is built from,
+and a cacheKey that combines those values. The build inputs are derived from
+tools/ModuleSqlGuard/ModuleSqlGuard.csproj: the project folders it references
+transitively, the files those projects compile in from elsewhere (the rule
+sources under shared/), and the repository-wide build files. The content hash
+reads the working tree, so committed, unstaged, staged and untracked source
+changes all produce a new identity. Build output below bin and obj is excluded.
 
 Consumers should call this script from the same resolved OpenModulePlatform
 checkout whose validate-module-definitions.ps1 and Test-ModuleSqlGuards.ps1
@@ -61,27 +64,31 @@ if ($headCommit -notmatch '^[0-9a-fA-F]{40}$') {
     throw "Module validator HEAD could not be resolved in '$platformRoot'."
 }
 
-$inputFiles = [System.Collections.Generic.List[string]]::new()
+. (Join-Path $PSScriptRoot 'module-sql-validator-support.ps1')
+
+# The validator scripts, the helper they share, and every file the validator is built
+# from. The build inputs are derived from ModuleSqlGuard.csproj and the projects it
+# references: the rules themselves are compiled in from shared/ and from the HostAgent
+# runtime, so a list that stopped at tools/ModuleSqlGuard kept the same key for a
+# changed rule.
+$inputFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 foreach ($relativePath in @(
     'scripts/omp/Test-ModuleSqlGuards.ps1',
-    'scripts/omp/validate-module-definitions.ps1'
+    'scripts/omp/validate-module-definitions.ps1',
+    'scripts/omp/module-sql-validator-support.ps1'
 )) {
-    $inputFiles.Add((Join-Path $platformRoot ($relativePath -replace '/', '\')))
+    [void]$inputFiles.Add((Join-Path $platformRoot ($relativePath -replace '/', '\')))
+}
+foreach ($file in (Get-ModuleSqlValidatorSourceFiles -PlatformRoot $platformRoot)) {
+    [void]$inputFiles.Add($file)
 }
 
-$toolRoot = Join-Path $platformRoot 'tools\ModuleSqlGuard'
-if (Test-Path -LiteralPath $toolRoot -PathType Container) {
-    foreach ($file in [System.IO.Directory]::EnumerateFiles($toolRoot, '*', [System.IO.SearchOption]::AllDirectories)) {
-        $relativeToolPath = $file.Substring($toolRoot.Length).TrimStart('\', '/')
-        if ($relativeToolPath -match '(?i)(^|[\\/])(bin|obj)([\\/]|$)') {
-            continue
-        }
-        $inputFiles.Add($file)
-    }
-}
+$orderedInputs = New-Object 'System.Collections.Generic.List[string]'
+$orderedInputs.AddRange([string[]]@($inputFiles))
+$orderedInputs.Sort([System.StringComparer]::OrdinalIgnoreCase)
 
 $contentLines = [System.Collections.Generic.List[string]]::new()
-foreach ($file in @($inputFiles | Sort-Object)) {
+foreach ($file in $orderedInputs) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         throw "Module validator input is missing: $file"
     }

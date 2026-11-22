@@ -24,6 +24,7 @@ Describe 'Module SQL validator cache identity' {
         $null = New-Item -ItemType Directory -Path $script:Scripts -Force
         $null = New-Item -ItemType Directory -Path $script:Tools -Force
         Copy-Item -LiteralPath $script:IdentitySource -Destination (Join-Path $script:Scripts 'get-module-sql-validator-identity.ps1')
+        Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $script:IdentitySource) 'module-sql-validator-support.ps1') -Destination $script:Scripts
         [IO.File]::WriteAllText((Join-Path $script:Scripts 'Test-ModuleSqlGuards.ps1'), '# guard v1')
         [IO.File]::WriteAllText((Join-Path $script:Scripts 'validate-module-definitions.ps1'), '# definitions v1')
         [IO.File]::WriteAllText((Join-Path $script:Tools 'Program.cs'), '// validator v1')
@@ -75,5 +76,67 @@ Describe 'Module SQL validator cache identity' {
         }
         $withOutput = Invoke-ValidatorIdentity -Root $script:Root
         $withOutput.contentSha256 | Should -Be $withSource.contentSha256
+    }
+
+    Context 'A validator built from referenced projects and linked rule sources' {
+        BeforeEach {
+            # The shape of the real validator: the tool project references a runtime
+            # project, which references a second project and compiles the rule in from a
+            # folder that belongs to no project.
+            $script:Runtime = Join-Path $script:Root 'Runtime'
+            $script:Contracts = Join-Path $script:Root 'Contracts'
+            $script:Shared = Join-Path $script:Root 'shared'
+            $script:Unrelated = Join-Path $script:Root 'Portal'
+            foreach ($folder in @($script:Runtime, $script:Contracts, $script:Shared, $script:Unrelated)) {
+                $null = New-Item -ItemType Directory -Path $folder -Force
+            }
+            [IO.File]::WriteAllText((Join-Path $script:Tools 'ModuleSqlGuard.csproj'),
+                '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><ProjectReference Include="../../Runtime/Runtime.csproj" /></ItemGroup></Project>')
+            [IO.File]::WriteAllText((Join-Path $script:Runtime 'Runtime.csproj'),
+                '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><ProjectReference Include="..\Contracts\Contracts.csproj" /><Compile Include="..\shared\OwnershipRule.cs" Link="Rules\OwnershipRule.cs" /></ItemGroup></Project>')
+            [IO.File]::WriteAllText((Join-Path $script:Runtime 'Service.cs'), '// runtime v1')
+            [IO.File]::WriteAllText((Join-Path $script:Contracts 'Contracts.csproj'), '<Project Sdk="Microsoft.NET.Sdk" />')
+            [IO.File]::WriteAllText((Join-Path $script:Contracts 'Contract.cs'), '// contract v1')
+            [IO.File]::WriteAllText((Join-Path $script:Shared 'OwnershipRule.cs'), '// rule v1')
+            [IO.File]::WriteAllText((Join-Path $script:Shared 'NotCompiledIn.cs'), '// not part of the validator')
+            [IO.File]::WriteAllText((Join-Path $script:Unrelated 'Page.cs'), '// portal v1')
+            [IO.File]::WriteAllText((Join-Path $script:Root 'Directory.Build.props'), '<Project />')
+        }
+
+        It 'Changes when <Name> changes' -ForEach @(
+            @{ Name = 'the rule source compiled in from outside every project'; Path = 'shared\OwnershipRule.cs' }
+            @{ Name = 'a source of the directly referenced project'; Path = 'Runtime\Service.cs' }
+            @{ Name = 'a source of a transitively referenced project'; Path = 'Contracts\Contract.cs' }
+            @{ Name = 'a referenced project file'; Path = 'Runtime\Runtime.csproj' }
+            @{ Name = 'the repository-wide build property file'; Path = 'Directory.Build.props' }
+            @{ Name = 'the helper both validator scripts share'; Path = 'scripts\omp\module-sql-validator-support.ps1' }
+        ) {
+            $original = Invoke-ValidatorIdentity -Root $script:Root
+            [IO.File]::AppendAllText((Join-Path $script:Root $Path), ' ')
+            $changed = Invoke-ValidatorIdentity -Root $script:Root
+
+            $changed.contentSha256 | Should -Not -Be $original.contentSha256
+            $changed.cacheKey | Should -Not -Be $original.cacheKey
+        }
+
+        It 'Stays the same when <Name> changes' -ForEach @(
+            @{ Name = 'a project the validator does not reference'; Path = 'Portal\Page.cs' }
+            @{ Name = 'a file beside the rule that no project compiles in'; Path = 'shared\NotCompiledIn.cs' }
+            @{ Name = 'build output of a referenced project'; Path = 'Runtime\obj\generated.cs' }
+        ) {
+            $original = Invoke-ValidatorIdentity -Root $script:Root
+            $target = Join-Path $script:Root $Path
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force
+            [IO.File]::AppendAllText($target, '// changed')
+            $changed = Invoke-ValidatorIdentity -Root $script:Root
+
+            $changed.contentSha256 | Should -Be $original.contentSha256
+        }
+
+        It 'Fails instead of describing a validator whose project list cannot be followed' {
+            Remove-Item -LiteralPath (Join-Path $script:Contracts 'Contracts.csproj')
+
+            { Invoke-ValidatorIdentity -Root $script:Root } | Should -Throw '*references a project that does not exist*'
+        }
     }
 }

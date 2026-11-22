@@ -13,8 +13,10 @@ SQL files or module-definition JSON files to validate.
 Repository containing omp-components.json. Defaults to this repository. A normal
 build uses this root to give each calling repository its own isolated tool output.
 .PARAMETER NoBuild
-Use the Release validator already built by the solution build in this checkout.
-If that DLL does not exist, reuse the caller's isolated DLL from an earlier call.
+Do not build. Use the isolated validator this caller built in an earlier call; only
+when there is none, fall back to the Release validator a solution build left in this
+checkout. The script prints which one it used, and fails instead of validating when
+that DLL is older than the sources it is built from.
 .PARAMETER SelfTest
 Run ownership regression probes against temporary SQL files before validating inputs.
 #>
@@ -50,25 +52,55 @@ try {
 finally {
     $sha.Dispose()
 }
-$buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-module-sql-guard\' + $callerKey)
+$guardRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'omp-module-sql-guard'
+$buildRoot = Join-Path $guardRoot $callerKey
 $isolatedValidator = Join-Path $buildRoot 'bin\ModuleSqlGuard\Release\net10.0\ModuleSqlGuard.dll'
+. (Join-Path $PSScriptRoot 'module-sql-validator-support.ps1')
 
 if (-not $NoBuild) {
     Write-Verbose "Module SQL validator isolated build root: $buildRoot"
+    # Isolated build folders of callers that are gone, or that have not validated
+    # anything for a week, are removed here. Never this caller's own folder, and
+    # never at the cost of the validation: the helper swallows its own failures.
+    try {
+        Set-ModuleSqlGuardBuildRootInUse -BuildRoot $buildRoot -CallerRoot $validationRepositoryRoot
+        $removedBuildRoots = @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $guardRoot -CurrentBuildRoot $buildRoot)
+        if ($removedBuildRoots.Count -gt 0) {
+            Write-Verbose "Removed $($removedBuildRoots.Count) unused module SQL validator build folder(s) below $guardRoot."
+        }
+    }
+    catch {
+        Write-Verbose "Module SQL validator build folder cleanup was skipped: $($_.Exception.Message)"
+    }
     $isolationProperty = '-p:OmpIsolatedBuildRoot=' + $buildRoot
     & dotnet build $project --configuration Release --nologo -v q $isolationProperty
     if ($LASTEXITCODE -ne 0) { throw "Module SQL validator build failed ($LASTEXITCODE)." }
     $validator = $isolatedValidator
 }
-elseif (-not (Test-Path -LiteralPath $validator -PathType Leaf) -and
-    (Test-Path -LiteralPath $isolatedValidator -PathType Leaf)) {
-    # Packaging builds once above, then validates individual generated SQL files
-    # with -NoBuild. A clean checkout has no in-tree DLL, so reuse the isolated
-    # DLL built by that first call. An existing solution-built DLL retains the
-    # original -NoBuild precedence.
-    $validator = $isolatedValidator
+else {
+    # -NoBuild measures with a validator somebody else built, so say which one and
+    # refuse one that is older than its sources. The caller's own isolated build comes
+    # first: packaging builds it once and then validates each generated file with
+    # -NoBuild, and that must be the validator it has just built. The DLL in this
+    # checkout is only the fallback, because nothing keeps it current: it is whatever
+    # the last solution build here happened to leave.
+    if (Test-Path -LiteralPath $isolatedValidator -PathType Leaf) {
+        $validator = $isolatedValidator
+        $validatorOrigin = "this caller's isolated build"
+    }
+    elseif (Test-Path -LiteralPath $validator -PathType Leaf) {
+        $validatorOrigin = 'the solution build in the platform checkout, because this caller has no isolated build'
+    }
+    else {
+        throw "Module SQL validator is missing. -NoBuild found neither this caller's isolated build ($isolatedValidator) nor a solution build ($validator). Run without -NoBuild first."
+    }
+
+    $staleSource = Get-ModuleSqlValidatorStaleSource -ValidatorPath $validator -PlatformRoot $ompRoot
+    if ($null -ne $staleSource) {
+        throw "Module SQL validator is older than its sources and was not used: $validator was built before $staleSource was last written. Run without -NoBuild to rebuild it."
+    }
+    Write-Host "Module SQL validator (-NoBuild): $validator ($validatorOrigin)."
 }
-if (-not (Test-Path -LiteralPath $validator -PathType Leaf)) { throw 'Module SQL validator is missing. Build it first.' }
 
 if ($SelfTest) {
     $probeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('module-sql-guards-' + [Guid]::NewGuid().ToString('N'))
