@@ -518,7 +518,15 @@ foreach ($file in @($files)) {
 }
 
 $items = [System.Collections.Generic.List[object]]::new()
-$archive = [System.IO.Compression.ZipFile]::Open($outputPathFull, [System.IO.Compression.ZipArchiveMode]::Create)
+# The package is written under a temporary name beside the final one and renamed
+# only when it is complete. Written straight to the final name, a failure half-way
+# left a zip without its manifest there, and because an existing output file is
+# refused above, every later run with the same -OutputPath failed until somebody
+# deleted the leftover by hand.
+$temporaryOutputPath = Join-Path (Split-Path -Parent $outputPathFull) (
+    '.' + (Split-Path -Leaf $outputPathFull) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+$packageComplete = $false
+$archive = [System.IO.Compression.ZipFile]::Open($temporaryOutputPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
     foreach ($file in @($files | Sort-Object PackagePath)) {
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
@@ -553,9 +561,26 @@ try {
         -Archive $archive `
         -EntryName 'omp-universal-package.json' `
         -Text ($manifest | ConvertTo-Json -Depth 20)
+    $packageComplete = $true
 }
 finally {
     $archive.Dispose()
+    if (-not $packageComplete -and (Test-Path -LiteralPath $temporaryOutputPath)) {
+        Remove-Item -LiteralPath $temporaryOutputPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+try {
+    # Not an overwriting move: a file that appeared at the final name while the
+    # package was being written is somebody else's and stays.
+    [System.IO.File]::Move($temporaryOutputPath, $outputPathFull)
+}
+catch {
+    Remove-Item -LiteralPath $temporaryOutputPath -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $outputPathFull) {
+        throw "$outputPathFull already exists and was not replaced. An existing package is never overwritten; choose another package version or output file."
+    }
+    throw
 }
 
 Write-Host "Universal package: $outputPathFull"
