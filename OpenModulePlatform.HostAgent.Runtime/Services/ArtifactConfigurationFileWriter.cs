@@ -475,6 +475,10 @@ internal static class ArtifactConfigurationFileWriter
                         {
                             type = "File",
                             fileName = "${var:logDirectory}/${var:appName}-${shortdate}.log",
+                            // The same limit as every other platform file target. This
+                            // template is what a host actually runs with: the checked-in
+                            // appsettings.json, which has the limit, never reaches it.
+                            maxArchiveDays = 14,
                             layout = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}"
                         },
                         ["console"] = new

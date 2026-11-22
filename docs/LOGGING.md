@@ -79,8 +79,20 @@ By default logs are written to:
 
 The log directory is ignored by Git through `.gitignore`.
 
-Every platform file target sets `maxArchiveDays` to 14, so NLog removes a
-process's own day files older than 14 days when it rolls over to a new day.
+Every platform file target that reaches a host sets `maxArchiveDays` to 14, so
+NLog removes a process's own day files older than 14 days when it rolls over to
+a new day. That covers the checked-in `appsettings.json` of the services, the
+`Packaging/appsettings.json` of the packaged web apps listed below, and the
+configuration HostAgent generates for WorkerManager when no artifact
+configuration file is registered for it (`ArtifactConfigurationFileWriter.cs`;
+that template is what a host's WorkerManager normally runs with, not the
+checked-in file).
+
+The iFrame web app module is the exception in the other direction: its
+checked-in `appsettings.json` has an `NLog` section with the same limit, but the
+module has no `Packaging/appsettings.json`, so a deployed iFrame module gets no
+`NLog` section from the package and writes no log files unless an operator
+supplies one as an artifact configuration file or config overlay.
 
 ### Packaged web apps
 

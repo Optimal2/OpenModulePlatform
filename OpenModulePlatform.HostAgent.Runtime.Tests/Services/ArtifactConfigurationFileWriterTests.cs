@@ -108,6 +108,31 @@ public sealed class ArtifactConfigurationFileWriterTests
     }
 
     [Fact]
+    public void WorkerManagerBuiltInConfiguration_FileTargetKeepsFourteenDaysLikeTheCheckedInOne()
+    {
+        // The built-in template is the appsettings.json a host's WorkerManager runs with
+        // when no artifact configuration file is registered. Without a limit on the file
+        // target its day files are never removed.
+        var result = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [],
+            CreateWorkerManagerDeployment(),
+            "Server=localhost;Database=OpenModulePlatform;",
+            new HostAgentSettings());
+
+        var builtIn = Assert.Single(result);
+        var logFile = JsonNode.Parse(builtIn.FileContent)!["NLog"]!["targets"]!["logfile"]!.AsObject();
+        Assert.Equal("File", logFile["type"]!.GetValue<string>());
+        Assert.Equal(14, logFile["maxArchiveDays"]!.GetValue<int>());
+
+        var checkedIn = JsonNode.Parse(
+            OpenModulePlatform.TestSupport.OmpRepositoryFiles.ReadRepositoryTextFile(
+                "OpenModulePlatform.WorkerManager.WindowsService",
+                "appsettings.json"))!["NLog"]!["targets"]!["logfile"]!.AsObject();
+        Assert.Equal(checkedIn["maxArchiveDays"]!.GetValue<int>(), logFile["maxArchiveDays"]!.GetValue<int>());
+        Assert.Equal(checkedIn["fileName"]!.GetValue<string>(), logFile["fileName"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void WorkerManagerOverlay_WithAppSettingsJson_ForcesLiveIdentityAndPreservesRest()
     {
         var deployment = CreateWorkerManagerDeployment();
