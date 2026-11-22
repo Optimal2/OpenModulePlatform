@@ -170,7 +170,16 @@ and does not replace this policy.
 > `script-src 'unsafe-inline'`) and logs a warning when the key is missing, and the
 > non-skippable `IFrameModuleInlineScriptGuardTests` fail the build if the key
 > disappears from the shipped appsettings.json. Apps without their own middleware
-> policy still have the silent fallback described above.
+> policy still fall back to the shared baseline described above. That fallback is
+> no longer silent: it is the case the startup warning reports.
+>
+> The startup warning is decided from the configuration key alone
+> (`Enabled` and an empty `Policy`), not from the header the app ends up sending.
+> An app that supplies its policy in its own middleware and has no `Policy` key
+> therefore logs the warning although it does not serve the baseline, and the
+> iFrame module without the key logs both this warning and its own. Treat the
+> warning as "the `Policy` key is missing here", and check the emitted header to
+> see which policy is in force.
 
 - **Portal** — baseline plus `blob:` in `img-src`/`media-src` (webamp unzips
   skins in JS and serves sprites via `URL.createObjectURL`; track/album-art
