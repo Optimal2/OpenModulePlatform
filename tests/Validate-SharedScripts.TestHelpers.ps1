@@ -55,6 +55,7 @@ function New-Pair {
         [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\bump-version.ps1'), $ConsumerBody)
     }
     [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\validate-component-versions.helpers.ps1'), $helpersBody)
+    [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\resolve-platform-root.ps1'), 'shared platform resolver')
 
     if ($ConsumerIsWeb) {
         New-Item -ItemType Directory -Path (Join-Path $consumer 'Web') -Force | Out-Null
@@ -94,6 +95,7 @@ function New-Pair {
         if (-not $OmitPlatformScripts) {
             [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\bump-version.ps1'), $PlatformBody)
             [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\validate-component-versions.helpers.ps1'), $helpersBody)
+            [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\resolve-platform-root.ps1'), 'shared platform resolver')
         }
         if (-not [string]::IsNullOrEmpty($PlatformManifest)) {
             [IO.File]::WriteAllText((Join-Path $platform 'omp-components.json'), $PlatformManifest)

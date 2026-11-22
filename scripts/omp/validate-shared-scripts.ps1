@@ -5,9 +5,10 @@
     from the canonical copy in OpenModulePlatform.
 
 .DESCRIPTION
-    scripts/omp/bump-version.ps1 and
+    scripts/omp/bump-version.ps1,
     scripts/omp/validate-component-versions.helpers.ps1 (the validator family's
-    shared core, see docs/VALIDATOR_CHECKS.md) are copied verbatim into every
+    shared core, see docs/VALIDATOR_CHECKS.md) and
+    scripts/omp/resolve-platform-root.ps1 are copied verbatim into every
     OMP-compatible repository, and so is the canonical Pester step
     (scripts/omp/run-script-tests.ps1 plus scripts/omp/pester-bootstrap.ps1)
     into every repository that runs Pester suites. Keeping the copies identical has so far been a
@@ -64,12 +65,12 @@
 
     A relative value is resolved against ConsumerRepositoryRoot, not the process
     current directory, and the resolved path is printed. A root named by this
-    parameter or either environment variable that exists but is not an
-    OpenModulePlatform checkout (a canonical shared script is missing, or
-    omp-components.json lacks repositoryKey/repositoryVersion) fails with exit 1
-    whether or not -Strict is passed: a mis-pointed root is a configuration
-    error, not an unmeasured check. A missing sibling stays a warning without
-    -Strict.
+    parameter or either environment variable that does not exist, or that exists
+    but is not an OpenModulePlatform checkout (a canonical shared script is
+    missing, or omp-components.json lacks repositoryKey/repositoryVersion), fails
+    with exit 1 whether or not -Strict is passed: a mis-pointed root is a
+    configuration error, not an unmeasured check. A missing sibling stays a
+    warning without -Strict.
 
 .PARAMETER Strict
     Treat an absent platform repository as a failure instead of an unverified skip.
@@ -102,7 +103,8 @@ $ErrorActionPreference = 'Stop'
 # (docs/VALIDATOR_CHECKS.md); its shared core - the helpers file below - is.
 $sharedScripts = @(
     'scripts/omp/bump-version.ps1',
-    'scripts/omp/validate-component-versions.helpers.ps1'
+    'scripts/omp/validate-component-versions.helpers.ps1',
+    'scripts/omp/resolve-platform-root.ps1'
 )
 
 # Shared build files every repository with a web project (a .csproj on
@@ -137,6 +139,7 @@ $sharedPesterStepFiles = @(
 # can never disagree about what a suite is: git-ignored files and bin/, obj/
 # and node_modules/ do not count, hidden files do.
 . (Join-Path $PSScriptRoot 'pester-bootstrap.ps1')
+. (Join-Path $PSScriptRoot 'validate-component-versions.helpers.ps1')
 
 function Test-NeedsPesterStep {
     <#
@@ -275,29 +278,14 @@ function Test-PlatformCheckout {
 
 $consumerRoot = [System.IO.Path]::GetFullPath($ConsumerRepositoryRoot).TrimEnd('\', '/')
 
-# Where the root came from. Anything but the sibling default was named by
-# somebody, and a named root that is not a platform checkout is a configuration
-# error rather than an unmeasured check.
-$platformSource = '-PlatformRepositoryRoot'
-$platformRoot = $PlatformRepositoryRoot
-if ([string]::IsNullOrWhiteSpace($platformRoot)) {
-    $platformSource = 'OMP_PLATFORM_ROOT'
-    $platformRoot = $env:OMP_PLATFORM_ROOT
-}
-if ([string]::IsNullOrWhiteSpace($platformRoot)) {
-    $platformSource = 'OpenModulePlatformRoot'
-    $platformRoot = $env:OpenModulePlatformRoot
-}
-if ([string]::IsNullOrWhiteSpace($platformRoot)) {
-    $platformSource = 'sibling of the consumer'
-    $platformRoot = '..\OpenModulePlatform'
-}
-$platformRootNamed = $platformSource -ne 'sibling of the consumer'
-
-# A relative root is anchored at the consumer repository, not at whatever the
-# process current directory happens to be. Path.Combine returns an absolute
-# second argument unchanged.
-$platformRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($consumerRoot, $platformRoot)).TrimEnd('\', '/')
+# The shared core owns checkout resolution for both this guard and consumer
+# validators. In particular, conflicting OMP_PLATFORM_ROOT and
+# OpenModulePlatformRoot values fail before a build and this guard can select
+# different checkouts.
+$resolvedPlatform = Resolve-OmpPlatformRoot -RepositoryRoot $consumerRoot -PlatformRepositoryRoot $PlatformRepositoryRoot
+$platformSource = $resolvedPlatform.Source
+$platformRoot = $resolvedPlatform.Root
+$platformRootNamed = $resolvedPlatform.Named
 Write-Host "Shared scripts: platform root '$platformRoot' (from $platformSource)."
 
 # The consumer IS the platform repository: nothing to compare against itself.

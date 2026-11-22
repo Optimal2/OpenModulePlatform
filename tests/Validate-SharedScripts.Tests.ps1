@@ -101,7 +101,7 @@ Describe 'validate-shared-scripts: cannot-measure is visible, never silently gre
         # must not fail the build - but it must not read as a passing check either.
         $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
         try {
-            $result = Invoke-Guard -Pair $pair
+            $result = Invoke-Guard -Pair $pair -OmitPlatformArgument -Environment @{ OMP_PLATFORM_ROOT = $null; OpenModulePlatformRoot = $null }
             $result.Threw | Should -Be $false
             ($result.Output -match 'not verified|skipp') | Should -Be $true
         }
@@ -305,7 +305,7 @@ Describe 'validate-shared-scripts: the exit code is the contract' {
     It 'Avslutar med 0 nar grannen saknas utan -Strict' {
         $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
         try {
-            $result = Invoke-Guard -Pair $pair
+            $result = Invoke-Guard -Pair $pair -OmitPlatformArgument -Environment @{ OMP_PLATFORM_ROOT = $null; OpenModulePlatformRoot = $null }
             $result.Kod | Should -Be 0
         }
         finally { Remove-Pair -Pair $pair }

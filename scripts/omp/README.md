@@ -157,8 +157,9 @@ rejects the consumer artifact at import.
 `validate-shared-scripts.ps1` is the canonical implementation of the consumer-side
 "Check 15" shared-script drift guard, and is the sibling of the Check 14 guard above.
 Where Check 14 locks shared source TREES, Check 15 locks the shared SCRIPTS that are
-copied verbatim across the fleet -- `scripts/omp/bump-version.ps1` and
-`scripts/omp/validate-component-versions.helpers.ps1` (the `$sharedScripts` list), which are
+copied verbatim across the fleet -- `scripts/omp/bump-version.ps1`,
+`scripts/omp/validate-component-versions.helpers.ps1` and
+`scripts/omp/resolve-platform-root.ps1` (the `$sharedScripts` list), which are
 byte-identical in all nine repositories. Repositories that run Pester suites (a `*.Tests.ps1`
 in the runner's own inventory of `tests/`, so build output and git-ignored files do not count)
 or carry a copy of either file must also carry the canonical Pester
@@ -177,6 +178,14 @@ then `$env:OpenModulePlatformRoot`, then the sibling `..\OpenModulePlatform`; se
 neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error; an explicitly named
 root that is not a checkout is exit 1 regardless of `-Strict`. Pre-push and
 local CI gates pass `-Strict` (see docs/VALIDATOR_CHECKS.md).
+
+A consumer's `scripts/local-ci.ps1` calls its own canonical
+`scripts/omp/resolve-platform-root.ps1 -RepositoryRoot $repoRoot` and uses the returned
+absolute path for both MSBuild's `OpenModulePlatformRoot` property and every platform
+validator. If `OMP_PLATFORM_ROOT` and `OpenModulePlatformRoot` are both set, they must be
+aliases of the same directory; different checkouts fail with both paths in the error.
+Case, trailing separators, junctions and 8.3 short names are normalized for that
+comparison. An explicitly named root that does not exist is also an error.
 
 There is no separate reference to maintain -- the canonical file in this repository IS the
 reference. When it changes here, copy it to the eight consumers in the same change; this

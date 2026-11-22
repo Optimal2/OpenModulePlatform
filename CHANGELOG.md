@@ -432,6 +432,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Consumer builds and validators cannot silently select different platform
+  checkouts.** The shared `Resolve-OmpPlatformRoot` implementation and canonical
+  `resolve-platform-root.ps1` wrapper reject conflicting `OMP_PLATFORM_ROOT` and
+  `OpenModulePlatformRoot` values while accepting path aliases of one checkout.
+
 - **Concurrent module SQL guards no longer share build output.**
   `Test-ModuleSqlGuards.ps1` builds with a per-consumer absolute
   `OmpIsolatedBuildRoot`, keeping intermediate and output folders outside the

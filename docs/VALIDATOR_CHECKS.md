@@ -99,11 +99,28 @@ boundary, so a call through `xnameof(...)` still counts.
 
 ## Finding the platform checkout (Checks 14 and 15)
 
-Check 15 compares against the OpenModulePlatform checkout. `validate-shared-scripts.ps1`
-resolves it in this order: `-PlatformRepositoryRoot`, then the environment variable
-`OMP_PLATFORM_ROOT`, then `OpenModulePlatformRoot`, then a sibling directory named
-`OpenModulePlatform`. Set `OMP_PLATFORM_ROOT` when the consumer checkout does not sit
-beside the platform checkout, for example a git worktree created under another root.
+Check 15 compares against the OpenModulePlatform checkout. One shared implementation,
+`Resolve-OmpPlatformRoot` in `validate-component-versions.helpers.ps1`, resolves it in
+this order: `-PlatformRepositoryRoot`, then `OMP_PLATFORM_ROOT`, then
+`OpenModulePlatformRoot`, then a sibling directory named `OpenModulePlatform`.
+`validate-shared-scripts.ps1` and `Resolve-PlatformCheckScript` both call that function;
+`resolve-platform-root.ps1` is the consumer-local wrapper for local-CI scripts. Check 15
+holds the wrapper and shared core byte-identical across repositories. Set
+`OMP_PLATFORM_ROOT` when the consumer checkout does not sit beside the platform checkout,
+for example a git worktree created under another root.
+
+When `OMP_PLATFORM_ROOT` and `OpenModulePlatformRoot` are both set, they must name the
+same checkout. Case, trailing separators, junctions and 8.3 short-name aliases are
+accepted; different roots are an error naming both resolved paths, even when
+`-PlatformRepositoryRoot` is also present. A consumer's local CI must call its canonical
+`scripts/omp/resolve-platform-root.ps1`, then pass the returned root both to MSBuild as
+`OpenModulePlatformRoot` and to every platform validator. This prevents a build and the
+validators from silently selecting different platform sources.
+
+```powershell
+$platformRoot = & (Join-Path $repoRoot 'scripts\omp\resolve-platform-root.ps1') -RepositoryRoot $repoRoot
+# Use $platformRoot for the build's OpenModulePlatformRoot property and all validators.
+```
 
 When no root resolves, the guard reports `NOT VERIFIED`. Without `-Strict` that is a
 warning and exit 0; with `-Strict` it is exit 1. Pre-push hooks and `scripts/local-ci.ps1`
