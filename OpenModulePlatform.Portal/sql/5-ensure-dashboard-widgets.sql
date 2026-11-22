@@ -374,7 +374,7 @@ BEGIN
     (
         user_id int NOT NULL,
         align_to_grid bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_align_to_grid DEFAULT(1),
-        expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(0),
+        expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(1),
         has_custom_dashboard_layout bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_has_custom_dashboard_layout DEFAULT(0),
         updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_updated_at DEFAULT(SYSUTCDATETIME()),
 
@@ -398,7 +398,7 @@ IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NOT NULL
    AND COL_LENGTH(N'omp_portal.user_dashboard_preferences', N'expanded_canvas') IS NULL
 BEGIN
     ALTER TABLE omp_portal.user_dashboard_preferences
-        ADD expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(0);
+        ADD expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(1);
 END
 GO
 
