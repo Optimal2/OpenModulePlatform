@@ -489,6 +489,7 @@ internal static partial class Program
         Console.WriteLine("  output. For per-host RUNTIME drift, use scripts/diagnostics/Get-OmpDeploymentDrift.ps1 instead.");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
+        Console.WriteLine("  --upgrade-or-complete skips the initial SQL scripts but still imports payload module definitions.");
     }
 
     private static async Task RemoveDatabaseObjectsAsync(SqlBootstrapOptions sql)

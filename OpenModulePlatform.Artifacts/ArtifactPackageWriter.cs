@@ -155,15 +155,6 @@ public sealed class ArtifactPackageWriter
     private static void AddWorkerPluginCompatibilityManifest(string payloadZipPath, string minWorkerHostVersion)
     {
         using var payload = ZipFile.Open(payloadZipPath, ZipArchiveMode.Update);
-        if (payload.Entries.Any(entry => string.Equals(
-                entry.FullName.Replace('\\', '/'),
-                WorkerPluginCompatibilityManifest.FileName,
-                StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException(
-                $"Artifact payload already contains reserved compatibility metadata '{WorkerPluginCompatibilityManifest.FileName}'.");
-        }
-
         var manifest = new WorkerPluginCompatibilityManifest
         {
             FormatVersion = 1,

@@ -3292,6 +3292,13 @@
   <data name="State" xml:space="preserve"><value>Tillstånd</value></data>
   <data name="Selectors" xml:space="preserve"><value>Väljare</value></data>
   <data name="Origin" xml:space="preserve"><value>Ursprung</value></data>
+  <data name="Enable" xml:space="preserve"><value>Aktivera</value></data>
+  <data name="Edit saved overlay draft" xml:space="preserve"><value>Redigera sparat utkast till konfigurationsöverlägg</value></data>
+  <data name="Add overlay draft" xml:space="preserve"><value>Lägg till utkast till konfigurationsöverlägg</value></data>
+  <data name="Saved effective sources" xml:space="preserve"><value>Sparade effektiva källor</value></data>
+  <data name="Read saved sources" xml:space="preserve"><value>Läs sparade källor</value></data>
+  <data name="Removal impact preview" xml:space="preserve"><value>Förhandsgranskning av borttagningspåverkan</value></data>
+  <data name="Installation impact" xml:space="preserve"><value>Påverkan på installationen</value></data>
   <data name="Preview removal" xml:space="preserve"><value>Förhandsgranska borttagning</value></data>
   <data name="Deleted overlays" xml:space="preserve"><value>Borttagna overlay</value></data>
   <data name="No deleted overlays recorded." xml:space="preserve"><value>Inga borttagna overlay har registrerats.</value></data>
@@ -3310,7 +3317,7 @@
   <data name="Theme" xml:space="preserve"><value>Tema</value></data>
   <data name="Light" xml:space="preserve"><value>Ljust</value></data>
   <data name="Dark" xml:space="preserve"><value>Mörkt</value></data>
-  <data name="Toasts" xml:space="preserve"><value>Toasts</value></data>
+  <data name="Toasts" xml:space="preserve"><value>Popupaviseringar</value></data>
   <data name="Notification sounds" xml:space="preserve"><value>Aviseringsljud</value></data>
   <data name="The theme is stored in this browser." xml:space="preserve"><value>Temat sparas i den här webbläsaren.</value></data>
   <data name="The language is stored in this browser." xml:space="preserve"><value>Språket sparas i den här webbläsaren.</value></data>
@@ -3319,5 +3326,5 @@
   <data name="Choose file" xml:space="preserve"><value>Välj fil</value></data>
   <data name="Reset profile image" xml:space="preserve"><value>Återställ profilbilden</value></data>
   <data name="You have unsaved changes." xml:space="preserve"><value>Du har osparade ändringar.</value></data>
-  <data name="When this is turned off, notification and message toasts are not shown." xml:space="preserve"><value>När den är avstängd visas inga notis- och meddelandetoasts.</value></data>
+  <data name="When this is turned off, notification and message toasts are not shown." xml:space="preserve"><value>När detta är avstängt visas varken aviseringar eller meddelanden som popuprutor.</value></data>
 </root>

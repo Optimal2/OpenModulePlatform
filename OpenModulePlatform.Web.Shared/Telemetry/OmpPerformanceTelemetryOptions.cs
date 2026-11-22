@@ -70,32 +70,32 @@ public sealed class OmpPerformanceTelemetryOptions
     {
         if (QueryCostSnapshotStatements is < 1 or > 500)
         {
-            throw new InvalidOperationException("Telemetry:QueryCostSnapshotStatements must be between 1 and 500.");
+            throw new InvalidOperationException("Portal:Telemetry:QueryCostSnapshotStatements must be between 1 and 500.");
         }
 
         if (FlushIntervalSeconds < 5)
         {
-            throw new InvalidOperationException("Telemetry:FlushIntervalSeconds must be at least 5.");
+            throw new InvalidOperationException("Portal:Telemetry:FlushIntervalSeconds must be at least 5.");
         }
 
         if (RetainHours < 1)
         {
-            throw new InvalidOperationException("Telemetry:RetainHours must be at least 1.");
+            throw new InvalidOperationException("Portal:Telemetry:RetainHours must be at least 1.");
         }
 
         if (RetainDays < 1)
         {
-            throw new InvalidOperationException("Telemetry:RetainDays must be at least 1.");
+            throw new InvalidOperationException("Portal:Telemetry:RetainDays must be at least 1.");
         }
 
         if (QueryCostRetainDays is < 1 or > 400)
         {
-            throw new InvalidOperationException("Telemetry:QueryCostRetainDays must be between 1 and 400.");
+            throw new InvalidOperationException("Portal:Telemetry:QueryCostRetainDays must be between 1 and 400.");
         }
 
         if (MinimumDurationMsToRecord < 0)
         {
-            throw new InvalidOperationException("Telemetry:MinimumDurationMsToRecord cannot be negative.");
+            throw new InvalidOperationException("Portal:Telemetry:MinimumDurationMsToRecord cannot be negative.");
         }
     }
 }

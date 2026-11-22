@@ -77,15 +77,6 @@ WHERE ArtifactId = @ArtifactId
   AND RelativePath = @RelativePath;";
 
     /// <summary>
-    /// Reads the relative paths currently registered for one artifact.
-    /// Parameters: @ArtifactId.
-    /// </summary>
-    public const string SelectConfigurationFilePaths = @"
-SELECT RelativePath
-FROM omp.ArtifactConfigurationFiles
-WHERE ArtifactId = @ArtifactId;";
-
-    /// <summary>
     /// Reads the relative paths of the package-delivered rows (those with a
     /// PackageFileContent baseline) for one artifact. A replacement may remove
     /// only these: a row without a baseline is operator-created or of unknown

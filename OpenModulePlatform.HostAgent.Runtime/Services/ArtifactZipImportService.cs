@@ -29,8 +29,6 @@ public sealed class ArtifactZipImportService
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        AllowTrailingCommas = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
         WriteIndented = true
     };
 
