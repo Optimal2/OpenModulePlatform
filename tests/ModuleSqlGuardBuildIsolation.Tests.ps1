@@ -51,8 +51,13 @@ Describe 'Module SQL guard isolated consumer builds' {
                 '-Path', ('"' + $script:Probe + '"'),
                 '-Verbose'
             )
-            $script:Processes += Start-Process -FilePath $shell -ArgumentList $arguments `
+            $started = Start-Process -FilePath $shell -ArgumentList $arguments `
                 -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+            # Windows PowerShell only reports ExitCode for a process whose handle was
+            # obtained while it was still running; without this the property reads as
+            # $null after the process has exited and the exit-code assertion below fails.
+            $null = $started.Handle
+            $script:Processes += $started
         }
 
         foreach ($process in $script:Processes) {
