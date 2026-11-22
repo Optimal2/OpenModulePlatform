@@ -67,6 +67,15 @@ default; `0` disables pruning). Database logging does not replace the per-proces
 files described above. Module hosts can adopt the same target, but must configure
 it explicitly.
 
+Where the target comes from differs. Portal and Auth declare it in their `NLog`
+section (checked in and in `Packaging/appsettings.json`). HostAgent and
+WorkerManager attach it in code at startup (`SystemLogNLogTarget.Attach` in each
+service), because both run on a settings file that is generated on the host: the
+generated WorkerManager and HostAgent configurations described below therefore
+contain no `systemlog` target, and do not need one. A `systemlog` target already
+present in the configuration is left as it is, and without an `OmpDb` connection
+string no target is attached.
+
 ## Configuration
 
 Each executable project has an `NLog` section in `appsettings.json`.
@@ -79,14 +88,35 @@ By default logs are written to:
 
 The log directory is ignored by Git through `.gitignore`.
 
-Every platform file target that reaches a host sets `maxArchiveDays` to 14, so
-NLog removes a process's own day files older than 14 days when it rolls over to
-a new day. That covers the checked-in `appsettings.json` of the services, the
-`Packaging/appsettings.json` of the packaged web apps listed below, and the
-configuration HostAgent generates for WorkerManager when no artifact
-configuration file is registered for it (`ArtifactConfigurationFileWriter.cs`;
-that template is what a host's WorkerManager normally runs with, not the
-checked-in file).
+Every NLog file target the repository checks in or generates sets
+`maxArchiveDays` to 14, so NLog removes a process's own day files older than 14
+days when it rolls over to a new day. The sources are:
+
+- the checked-in `appsettings.json` of every executable project, the example
+  modules included;
+- the `Packaging/appsettings.json` of the packaged web apps listed below;
+- the `appsettings.json` that `scripts/deployment/package-hostagent-first.ps1`
+  registers on the WorkerManager artifact
+  (`New-WorkerManagerArtifactConfigurationFile`). A registered file replaces
+  HostAgent's built-in template, so this is the configuration a WorkerManager
+  installed from that package runs with;
+- HostAgent's built-in WorkerManager template, used when no artifact
+  configuration file is registered (`ArtifactConfigurationFileWriter.cs`);
+- the `NLog` section a HostAgent self-upgrade writes into the next version's
+  settings when they have none (`HostAgentSelfUpgradeService.cs`);
+- the worker process host, which builds its file target in code
+  (`WorkerHostLogFile.RetentionDays`).
+
+`NLogFileTargetRetentionTests` in the HostAgent runtime tests finds the
+checked-in sections and the generators by scanning the repository rather than
+from a list, so a new source without the limit fails the build.
+
+The limit reaches an existing installation only through new configuration. A
+HostAgent self-upgrade adds an `NLog` section only when the settings have none,
+so a HostAgent that already carries a section without the limit keeps it until
+an operator adds `maxArchiveDays` there. Whether an installed WorkerManager
+picks the limit up depends on its registered artifact configuration file being
+replaced by the one from a newer package; this has not been measured on a host.
 
 The iFrame web app module is the exception in the other direction: its
 checked-in `appsettings.json` has an `NLog` section with the same limit, but the

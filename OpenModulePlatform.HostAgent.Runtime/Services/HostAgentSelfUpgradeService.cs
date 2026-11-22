@@ -782,7 +782,7 @@ public sealed class HostAgentSelfUpgradeService
         }
     }
 
-    private static void EnsureDefaultLoggingSettings(JsonObject json)
+    internal static void EnsureDefaultLoggingSettings(JsonObject json)
     {
         if (json["Logging"] is null)
         {
@@ -816,6 +816,9 @@ public sealed class HostAgentSelfUpgradeService
                 {
                     ["type"] = "File",
                     ["fileName"] = "${var:logDirectory}/${var:appName}-${shortdate}.log",
+                    // The same 14-day limit as the checked-in appsettings.json. Without it
+                    // a HostAgent that got its NLog section from here never removes a day file.
+                    ["maxArchiveDays"] = 14,
                     ["layout"] = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}"
                 },
                 ["console"] = new JsonObject
