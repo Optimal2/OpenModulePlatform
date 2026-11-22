@@ -60,7 +60,7 @@ public sealed class DashboardWidgetsModel : OmpPortalPageModel
             StatusMessage = T("Dashboard widget description updated.");
             return RedirectToPage("/Admin/DashboardWidgets");
         }
-        catch (InvalidOperationException ex)
+        catch (PortalRefusalException ex)
         {
             ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct, widgetId);
@@ -83,7 +83,7 @@ public sealed class DashboardWidgetsModel : OmpPortalPageModel
                 ? T("Dashboard widget enabled.")
                 : T("Dashboard widget disabled.");
         }
-        catch (InvalidOperationException ex)
+        catch (PortalRefusalException ex)
         {
             StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
         }

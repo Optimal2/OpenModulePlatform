@@ -61,10 +61,15 @@ public sealed class AppInstancesModel : OmpPortalPageModel
                 duplicateMessage: null,
                 foreignKeyMessage: "The runtime row could not be deleted. Delete or update dependent rows first."));
         }
-        // The repository refuses with InvalidOperationException when module or content rows
-        // still own the app instance, or when module runtime maintenance stops the delete.
-        // Those carry the operator's next step; without this they reached the error page.
-        catch (InvalidOperationException ex)
+        // The repository refuses with a PortalRefusalException when module or content rows
+        // still own the app instance, and module runtime maintenance stops the delete with its
+        // own exception type. Those carry the operator's next step; without this they reached
+        // the error page. Any other InvalidOperationException is not a refusal -- SqlClient
+        // reports an exhausted connection pool that way -- and goes to the ordinary error
+        // handling, which logs it, instead of being shown here as raw text.
+        catch (InvalidOperationException ex) when (ex
+            is PortalRefusalException
+            or OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceException)
         {
             StatusMessage = ex is OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceException
                 ? DeleteBlockedMessage(ex, "The runtime row could not be deleted.")

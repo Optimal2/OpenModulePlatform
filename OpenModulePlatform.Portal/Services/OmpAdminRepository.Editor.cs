@@ -4377,7 +4377,7 @@ WHERE AppInstanceId = @AppInstanceId;";
         var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, appInstanceId, ct);
         if (blockTemplateManagedRows && templateAppInstanceId.HasValue)
         {
-            throw new InvalidOperationException(
+            throw new PortalRefusalException(
                 "This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
         }
 
@@ -5623,7 +5623,7 @@ WHERE AppInstanceId = @Id
 
         if (blockers.Count > 0)
         {
-            throw new InvalidOperationException(
+            throw new PortalRefusalException(
                 "This app instance still owns "
                 + string.Join(" and ", blockers)
                 + ". Remove them in the owning module before deleting the app instance.");

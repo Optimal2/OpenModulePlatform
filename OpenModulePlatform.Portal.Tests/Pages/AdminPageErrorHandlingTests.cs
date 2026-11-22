@@ -63,9 +63,9 @@ public sealed class AdminPageErrorHandlingTests : IAsyncLifetime
     {
         var service = new PortalDashboardWidgetPackageService(Factory());
 
-        var enable = await Assert.ThrowsAsync<InvalidOperationException>(
+        var enable = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => service.SetWidgetEnabledAsync(999, false, CancellationToken.None));
-        var describe = await Assert.ThrowsAsync<InvalidOperationException>(
+        var describe = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => service.UpdateWidgetDescriptionAsync(999, "Example", CancellationToken.None));
         Assert.Equal("The selected dashboard widget was not found.", enable.Message);
         Assert.Equal("The selected dashboard widget was not found.", describe.Message);
@@ -159,8 +159,136 @@ public sealed class AdminPageErrorHandlingTests : IAsyncLifetime
                 model.StatusMessage);
         });
 
+    [Fact]
+    public async Task PreparedRefusals_AreTheirOwnExceptionType()
+    {
+        // The handlers tell a refusal from any other failure by this type, so the services
+        // have to throw it for the messages that are meant for the operator.
+        var widgets = new PortalDashboardWidgetPackageService(Factory());
+        var iframe = new IFrameAdminService(Factory());
+
+        await Assert.ThrowsAsync<PortalRefusalException>(
+            () => widgets.SetWidgetEnabledAsync(999, false, CancellationToken.None));
+        await Assert.ThrowsAsync<PortalRefusalException>(
+            () => widgets.UpdateWidgetDescriptionAsync(1, new string('x', 1001), CancellationToken.None));
+        await Assert.ThrowsAsync<PortalRefusalException>(
+            () => iframe.SetUrlEnabledAsync(1, true, CancellationToken.None));
+    }
+
+    public enum RefusalHandler
+    {
+        DashboardWidgetSetEnabled,
+        DashboardWidgetUpdateDescription,
+        IFrameSetUrlEnabled,
+        IFrameSetUrlSetEnabled,
+        AppInstanceDeleteRuntime
+    }
+
+    [Theory]
+    [InlineData(RefusalHandler.DashboardWidgetSetEnabled)]
+    [InlineData(RefusalHandler.DashboardWidgetUpdateDescription)]
+    [InlineData(RefusalHandler.IFrameSetUrlEnabled)]
+    [InlineData(RefusalHandler.IFrameSetUrlSetEnabled)]
+    [InlineData(RefusalHandler.AppInstanceDeleteRuntime)]
+    public Task AnExhaustedConnectionPool_IsNotShownAsARefusal(RefusalHandler handler)
+        => PageHandlerHarness.InEnglishAsync(async () =>
+        {
+            // SqlClient reports a pool with no free connection as InvalidOperationException,
+            // the very type the handlers used to catch for their prepared refusals. It is not
+            // one: it must reach the ordinary error handling (and so the log) instead of
+            // appearing as raw text in the status line.
+            var exhausted = new SqlConnectionStringBuilder(_connectionString)
+            {
+                Pooling = true,
+                MaxPoolSize = 1,
+                ConnectTimeout = 1,
+                ApplicationName = "omp-pool-exhausted-" + Guid.NewGuid().ToString("N")
+            }.ConnectionString;
+            // Taken through the factory, so it comes from the very pool the handler will ask:
+            // the factory completes the connection string, and the pool is keyed by the result.
+            var factory = Factory(exhausted);
+            await using var onlyConnection = factory.Create();
+            await onlyConnection.OpenAsync();
+
+            string? statusMessage = null;
+            var failure = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                switch (handler)
+                {
+                    case RefusalHandler.DashboardWidgetSetEnabled:
+                    case RefusalHandler.DashboardWidgetUpdateDescription:
+                        var widgets = PageHandlerHarness.Prepare(new DashboardWidgetsModel(
+                            PageHandlerHarness.AnonymousOptions(),
+                            null!,
+                            new PortalDashboardWidgetPackageService(factory)));
+                        try
+                        {
+                            if (handler == RefusalHandler.DashboardWidgetSetEnabled)
+                            {
+                                await widgets.OnPostSetEnabled(1, true, CancellationToken.None);
+                            }
+                            else
+                            {
+                                await widgets.OnPostUpdateDescription(1, "Example", CancellationToken.None);
+                            }
+                        }
+                        finally
+                        {
+                            statusMessage = widgets.StatusMessage;
+                        }
+
+                        break;
+                    case RefusalHandler.IFrameSetUrlEnabled:
+                    case RefusalHandler.IFrameSetUrlSetEnabled:
+                        var iframe = PageHandlerHarness.Prepare(new IFrameUrlsModel(
+                            PageHandlerHarness.AnonymousOptions(),
+                            null!,
+                            new IFrameAdminService(factory)));
+                        try
+                        {
+                            if (handler == RefusalHandler.IFrameSetUrlEnabled)
+                            {
+                                await iframe.OnPostSetUrlEnabled(1, true, CancellationToken.None);
+                            }
+                            else
+                            {
+                                await iframe.OnPostSetUrlSetEnabled(1, true, CancellationToken.None);
+                            }
+                        }
+                        finally
+                        {
+                            statusMessage = iframe.StatusMessage;
+                        }
+
+                        break;
+                    default:
+                        var appInstances = PageHandlerHarness.Prepare(new AppInstancesModel(
+                            PageHandlerHarness.AnonymousOptions(),
+                            null!,
+                            new OmpAdminRepository(factory)));
+                        try
+                        {
+                            await appInstances.OnPostDeleteRuntime(Guid.NewGuid(), CancellationToken.None);
+                        }
+                        finally
+                        {
+                            statusMessage = appInstances.StatusMessage;
+                        }
+
+                        break;
+                }
+            });
+
+            Assert.IsNotType<PortalRefusalException>(failure);
+            Assert.Contains("pool", failure.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(string.IsNullOrEmpty(statusMessage), $"The pool timeout was shown to the operator: {statusMessage}");
+        });
+
     private SqlConnectionFactory Factory()
+        => Factory(_connectionString);
+
+    private static SqlConnectionFactory Factory(string connectionString)
         => new(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:OmpDb"] = _connectionString })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:OmpDb"] = connectionString })
             .Build());
 }

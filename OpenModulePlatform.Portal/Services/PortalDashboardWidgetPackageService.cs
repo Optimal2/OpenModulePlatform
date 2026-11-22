@@ -140,7 +140,19 @@ WHERE widget_id = @widget_id;";
         string? description,
         CancellationToken ct)
     {
-        var cleanedDescription = CleanOptionalText(description, "description", 1000);
+        string? cleanedDescription;
+        try
+        {
+            cleanedDescription = CleanOptionalText(description, "description", 1000);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Here the text comes from the operator's own form, so the validation message is
+            // a refusal to show them. The package import uses the same validation and keeps
+            // its own handling.
+            throw new PortalRefusalException(ex.Message, ex);
+        }
+
         const string sql = @"
 UPDATE omp_portal.widgets
 SET description = @description,
@@ -162,7 +174,7 @@ WHERE widget_id = @widget_id;";
     {
         if (affectedRows == 0)
         {
-            throw new InvalidOperationException("The selected dashboard widget was not found.");
+            throw new PortalRefusalException("The selected dashboard widget was not found.");
         }
     }
 

@@ -71,7 +71,7 @@ VALUES(@url, @displayname, @allowed_roles, @enabled);";
         var setKey = request.SetKey.Trim();
         if (await UrlSetKeyExistsAsync(conn, setKey, ct))
         {
-            throw new InvalidOperationException("An iFrame URL set with this key already exists.");
+            throw new PortalRefusalException("An iFrame URL set with this key already exists.");
         }
 
         var requestedUrlIds = request.UrlIds
@@ -82,7 +82,7 @@ VALUES(@url, @displayname, @allowed_roles, @enabled);";
         var validUrlIds = await GetExistingUrlIdsAsync(conn, requestedUrlIds, ct);
         if (validUrlIds.Count != requestedUrlIds.Length)
         {
-            throw new InvalidOperationException("Select valid iFrame URLs.");
+            throw new PortalRefusalException("Select valid iFrame URLs.");
         }
 
         await using var tx = await conn.BeginTransactionAsync(ct);
@@ -272,7 +272,7 @@ ORDER BY usu.[url_set_id], usu.[sort_order], u.[displayname], u.[id];";
     {
         if (!await HasIFrameTablesAsync(conn, ct))
         {
-            throw new InvalidOperationException("The iFrame URL tables are not installed.");
+            throw new PortalRefusalException("The iFrame URL tables are not installed.");
         }
     }
 
