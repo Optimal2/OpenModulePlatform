@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
@@ -30,6 +29,11 @@ public sealed class PortalTopBarRuntimeAdvisoryRenderingTests
     [Fact]
     public async Task MvcTopBar_AdminAndNonAdminModelsRenderWithoutException()
     {
+        // The banner text is resolved when the model is built, not when the view renders, so
+        // the culture has to be pinned for the whole test: on a host whose culture has a
+        // translation (sv-SE) the model otherwise carries the translated title and the
+        // English assertions below fail.
+        using var culture = new PortalTopBarRuntimeAdvisoryTests.CultureScope("en-US");
         using var scope = _fixture.Factory.Services.CreateScope();
         var localizer = scope.ServiceProvider.GetRequiredService<IStringLocalizer<SharedResource>>();
         var advisory = OmpRuntimeAdvisory.Compare(new Version(10, 0, 14), "10.0.15");
@@ -84,19 +88,7 @@ public sealed class PortalTopBarRuntimeAdvisoryRenderingTests
             writer,
             new HtmlHelperOptions());
 
-        var culture = CultureInfo.CurrentCulture;
-        var uiCulture = CultureInfo.CurrentUICulture;
-        try
-        {
-            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
-            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
-            await viewResult.View.RenderAsync(viewContext);
-        }
-        finally
-        {
-            CultureInfo.CurrentCulture = culture;
-            CultureInfo.CurrentUICulture = uiCulture;
-        }
+        await viewResult.View.RenderAsync(viewContext);
 
         return writer.ToString();
     }

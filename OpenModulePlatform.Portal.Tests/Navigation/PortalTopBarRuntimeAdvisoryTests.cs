@@ -166,7 +166,12 @@ public sealed class PortalTopBarRuntimeAdvisoryTests
         public OmpRuntimeAdvisoryResult GetAdvisory() => getAdvisory();
     }
 
-    private sealed class CultureScope : IDisposable
+    /// <summary>
+    /// Pins the current culture for one test and restores it on dispose. CultureInfo's current
+    /// culture is stored per execution context, so the scope follows an async test across its
+    /// awaits and never leaks into tests running in parallel.
+    /// </summary>
+    internal sealed class CultureScope : IDisposable
     {
         private readonly CultureInfo _culture = CultureInfo.CurrentCulture;
         private readonly CultureInfo _uiCulture = CultureInfo.CurrentUICulture;
