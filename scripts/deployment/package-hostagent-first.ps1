@@ -1181,7 +1181,7 @@ function New-WorkerManagerArtifactConfigurationFile {
                     # file is registered on the WorkerManager artifact and replaces the
                     # template HostAgent has built in, so the limit has to be here too.
                     maxArchiveDays = 14
-                    layout ='${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}'
+                    layout = '${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}'
                 }
                 console = [ordered]@{
                     type = 'Console'
