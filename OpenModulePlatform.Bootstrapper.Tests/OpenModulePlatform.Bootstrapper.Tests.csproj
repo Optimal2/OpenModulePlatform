@@ -28,6 +28,7 @@
     <Using Include="Xunit" />
     <Compile Include="..\tests\shared\PlatformConfigurationImportContract.cs" Link="TestSupport\PlatformConfigurationImportContract.cs" />
     <Compile Include="..\tests\shared\ModuleDefinitionSqlSafetyContract.cs" Link="TestSupport\ModuleDefinitionSqlSafetyContract.cs" />
+    <Compile Include="..\tests\shared\PreOrdinalDirectoryHash.cs" Link="TestSupport\PreOrdinalDirectoryHash.cs" />
     <Using Include="OpenModulePlatform.Installation" />
   </ItemGroup>
 

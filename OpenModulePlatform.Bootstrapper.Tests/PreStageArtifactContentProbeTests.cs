@@ -1,6 +1,6 @@
 using System.IO.Compression;
-using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Bootstrapper.Tests;
 
@@ -121,8 +121,8 @@ public sealed class PreStageArtifactContentProbeTests : IDisposable
         // omp.Artifacts.Sha256 values registered before the directory hash ordered paths
         // with the ordinal comparer differ from today's hash of the same bytes whenever the
         // two orderings disagree ("B.txt" and "a.txt"). The import accepts those, so the
-        // gate has to as well; the legacy value itself is pinned against an independent copy
-        // of the old definition in ArtifactRegisteredHashTests.
+        // gate has to as well. The registered value is computed by PreOrdinalDirectoryHash, an
+        // independent copy of the old definition.
         var universal = BuildOrderSensitiveUniversalPackage("bravo");
         var canonicalHash = await HashOfOrderSensitiveContentAsync("bravo", legacyPathOrdering: false);
         var registeredHash = await HashOfOrderSensitiveContentAsync("bravo", legacyPathOrdering: true);
@@ -173,8 +173,10 @@ public sealed class PreStageArtifactContentProbeTests : IDisposable
         Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(Path.Join(directory, "B.txt"), bravoText);
         await File.WriteAllTextAsync(Path.Join(directory, "a.txt"), "alpha");
+        // The registered value comes from the independent copy of the old algorithm, never
+        // from the code under test.
         return legacyPathOrdering
-            ? await ArtifactRegisteredHash.ComputeLegacyDirectorySha256Async(directory, CancellationToken.None)
+            ? PreOrdinalDirectoryHash.Compute(directory)
             : await ArtifactHash.ComputeSha256Async(directory, CancellationToken.None);
     }
 

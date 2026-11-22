@@ -1,60 +1,14 @@
-using System.Security.Cryptography;
-using System.Text;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
 /// <summary>
-/// The directory hash as it was written before the path ordering became ordinal, kept here
-/// as an independent reference: these tests must not derive the "registered before the
-/// change" value from the code under test.
+/// The shared comparison of freshly measured content with a registered hash. The value
+/// "registered before the path ordering became ordinal" always comes from
+/// <see cref="PreOrdinalDirectoryHash"/>, an independent copy of the old algorithm.
 /// </summary>
-internal static class PreOrdinalDirectoryHash
-{
-    /// <summary>
-    /// File names for which the ordinal and the case-insensitive ordering disagree:
-    /// ordinal sorts "B.txt" and "Zeta" before "a.txt" and "alpha", case-insensitive after.
-    /// </summary>
-    public static readonly IReadOnlyList<(string RelativePath, string Content)> OrderSensitiveFiles =
-    [
-        ("B.txt", "bravo"),
-        ("a.txt", "alpha"),
-        (Path.Join("Zeta", "x"), "zeta-x"),
-        (Path.Join("alpha", "y"), "alpha-y")
-    ];
-
-    public static void WriteOrderSensitiveTree(string root)
-    {
-        foreach (var (relativePath, content) in OrderSensitiveFiles)
-        {
-            var path = Path.Join(root, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, content);
-        }
-    }
-
-    public static string Compute(string path)
-    {
-        using var sha = SHA256.Create();
-        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (var file in files)
-        {
-            var relativeBytes = Encoding.UTF8.GetBytes(Path.GetRelativePath(path, file).Replace('\\', '/'));
-            sha.TransformBlock(relativeBytes, 0, relativeBytes.Length, null, 0);
-            sha.TransformBlock([0], 0, 1, null, 0);
-            var content = File.ReadAllBytes(file);
-            sha.TransformBlock(content, 0, content.Length, null, 0);
-        }
-
-        sha.TransformFinalBlock([], 0, 0);
-        return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
-    }
-}
-
 public sealed class ArtifactRegisteredHashTests : IDisposable
 {
     private readonly string _root = Path.Join(Path.GetTempPath(), "omp-registered-hash-" + Guid.NewGuid().ToString("N"));

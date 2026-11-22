@@ -1,8 +1,8 @@
 using System.IO.Compression;
 using System.Text;
 using Microsoft.Data.SqlClient;
-using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -15,8 +15,8 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// "a.txt") the registered value no longer equals the hash an import computes for the very
 /// same bytes. Both import paths compare a freshly computed hash with the registered one, so
 /// both must read unchanged content as identical rather than as different content under the
-/// same version. The legacy value itself is pinned against an independent copy of the old
-/// definition in the HostAgent runtime tests (ArtifactRegisteredHashTests).
+/// same version. The registered value is computed by PreOrdinalDirectoryHash, an independent
+/// copy of the old definition.
 /// </remarks>
 public sealed partial class UniversalPackageSeedSqlOrderingTests
 {
@@ -128,7 +128,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests
             await File.WriteAllTextAsync(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
-        var registeredHash = await ArtifactRegisteredHash.ComputeLegacyDirectorySha256Async(payloadRoot, CancellationToken.None);
+        // From the independent copy of the old algorithm, never from the code under test.
+        var registeredHash = PreOrdinalDirectoryHash.Compute(payloadRoot);
         Assert.NotEqual(registeredHash, await ArtifactHash.ComputeSha256Async(payloadRoot, CancellationToken.None));
 
         var moduleId = await _fixture.InsertModuleAsync(moduleKey, schemaName);

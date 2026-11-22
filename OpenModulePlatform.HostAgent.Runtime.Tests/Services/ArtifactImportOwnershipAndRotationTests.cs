@@ -7,6 +7,7 @@ using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
 using OpenModulePlatform.ModuleDefinitions;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 

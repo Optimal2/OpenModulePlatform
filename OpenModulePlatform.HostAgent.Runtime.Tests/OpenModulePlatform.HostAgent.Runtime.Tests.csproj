@@ -34,6 +34,7 @@
     <Compile Include="..\tests\shared\OmpTestDatabaseNames.cs" Link="TestSupport\OmpTestDatabaseNames.cs" />
     <Compile Include="..\tests\shared\OmpTestCleanupLog.cs" Link="TestSupport\OmpTestCleanupLog.cs" />
     <Compile Include="..\tests\shared\OmpRepositoryFiles.cs" Link="TestSupport\OmpRepositoryFiles.cs" />
+    <Compile Include="..\tests\shared\PreOrdinalDirectoryHash.cs" Link="TestSupport\PreOrdinalDirectoryHash.cs" />
     <Compile Include="..\tests\shared\PlatformConfigurationImportContract.cs" Link="TestSupport\PlatformConfigurationImportContract.cs" />
     <Compile Include="..\tests\shared\ModuleDefinitionSqlSafetyContract.cs" Link="TestSupport\ModuleDefinitionSqlSafetyContract.cs" />
   </ItemGroup>

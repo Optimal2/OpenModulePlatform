@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
@@ -251,6 +252,29 @@ public sealed class ArtifactProvisionerTests : IDisposable
         Assert.False(Directory.Exists(localPath));
         var quarantined = Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(localPath)!, "*.corrupt-*"));
         Assert.Equal("ALPHA", await File.ReadAllTextAsync(Path.Join(quarantined, "a.txt")));
+    }
+
+    [Fact]
+    public async Task EnsureAsync_CachedContentChangedAfterAcceptanceThroughTheOldPathOrdering_IsRefused()
+    {
+        // Having matched through the old ordering once must not turn into standing trust:
+        // the remembered acceptance only decides which definition is tried first.
+        var localPath = Path.Join(_localRoot, "pkg", "target", "1.0");
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(localPath);
+        var registeredHash = PreOrdinalDirectoryHash.Compute(localPath);
+        var provisioner = CreateProvisioner();
+        var accepted = await provisioner.EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+        Assert.True(accepted.IsSuccess, accepted.ErrorMessage);
+
+        await File.WriteAllTextAsync(Path.Join(localPath, "a.txt"), "alpha, tampered with");
+
+        var afterChange = await provisioner.EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+
+        // The changed copy is quarantined; with no source to stage from, nothing is provisioned.
+        Assert.False(afterChange.IsSuccess);
+        Assert.False(Directory.Exists(localPath));
+        var quarantined = Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(localPath)!, "*.corrupt-*"));
+        Assert.Equal("alpha, tampered with", await File.ReadAllTextAsync(Path.Join(quarantined, "a.txt")));
     }
 
     private ArtifactProvisioner CreateProvisioner(ILogger<ArtifactProvisioner>? logger = null)
