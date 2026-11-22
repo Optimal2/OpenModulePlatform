@@ -581,9 +581,11 @@ flowchart LR
   descendants, and orders relative paths with the ordinal comparer on every
   platform. That ordering is canonical for everything registered since it was
   introduced (HostAgent 0.3.340). Older rows were hashed with case-insensitive
-  ordering and are not
-  rewritten, so every comparison of a fresh hash with a registered one also
-  accepts the older ordering when the canonical hash differs
+  ordering. A registered hash is kept for as long as the content is unchanged,
+  also when the Installer or Bootstrapper registers the same version again, so
+  an upgrade redeploys nothing; the canonical hash is written for new or
+  changed content. Every comparison of a fresh hash with a registered one
+  therefore also accepts the older ordering when the canonical hash differs
   (`ArtifactRegisteredHash.cs`); changed content matches neither. See
   "Artifact content verification" in `docs/HOST_AGENT.md`. HostAgent refuses to
   write its own control paths through overlays

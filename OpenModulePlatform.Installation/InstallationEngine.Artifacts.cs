@@ -466,15 +466,15 @@ public static partial class InstallationEngine
                 : null;
             if (artifactId is null)
             {
-                var sha256 = ComputeDirectorySha256(targetPath);
-                artifactId = await UpsertArtifactMetadataAsync(
+                artifactId = await RegisterArtifactContentAsync(
                     connection,
                     appId.Value,
                     identity.Version,
                     identity.PackageType,
                     identity.TargetName,
                     relativePath,
-                    sha256);
+                    targetPath,
+                    artifact.Target);
             }
             else
             {
@@ -588,6 +588,112 @@ SELECT @artifactId;
 
         var value = await command.ExecuteScalarAsync();
         return value is null or DBNull ? null : Convert.ToInt32(value);
+    }
+
+    /// <summary>
+    /// Registers the artifact content at <paramref name="targetPath"/> under its identity and
+    /// returns the artifact id.
+    /// </summary>
+    /// <remarks>
+    /// A row that already exists for the identity keeps its registered Sha256 as long as the
+    /// content is the content that value was computed for. That matters for rows registered
+    /// before the directory hash ordered relative paths with the ordinal comparer: their
+    /// value differs from today's canonical hash of the very same bytes whenever the two
+    /// orderings disagree. Writing the canonical hash over such a row changes the hash
+    /// HostAgent reports for the artifact, which no longer equals the hash recorded for the
+    /// deployed app, and every unbumped app is redeployed once for no change in content.
+    ///
+    /// The canonical hash is written when the content really differs from the registered
+    /// value (that is a change, and it must redeploy), when the row carries no hash, and
+    /// when the identity is new.
+    /// </remarks>
+    internal static async Task<int> RegisterArtifactContentAsync(
+        SqlConnection connection,
+        int appId,
+        string version,
+        string packageType,
+        string targetName,
+        string relativePath,
+        string targetPath,
+        string? displayName = null)
+    {
+        var canonicalSha256 = ComputeDirectorySha256(targetPath);
+        var registeredSha256 = await FindRegisteredArtifactSha256Async(
+            connection,
+            appId,
+            version,
+            packageType,
+            targetName);
+        var (sha256, match) = await ResolveSha256ToRegisterAsync(targetPath, canonicalSha256, registeredSha256);
+        if (match == ArtifactRegisteredHashMatch.LegacyPathOrdering)
+        {
+            InstallOutput.Info(
+                $"> Artifact metadata {displayName ?? relativePath}: content is unchanged; kept the SHA-256 registered with the legacy (case-insensitive) path ordering for version {version}.");
+        }
+
+        return await UpsertArtifactMetadataAsync(
+            connection,
+            appId,
+            version,
+            packageType,
+            targetName,
+            relativePath,
+            sha256);
+    }
+
+    /// <summary>
+    /// The Sha256 to store for content whose canonical hash is
+    /// <paramref name="canonicalSha256"/>: the registered value, untouched, when the content
+    /// matches it under the canonical or the legacy path ordering; otherwise the canonical
+    /// hash.
+    /// </summary>
+    internal static async Task<(string Sha256, ArtifactRegisteredHashMatch Match)> ResolveSha256ToRegisterAsync(
+        string targetPath,
+        string canonicalSha256,
+        string? registeredSha256)
+    {
+        if (string.IsNullOrWhiteSpace(registeredSha256))
+        {
+            return (canonicalSha256, ArtifactRegisteredHashMatch.Mismatch);
+        }
+
+        var match = await ArtifactRegisteredHash.MatchAsync(
+            targetPath,
+            canonicalSha256,
+            registeredSha256,
+            CancellationToken.None);
+        return match == ArtifactRegisteredHashMatch.Mismatch
+            ? (canonicalSha256, match)
+            : (registeredSha256, match);
+    }
+
+    internal static async Task<string?> FindRegisteredArtifactSha256Async(
+        SqlConnection connection,
+        int appId,
+        string version,
+        string packageType,
+        string targetName)
+    {
+        // The same identity predicate as UpsertArtifactMetadataAsync, so the value read here
+        // is the value of exactly the row(s) that statement updates.
+        const string sql = """
+SELECT TOP (1) Sha256
+FROM omp.Artifacts
+WHERE AppId = @appId
+  AND Version = @version
+  AND PackageType = @packageType
+  AND ((TargetName = @targetName) OR (TargetName IS NULL AND @targetName IS NULL))
+ORDER BY ArtifactId;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@appId", appId);
+        command.Parameters.AddWithValue("@version", version);
+        command.Parameters.AddWithValue("@packageType", packageType);
+        command.Parameters.AddWithValue("@targetName", string.IsNullOrWhiteSpace(targetName) ? DBNull.Value : targetName.Trim());
+
+        var value = await command.ExecuteScalarAsync();
+        return value is null or DBNull ? null : Convert.ToString(value);
     }
 
     internal static async Task<int> UpsertArtifactMetadataAsync(

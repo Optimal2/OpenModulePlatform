@@ -65,10 +65,10 @@ Portal import and upload, and the Bootstrapper.
 **Rows registered before that.** Earlier versions sorted the paths
 case-insensitively. For most trees both orderings are the same and so is the
 hash, but not for a tree that mixes upper- and lower-case leading characters
-(`B.txt` next to `a.txt`). `omp.Artifacts.Sha256` is not rewritten on upgrade,
-so every comparison between a freshly computed hash and a registered one
-accepts either definition (`ArtifactRegisteredHash` in
-`OpenModulePlatform.Artifacts`):
+(`B.txt` next to `a.txt`). A registered `omp.Artifacts.Sha256` is kept for as
+long as the content is unchanged (see "Registered hashes are kept" below), so
+every comparison between a freshly computed hash and a registered one accepts
+either definition (`ArtifactRegisteredHash` in `OpenModulePlatform.Artifacts`):
 
 - The canonical hash is compared first. Only when it differs is the older
   ordering computed, and only for a directory whose two orderings actually
@@ -99,12 +99,74 @@ to an artifact of a *different* component looks the canonical hash up in
 with the older ordering. That check guards against a packaging mistake, not
 against tampering.
 
-**Possible follow-up, not implemented.** Nothing rewrites the older values.
-Recomputing `omp.Artifacts.Sha256` with the canonical ordering is a data
-migration that needs its own decision: it has to read every artifact from the
-central store, it changes the value every host compares against, and the
+**Registered hashes are kept.** No path replaces the registered hash of an
+existing artifact version while its content is unchanged, so an upgrade does not
+redeploy anything:
+
+- The HostAgent and Portal package imports and the Portal artifact upload
+  treat matching content as already imported and leave the row alone. They
+  write a hash only for a new identity, for a row that carries no hash, or
+  (Portal, with replacement confirmed) for content that differs.
+- The Installer and Bootstrapper register every artifact in their package,
+  also one whose version is already registered. They read the registered
+  value first and store it back untouched when the content matches it under
+  either definition (`RegisterArtifactContentAsync` in
+  `InstallationEngine.Artifacts.cs`); the install log notes when that was the
+  older ordering. Fast mode reuses the existing row without hashing at all.
+- The canonical hash is written when the artifact is new, when the row has no
+  hash, and when the content really differs from the registered value. Only
+  the last case changes what HostAgent reports for an existing artifact, and
+  then the apps using it are redeployed, as they must be.
+
+Between the ordering change (commit a9ac390f, HostAgent 0.3.340) and this rule,
+an Installer or Bootstrapper run outside fast mode wrote the canonical hash
+over every artifact it registered again. For an artifact whose two orderings
+differ that changed the reported hash without any change in content, and each
+unbumped app using it was redeployed once, with the application pool recycle
+or service restart a deployment involves. Rows rewritten that way now hold the
+canonical hash and are simply verified through it.
+
+**Possible follow-up, not implemented.** Nothing converts the older values.
+Recomputing `omp.Artifacts.Sha256` with the canonical ordering everywhere is a
+data migration that needs its own decision: it has to read every artifact from
+the central store, it changes the value every host compares against, and the
 `ContentSha256` columns above would have to move with it or each affected app
 is redeployed once. Until then the two-definition comparison has to stay.
+
+### Recovery after HostAgent 0.3.340 to 0.3.342
+
+Those versions compared with the canonical hash only. On a host that ran one of
+them, every directory artifact registered with the older ordering and a tree
+whose two orderings differ was reported as "Local artifact hash mismatch", its
+cached copy was moved to `<version>.corrupt-<timestamp>`, and the fresh copy
+was then rejected with "Downloaded artifact hash mismatch" on every cycle.
+
+- A HostAgent with the two-definition comparison (0.3.343 or later) stages
+  those artifacts from the central artifact root again and accepts them. No
+  manual step is needed for that.
+- The quarantined `<version>.corrupt-<timestamp>` folders are not restored and
+  not removed by this. HostAgent deletes such a folder only when the same
+  artifact fails verification again, and the artifact cache cleanup job
+  deletes the artifact folders it is given, not their quarantined siblings
+  (read from `ArtifactProvisioner.cs` and `HostAgentJobProcessor.cs`). They
+  hold a complete, unchanged copy of the artifact and can be deleted once the
+  artifact is provisioned again.
+- Where the cached folder was in use by a running process, the move into
+  quarantine failed. Such an artifact was never quarantined; the provisioning
+  attempt ended with an error on every cycle instead, and the cached copy is
+  accepted in place by the corrected HostAgent.
+
+### Mixed HostAgent versions
+
+Derived from the code, not measured. HostAgent 0.3.339 and earlier know only
+the older ordering. They therefore reject an artifact whose
+`omp.Artifacts.Sha256` was registered with the canonical ordering, when its
+tree is one where the two orderings differ. A row gets the canonical hash when
+it is new and imported by HostAgent 0.3.340 or later, imported or uploaded
+through a Portal built after the ordering change, or registered by an installer
+built after it. In an installation with several hosts, upgrade HostAgent on every
+host to a version with the two-definition comparison before importing new
+artifacts.
 
 ## SQL objects
 
