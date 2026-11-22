@@ -57,13 +57,27 @@ $buildRoot = Join-Path $guardRoot $callerKey
 $isolatedValidator = Join-Path $buildRoot 'bin\ModuleSqlGuard\Release\net10.0\ModuleSqlGuard.dll'
 . (Join-Path $PSScriptRoot 'module-sql-validator-support.ps1')
 
+# Held from here to the end of the script (the try that follows is closed at the very
+# end of the file; its body is left unindented so the change stays readable). While
+# the handle is open, no cleanup in another process can take this caller's build
+# folder away: the cleanup renames a folder before deleting it, and Windows refuses
+# to rename a folder with an open file in it. A -NoBuild run holds an existing folder
+# the same way but never creates one.
+$buildRootHold = $null
+try {
+try {
+    $buildRootHold = Enter-ModuleSqlGuardBuildRoot -BuildRoot $buildRoot -CallerRoot $validationRepositoryRoot -ExistingOnly:$NoBuild
+}
+catch {
+    Write-Verbose "Module SQL validator build folder could not be held against cleanup: $($_.Exception.Message)"
+}
+
 if (-not $NoBuild) {
     Write-Verbose "Module SQL validator isolated build root: $buildRoot"
     # Isolated build folders of callers that are gone, or that have not validated
     # anything for a week, are removed here. Never this caller's own folder, and
     # never at the cost of the validation: the helper swallows its own failures.
     try {
-        Set-ModuleSqlGuardBuildRootInUse -BuildRoot $buildRoot -CallerRoot $validationRepositoryRoot
         $removedBuildRoots = @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $guardRoot -CurrentBuildRoot $buildRoot)
         if ($removedBuildRoots.Count -gt 0) {
             Write-Verbose "Removed $($removedBuildRoots.Count) unused module SQL validator build folder(s) below $guardRoot."
@@ -323,3 +337,7 @@ else {
 
 & dotnet $validator @arguments
 if ($LASTEXITCODE -ne 0) { throw "Module SQL validation failed ($LASTEXITCODE)." }
+}
+finally {
+    if ($null -ne $buildRootHold) { $buildRootHold.Dispose() }
+}

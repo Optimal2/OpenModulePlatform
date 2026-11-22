@@ -1,142 +1,42 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-Shared helpers for the module SQL validator scripts. Dot-source this file.
+Shared helpers for Test-ModuleSqlGuards.ps1. Dot-source this file.
 
 .DESCRIPTION
-Test-ModuleSqlGuards.ps1 and get-module-sql-validator-identity.ps1 have to agree on
-what the validator is built from, and the guard has to keep its isolated build
-folders from accumulating. Both live here so there is one definition of each:
+The guard builds the validator into an isolated folder per caller and has to keep
+those folders from accumulating, and under -NoBuild it has to know whether a built
+validator is still current.
 
-- Get-ModuleSqlValidatorSourceFiles lists every file the validator is built from,
-  derived from ModuleSqlGuard.csproj rather than from a hand-kept list.
 - Get-ModuleSqlValidatorStaleSource tells whether a built validator is older than
-  those files.
+  the files it is built from.
+- Enter-ModuleSqlGuardBuildRoot marks an isolated build folder as used and holds it
+  against removal for as long as the caller keeps the returned handle.
 - Remove-StaleModuleSqlGuardBuildRoots removes isolated build folders that are no
   longer used.
+
+The list of files the validator is built from is NOT defined here. It lives in
+get-module-sql-validator-identity.ps1, which consumers copy on its own into their
+test fixtures and which therefore has to work without this file; this file takes
+the definition from there, so there is still exactly one.
 
 The file defines functions only and has no effect when dot-sourced.
 #>
 
 Set-StrictMode -Version Latest
 
+# The one definition of "what the validator is built from"
+# (Get-ModuleSqlValidatorSourceFiles and the build-output filter it uses).
+. (Join-Path $PSScriptRoot 'get-module-sql-validator-identity.ps1') -DefineFunctionsOnly
+
 $script:ModuleSqlGuardLastUsedMarker = '.omp-guard-last-used'
 $script:ModuleSqlGuardCallerRootMarker = '.omp-guard-caller-root'
 $script:ModuleSqlGuardRootName = 'omp-module-sql-guard'
 
-function Test-ModuleSqlValidatorGeneratedPath {
-    <#
-    .SYNOPSIS
-    True for a path below a project folder that holds build output, not source.
-    #>
-    param([Parameter(Mandatory = $true)][string]$RelativePath)
-
-    return $RelativePath -match '(?i)(^|[\\/])(bin|obj)([\\/]|$)'
-}
-
-function Get-ModuleSqlValidatorSourceFiles {
-    <#
-    .SYNOPSIS
-    Every file the module SQL validator is built from, as sorted full paths.
-
-    .DESCRIPTION
-    Starts at tools/ModuleSqlGuard/ModuleSqlGuard.csproj and follows ProjectReference
-    items transitively. For each project it takes every file below the project folder
-    except bin and obj, and every file an item in the project file includes from
-    outside that folder (the rule sources under shared/ are compiled in that way).
-    The repository-wide build files that shape every project are included as well.
-
-    Taking whole project folders is deliberately generous: an extra file can only
-    make a cache key change once too often, while a missing one lets a changed rule
-    keep an old key or an old validator pass as current.
-
-    A referenced project or an included file that does not exist is an error, because
-    a list that silently omits it would not describe the validator.
-    #>
-    param([Parameter(Mandatory = $true)][string]$PlatformRoot)
-
-    $root = [System.IO.Path]::GetFullPath($PlatformRoot).TrimEnd('\', '/')
-    $files = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-
-    foreach ($name in @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props', 'global.json')) {
-        $buildFile = Join-Path $root $name
-        if (Test-Path -LiteralPath $buildFile -PathType Leaf) { [void]$files.Add($buildFile) }
-    }
-
-    $toolRoot = Join-Path $root 'tools\ModuleSqlGuard'
-    $entryProject = Join-Path $toolRoot 'ModuleSqlGuard.csproj'
-    if (-not (Test-Path -LiteralPath $entryProject -PathType Leaf)) {
-        # No project file to derive from: fall back to the tool folder itself, which is
-        # all a checkout without the project can offer.
-        if (Test-Path -LiteralPath $toolRoot -PathType Container) {
-            foreach ($file in [System.IO.Directory]::EnumerateFiles($toolRoot, '*', [System.IO.SearchOption]::AllDirectories)) {
-                $relative = $file.Substring($toolRoot.Length).TrimStart('\', '/')
-                if (-not (Test-ModuleSqlValidatorGeneratedPath -RelativePath $relative)) { [void]$files.Add($file) }
-            }
-        }
-        return @($files | Sort-Object)
-    }
-
-    $pending = New-Object 'System.Collections.Generic.Queue[string]'
-    $seenProjects = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    $pending.Enqueue([System.IO.Path]::GetFullPath($entryProject))
-    $includeItems = @('Compile', 'EmbeddedResource', 'Content', 'None', 'AdditionalFiles')
-
-    while ($pending.Count -gt 0) {
-        $projectPath = $pending.Dequeue()
-        if (-not $seenProjects.Add($projectPath)) { continue }
-        if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) {
-            throw "Module SQL validator project is missing: $projectPath"
-        }
-
-        $projectDirectory = Split-Path -Parent $projectPath
-        foreach ($file in [System.IO.Directory]::EnumerateFiles($projectDirectory, '*', [System.IO.SearchOption]::AllDirectories)) {
-            $relative = $file.Substring($projectDirectory.Length).TrimStart('\', '/')
-            if (-not (Test-ModuleSqlValidatorGeneratedPath -RelativePath $relative)) { [void]$files.Add($file) }
-        }
-
-        $projectXml = New-Object System.Xml.XmlDocument
-        $projectXml.Load($projectPath)
-        foreach ($node in $projectXml.SelectNodes('//*[@Include]')) {
-            $include = [string]$node.GetAttribute('Include')
-            if ([string]::IsNullOrWhiteSpace($include)) { continue }
-
-            if ($node.LocalName -eq 'ProjectReference') {
-                $referenced = [System.IO.Path]::GetFullPath((Join-Path $projectDirectory $include))
-                if (-not (Test-Path -LiteralPath $referenced -PathType Leaf)) {
-                    throw "Module SQL validator project '$projectPath' references a project that does not exist: $include"
-                }
-                $pending.Enqueue($referenced)
-                continue
-            }
-
-            if ($includeItems -notcontains $node.LocalName) { continue }
-
-            foreach ($pattern in $include.Split(';')) {
-                $trimmed = $pattern.Trim()
-                if ($trimmed.Length -eq 0 -or $trimmed.Contains('$(') -or $trimmed.Contains('@(')) { continue }
-                if ($trimmed.IndexOfAny([char[]]@('*', '?')) -ge 0) {
-                    # A wildcard below the project folder is already covered by the folder
-                    # walk above. One that reaches outside cannot be listed without
-                    # evaluating the project, so it is refused rather than guessed at.
-                    $wildcardBase = [System.IO.Path]::GetFullPath((Join-Path $projectDirectory ($trimmed -replace '[*?].*$', '')))
-                    if (-not ($wildcardBase + '\').StartsWith($projectDirectory.TrimEnd('\', '/') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
-                        throw "Module SQL validator project '$projectPath' includes files outside its folder with a wildcard ('$trimmed'); list them explicitly so they can be tracked."
-                    }
-                    continue
-                }
-
-                $included = [System.IO.Path]::GetFullPath((Join-Path $projectDirectory $trimmed))
-                if (-not (Test-Path -LiteralPath $included -PathType Leaf)) {
-                    throw "Module SQL validator project '$projectPath' includes a file that does not exist: $trimmed"
-                }
-                [void]$files.Add($included)
-            }
-        }
-    }
-
-    return @($files | Sort-Object)
-}
+# Names are compared case-sensitively (-cmatch): the guard writes its hash in lower
+# case, and anything else in the folder is not the guard's to remove.
+$script:ModuleSqlGuardBuildRootPattern = '^[0-9a-f]{64}$'
+$script:ModuleSqlGuardLeftoverPattern = '^del-[0-9a-f]{16}$'
 
 function Get-ModuleSqlValidatorStaleSource {
     <#
@@ -153,7 +53,12 @@ function Get-ModuleSqlValidatorStaleSource {
     Only files the build reads count (C# sources, project and props/targets files,
     resources). A file that cannot change the build, such as a note in a project
     folder or global.json, would otherwise condemn a current validator, because no
-    rebuild would ever make the DLL newer than it.
+    rebuild would ever make the DLL newer than it. For the same reason the source
+    list leaves out what MSBuild leaves out of a project (bin, obj and artifacts
+    directly below the project folder, and dot-folders).
+
+    The comparison is by modification time. A source whose content changed while its
+    time was kept is not detected.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$ValidatorPath,
@@ -197,24 +102,120 @@ function Set-ModuleSqlGuardBuildRootInUse {
     [System.IO.File]::WriteAllText((Join-Path $BuildRoot $script:ModuleSqlGuardLastUsedMarker), [System.DateTime]::UtcNow.ToString('o'))
 }
 
-function Remove-ModuleSqlGuardTree {
+function Enter-ModuleSqlGuardBuildRoot {
     <#
     .SYNOPSIS
-    Deletes a folder tree without ever following a junction or symbolic link.
+    Marks an isolated build folder as used and returns an open handle on its marker.
+    The folder cannot be removed by the cleanup while the handle is open.
 
     .DESCRIPTION
-    A link found inside the tree is removed as a link; what it points at is left
-    alone. Read-only files are made writable first, as build output can carry that
-    attribute.
+    Marking alone leaves a gap: a cleanup in another process can read the folder's
+    age just before this run marks it and rename it just after, taking the folder
+    away from under a build that has already started. The cleanup renames a folder
+    before it deletes anything, and Windows refuses to rename a folder while a file
+    in it is open, so holding the marker open closes the gap without a lock of its
+    own: the rename fails and the cleanup leaves the folder alone.
+
+    The handle is opened for reading and shares reading and writing, but not
+    deletion, so several runs of the same caller can hold it at once and each can
+    still refresh the marker.
+
+    If a cleanup wins the race between the marking and the open, the folder is gone
+    and the open fails; the folder is then simply created and marked again.
+
+    With -ExistingOnly nothing is created: the result is $null when the folder does
+    not exist (a -NoBuild run has no business creating a build folder).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$BuildRoot,
+        [Parameter(Mandatory = $true)][string]$CallerRoot,
+        [switch]$ExistingOnly
+    )
+
+    $marker = Join-Path $BuildRoot $script:ModuleSqlGuardLastUsedMarker
+    for ($attempt = 1; ; $attempt++) {
+        if ($ExistingOnly -and -not [System.IO.Directory]::Exists($BuildRoot)) { return $null }
+        try {
+            Set-ModuleSqlGuardBuildRootInUse -BuildRoot $BuildRoot -CallerRoot $CallerRoot
+            return [System.IO.File]::Open(
+                $marker,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                [System.IO.FileShare]::ReadWrite)
+        }
+        catch [System.IO.IOException] {
+            # DirectoryNotFoundException and FileNotFoundException are IOExceptions: the
+            # folder was renamed away between the marking and the open.
+            if ($attempt -ge 5) { throw }
+        }
+    }
+}
+
+function Test-ModuleSqlGuardRoot {
+    <#
+    .SYNOPSIS
+    True when the path is a guard root this file may remove folders from: an absolute
+    path whose last segment is 'omp-module-sql-guard' and which is a real folder, not
+    a junction or symbolic link. Returns the normalized root through -Root.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$GuardRoot,
+        [ref]$Root
+    )
+
+    if ([string]::IsNullOrWhiteSpace($GuardRoot) -or -not [System.IO.Path]::IsPathRooted($GuardRoot)) { return $false }
+    try {
+        $normalized = [System.IO.Path]::GetFullPath($GuardRoot).TrimEnd('\', '/')
+    }
+    catch {
+        return $false
+    }
+    if ([System.IO.Path]::GetFileName($normalized) -cne $script:ModuleSqlGuardRootName) { return $false }
+    if (-not [System.IO.Directory]::Exists($normalized)) { return $false }
+    if (([System.IO.File]::GetAttributes($normalized) -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $false }
+
+    if ($null -ne $Root) { $Root.Value = $normalized }
+    return $true
+}
+
+function Test-ModuleSqlGuardRemovableFolder {
+    <#
+    .SYNOPSIS
+    True when the path is a folder the cleanup may delete: a real folder (not a
+    junction or symbolic link) directly below the given, already verified guard root,
+    named like a build folder or like a folder the cleanup renamed for deletion.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+
+    $name = [System.IO.Path]::GetFileName($Path)
+    if (-not ($name -cmatch $script:ModuleSqlGuardBuildRootPattern -or $name -cmatch $script:ModuleSqlGuardLeftoverPattern)) { return $false }
+    if (-not [string]::Equals([System.IO.Path]::GetDirectoryName($Path), $Root, [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+    if (-not [System.IO.Directory]::Exists($Path)) { return $false }
+    if (([System.IO.File]::GetAttributes($Path) -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $false }
+    return $true
+}
+
+function Remove-ModuleSqlGuardTreeContent {
+    <#
+    .SYNOPSIS
+    Deletes what is inside a folder, then the folder, without following links.
+    Internal: call Remove-ModuleSqlGuardTree, which decides whether the folder may go.
     #>
     param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (([System.IO.File]::GetAttributes($Path) -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to delete through a junction or symbolic link: $Path"
+    }
 
     foreach ($entry in [System.IO.Directory]::GetFileSystemEntries($Path)) {
         $attributes = [System.IO.File]::GetAttributes($entry)
         $isDirectory = ($attributes -band [System.IO.FileAttributes]::Directory) -ne 0
         $isLink = ($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
         if ($isDirectory -and -not $isLink) {
-            Remove-ModuleSqlGuardTree -Path $entry
+            Remove-ModuleSqlGuardTreeContent -Path $entry
             continue
         }
 
@@ -225,6 +226,70 @@ function Remove-ModuleSqlGuardTree {
     }
 
     [System.IO.Directory]::Delete($Path, $false)
+}
+
+function Remove-ModuleSqlGuardTree {
+    <#
+    .SYNOPSIS
+    Deletes one build folder below the guard root, without ever following a junction
+    or symbolic link.
+
+    .DESCRIPTION
+    The function checks its own argument and does not rely on its caller having done
+    so: the path must be a real folder directly below a real guard root and be named
+    like a build folder or like one renamed for deletion. Anything else is refused
+    with an error and nothing is deleted. In particular a junction passed here is
+    refused; emptying it would delete the files of whatever it points at.
+
+    A link found inside the tree is removed as a link; what it points at is left
+    alone. Read-only files are made writable first, as build output can carry that
+    attribute.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$GuardRoot
+    )
+
+    $root = ''
+    if (-not (Test-ModuleSqlGuardRoot -GuardRoot $GuardRoot -Root ([ref]$root))) {
+        throw "Refusing to delete below '$GuardRoot': it is not a module SQL guard root."
+    }
+    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    if (-not (Test-ModuleSqlGuardRemovableFolder -Path $fullPath -Root $root)) {
+        throw "Refusing to delete '$Path': it is not a build folder directly below '$root', or it is a junction or symbolic link."
+    }
+
+    Remove-ModuleSqlGuardTreeContent -Path $fullPath
+}
+
+function Test-ModuleSqlGuardTreeWithinClassicPathLimit {
+    <#
+    .SYNOPSIS
+    True when every path in the tree is short enough for an engine without long path
+    support to delete it. Links are not followed.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        $pending = New-Object 'System.Collections.Generic.Stack[string]'
+        $pending.Push($Path)
+        while ($pending.Count -gt 0) {
+            foreach ($entry in [System.IO.Directory]::GetFileSystemEntries($pending.Pop())) {
+                # 248 is the classic limit for a folder path and the stricter of the two.
+                if ($entry.Length -ge 248) { return $false }
+                $attributes = [System.IO.File]::GetAttributes($entry)
+                if (($attributes -band [System.IO.FileAttributes]::Directory) -ne 0 -and
+                    ($attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+                    $pending.Push($entry)
+                }
+            }
+        }
+        return $true
+    }
+    catch {
+        # An engine that cannot even list the tree cannot delete it either.
+        return $false
+    }
 }
 
 function Remove-StaleModuleSqlGuardBuildRoots {
@@ -249,12 +314,22 @@ function Remove-StaleModuleSqlGuardBuildRoots {
     What it never touches:
     - anything unless GuardRoot is an absolute path whose last segment is
       'omp-module-sql-guard' and which is a real folder, not a link;
-    - anything that is not a direct child folder of GuardRoot named by a 64-character
-      hash (or such a folder this function itself renamed for deletion earlier);
+    - anything that is not a direct child folder of GuardRoot named by a lower-case
+      64-character hash (or such a folder this function itself renamed for deletion
+      earlier);
     - a child that is a link, the folder passed as CurrentBuildRoot, or a folder that
       was used recently;
-    - a folder in which a file is open: it is renamed before deletion, which Windows
-      refuses while anything inside is in use, and is then left for a later run.
+    - a folder in which a file is open, which includes every folder a running guard
+      holds through Enter-ModuleSqlGuardBuildRoot: it is renamed before deletion,
+      which Windows refuses while anything inside is open, and is then left for a
+      later run. The folder is checked again after the rename, immediately before
+      the first file is deleted.
+
+    Windows PowerShell cannot delete a path beyond the classic length limit, although
+    it can rename the folder above it. A folder holding such a path is therefore not
+    touched by that engine at all and is reported in one line; a PowerShell 7 run
+    removes it. (ClassicPathLimit defaults to the running engine and exists as a
+    parameter so the rule can be tested on either.)
 
     Failures are swallowed per folder. Cleanup must never fail the validation it rides on.
     #>
@@ -263,21 +338,13 @@ function Remove-StaleModuleSqlGuardBuildRoots {
         [AllowEmptyString()][string]$CurrentBuildRoot = '',
         [int]$MaxAgeDays = 7,
         [int]$OrphanGraceMinutes = 60,
-        [System.DateTime]$NowUtc = [System.DateTime]::UtcNow
+        [System.DateTime]$NowUtc = [System.DateTime]::UtcNow,
+        [bool]$ClassicPathLimit = ($PSVersionTable.PSVersion.Major -le 5)
     )
 
     $removed = New-Object 'System.Collections.Generic.List[string]'
-    if ([string]::IsNullOrWhiteSpace($GuardRoot) -or -not [System.IO.Path]::IsPathRooted($GuardRoot)) { return @() }
-
-    try {
-        $root = [System.IO.Path]::GetFullPath($GuardRoot).TrimEnd('\', '/')
-    }
-    catch {
-        return @()
-    }
-    if ([System.IO.Path]::GetFileName($root) -ne $script:ModuleSqlGuardRootName) { return @() }
-    if (-not [System.IO.Directory]::Exists($root)) { return @() }
-    if (([System.IO.File]::GetAttributes($root) -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return @() }
+    $root = ''
+    if (-not (Test-ModuleSqlGuardRoot -GuardRoot $GuardRoot -Root ([ref]$root))) { return @() }
 
     $current = ''
     if (-not [string]::IsNullOrWhiteSpace($CurrentBuildRoot)) {
@@ -286,15 +353,11 @@ function Remove-StaleModuleSqlGuardBuildRoots {
 
     foreach ($candidate in [System.IO.Directory]::GetDirectories($root)) {
         try {
-            $name = [System.IO.Path]::GetFileName($candidate)
-            $isBuildRoot = $name -match '^[0-9a-f]{64}$'
-            $isLeftover = $name -match '^del-[0-9a-f]{16}$'
-            if (-not ($isBuildRoot -or $isLeftover)) { continue }
-            if (-not [string]::Equals([System.IO.Path]::GetDirectoryName($candidate), $root, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
-            if (([System.IO.File]::GetAttributes($candidate) -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+            if (-not (Test-ModuleSqlGuardRemovableFolder -Path $candidate -Root $root)) { continue }
             if ($current.Length -gt 0 -and [string]::Equals($candidate, $current, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
 
-            $doomed = $candidate
+            $name = [System.IO.Path]::GetFileName($candidate)
+            $isBuildRoot = $name -cmatch $script:ModuleSqlGuardBuildRootPattern
             if ($isBuildRoot) {
                 $usedUtc = [System.IO.Directory]::GetLastWriteTimeUtc($candidate)
                 $marker = Join-Path $candidate $script:ModuleSqlGuardLastUsedMarker
@@ -314,7 +377,15 @@ function Remove-StaleModuleSqlGuardBuildRoots {
                 $expired = $age.TotalDays -ge $MaxAgeDays
                 $abandoned = $orphaned -and $age.TotalMinutes -ge $OrphanGraceMinutes
                 if (-not ($expired -or $abandoned)) { continue }
+            }
 
+            if ($ClassicPathLimit -and -not (Test-ModuleSqlGuardTreeWithinClassicPathLimit -Path $candidate)) {
+                Write-Host "Module SQL validator build folder was not removed: $candidate holds paths beyond the classic length limit, which this PowerShell engine cannot delete. A PowerShell 7 run removes it."
+                continue
+            }
+
+            $doomed = $candidate
+            if ($isBuildRoot) {
                 # The rename is the in-use test: Windows refuses it while any file below
                 # the folder is open, and it takes the folder out of every caller's way
                 # before the first file is deleted. The new name is shorter than the old
@@ -325,7 +396,8 @@ function Remove-StaleModuleSqlGuardBuildRoots {
                 [System.IO.Directory]::Move($candidate, $doomed)
             }
 
-            Remove-ModuleSqlGuardTree -Path $doomed
+            # Checks the renamed folder once more before anything is deleted.
+            Remove-ModuleSqlGuardTree -Path $doomed -GuardRoot $root
             $removed.Add($candidate)
         }
         catch {

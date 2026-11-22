@@ -34,13 +34,10 @@ Describe 'Module SQL guard isolated build folder cleanup' {
         function New-DirectoryLink {
             param([string]$LinkPath, [string]$TargetPath)
 
-            try {
-                $null = New-Item -ItemType Junction -Path $LinkPath -Target $TargetPath -ErrorAction Stop
-                return (Test-Path -LiteralPath $LinkPath)
-            }
-            catch {
-                return $false
-            }
+            # A real junction, made the way an operator or a tool would make one.
+            $null = & cmd.exe /c mklink /J "$LinkPath" "$TargetPath" 2>&1
+            if ($LASTEXITCODE -ne 0) { return $false }
+            return (([IO.File]::GetAttributes($LinkPath) -band [IO.FileAttributes]::ReparsePoint) -ne 0)
         }
     }
 
@@ -189,6 +186,153 @@ Describe 'Module SQL guard isolated build folder cleanup' {
         Test-Path -LiteralPath $precious | Should -BeTrue
     }
 
+    It 'Never removes a folder a running guard holds, however old it looks' {
+        # The race this closes: a cleanup reads the age, the owner marks the folder and
+        # starts building, the cleanup renames it. The owner holds the marker open
+        # instead, and the rename cannot happen.
+        $held = New-GuardBuildRoot -GuardRoot $script:GuardRoot -AgeHours 1 -CallerRoot $script:GoneCaller
+        $hold = Enter-ModuleSqlGuardBuildRoot -BuildRoot $held -CallerRoot $script:GoneCaller
+        try {
+            # Old by every rule: far past the maximum age, and its caller is gone.
+            $ancient = [DateTime]::UtcNow.AddDays(-400)
+            foreach ($marker in @(Get-ChildItem -LiteralPath $held -Force -File)) { $marker.LastWriteTimeUtc = $ancient }
+            [IO.Directory]::SetLastWriteTimeUtc($held, $ancient)
+
+            @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $script:GuardRoot).Count | Should -Be 0
+            Test-Path -LiteralPath (Join-Path $held 'bin\ModuleSqlGuard\Release\net10.0\ModuleSqlGuard.dll') | Should -BeTrue
+            @(Get-ChildItem -LiteralPath $script:GuardRoot -Force -Directory).Name | Should -Be @(Split-Path -Leaf $held)
+
+            # A second run of the same caller can hold and refresh it at the same time.
+            $second = Enter-ModuleSqlGuardBuildRoot -BuildRoot $held -CallerRoot $script:GoneCaller
+            $second.Dispose()
+        }
+        finally {
+            $hold.Dispose()
+        }
+
+        # Released and old again: now it goes.
+        $ancient = [DateTime]::UtcNow.AddDays(-400)
+        foreach ($marker in @(Get-ChildItem -LiteralPath $held -Force -File)) { $marker.LastWriteTimeUtc = $ancient }
+        [IO.Directory]::SetLastWriteTimeUtc($held, $ancient)
+        @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $script:GuardRoot) | Should -Be @($held)
+    }
+
+    It 'Holds an existing folder for a -NoBuild run and creates none' {
+        $missing = Join-Path $script:GuardRoot ('d' * 64)
+
+        Enter-ModuleSqlGuardBuildRoot -BuildRoot $missing -CallerRoot $script:LiveCaller -ExistingOnly | Should -BeNullOrEmpty
+        Test-Path -LiteralPath $missing | Should -BeFalse
+
+        $existing = New-GuardBuildRoot -GuardRoot $script:GuardRoot -AgeHours 1 -CallerRoot $script:LiveCaller
+        $hold = Enter-ModuleSqlGuardBuildRoot -BuildRoot $existing -CallerRoot $script:LiveCaller -ExistingOnly
+        try {
+            $hold | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $hold.Dispose()
+        }
+    }
+
+    It 'Leaves a folder whose hash name is not in lower case' {
+        $upper = New-GuardBuildRoot -GuardRoot $script:GuardRoot -AgeHours (30 * 24) -Name ('ABCDEF0123456789' * 4)
+
+        @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $script:GuardRoot).Count | Should -Be 0
+        Test-Path -LiteralPath $upper | Should -BeTrue
+        { Remove-ModuleSqlGuardTree -Path $upper -GuardRoot $script:GuardRoot } | Should -Throw '*Refusing to delete*'
+        Test-Path -LiteralPath $upper | Should -BeTrue
+    }
+
+    It 'Refuses, when called directly, to delete through a junction and leaves its target intact' {
+        # The deletion checks its own argument: called on a junction it used to empty
+        # whatever the junction pointed at.
+        $external = Join-Path $TestDrive ('external-' + [Guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path (Join-Path $external 'sub') -Force
+        [IO.File]::WriteAllText((Join-Path $external 'keep.txt'), 'outside the guard root')
+        [IO.File]::WriteAllText((Join-Path $external 'sub\keep-too.txt'), 'outside the guard root')
+        $buildRootLink = Join-Path $script:GuardRoot ('e' * 64)
+        $leftoverLink = Join-Path $script:GuardRoot 'del-0123456789abcdef'
+        if (-not ((New-DirectoryLink -LinkPath $buildRootLink -TargetPath $external) -and
+                (New-DirectoryLink -LinkPath $leftoverLink -TargetPath $external))) {
+            Set-ItResult -Skipped -Because 'this process cannot create a junction'
+            return
+        }
+
+        { Remove-ModuleSqlGuardTree -Path $buildRootLink -GuardRoot $script:GuardRoot } | Should -Throw '*Refusing to delete*'
+        { Remove-ModuleSqlGuardTree -Path $leftoverLink -GuardRoot $script:GuardRoot } | Should -Throw '*Refusing to delete*'
+        { Remove-ModuleSqlGuardTreeContent -Path $buildRootLink } | Should -Throw '*junction or symbolic link*'
+
+        [IO.File]::ReadAllText((Join-Path $external 'keep.txt')) | Should -Be 'outside the guard root'
+        [IO.File]::ReadAllText((Join-Path $external 'sub\keep-too.txt')) | Should -Be 'outside the guard root'
+        Test-Path -LiteralPath $buildRootLink | Should -BeTrue
+        Test-Path -LiteralPath $leftoverLink | Should -BeTrue
+    }
+
+    It 'Refuses, when called directly, anything that is not a build folder of a guard root: <Name>' -ForEach @(
+        @{ Name = 'a folder outside the guard root'; Kind = 'Outside' }
+        @{ Name = 'a folder two levels below the guard root'; Kind = 'Nested' }
+        @{ Name = 'the guard root itself'; Kind = 'Root' }
+        @{ Name = 'a build folder below a root with another name'; Kind = 'OtherRoot' }
+        @{ Name = 'a build folder below a root reached through a junction'; Kind = 'LinkedRoot' }
+    ) {
+        $inside = New-GuardBuildRoot -GuardRoot $script:GuardRoot -AgeHours (30 * 24) -CallerRoot $script:GoneCaller
+        $guardRootArgument = $script:GuardRoot
+        switch ($Kind) {
+            'Outside' {
+                $target = Join-Path $TestDrive ('f' * 64)
+                $null = New-Item -ItemType Directory -Path $target -Force
+            }
+            'Nested' {
+                $target = Join-Path $inside ('a' * 64)
+                $null = New-Item -ItemType Directory -Path $target -Force
+            }
+            'Root' { $target = $script:GuardRoot }
+            'OtherRoot' {
+                $guardRootArgument = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N') + '\some-other-root')
+                $null = New-Item -ItemType Directory -Path $guardRootArgument -Force
+                $target = New-GuardBuildRoot -GuardRoot $guardRootArgument -AgeHours 1
+            }
+            'LinkedRoot' {
+                $linkParent = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+                $null = New-Item -ItemType Directory -Path $linkParent -Force
+                $guardRootArgument = Join-Path $linkParent 'omp-module-sql-guard'
+                if (-not (New-DirectoryLink -LinkPath $guardRootArgument -TargetPath $script:GuardRoot)) {
+                    Set-ItResult -Skipped -Because 'this process cannot create a junction'
+                    return
+                }
+                $target = Join-Path $guardRootArgument (Split-Path -Leaf $inside)
+            }
+        }
+
+        { Remove-ModuleSqlGuardTree -Path $target -GuardRoot $guardRootArgument } | Should -Throw '*Refusing to delete*'
+
+        Test-Path -LiteralPath $target | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $inside 'bin\ModuleSqlGuard\Release\net10.0\ModuleSqlGuard.dll') | Should -BeTrue
+    }
+
+    It 'Leaves a folder with paths beyond the classic length limit to an engine that can delete them' {
+        if ($PSVersionTable.PSVersion.Major -le 5) {
+            Set-ItResult -Skipped -Because 'Windows PowerShell cannot create the over-long path this case needs'
+            return
+        }
+
+        $long = New-GuardBuildRoot -GuardRoot $script:GuardRoot -AgeHours (30 * 24) -CallerRoot $script:GoneCaller
+        $deep = $long
+        while ($deep.Length -lt 300) { $deep = Join-Path $deep ('segment-' + ('x' * 40)) }
+        $null = [IO.Directory]::CreateDirectory($deep)
+        [IO.File]::WriteAllText((Join-Path $deep 'deep.txt'), 'deep')
+        [IO.Directory]::SetLastWriteTimeUtc($long, [DateTime]::UtcNow.AddDays(-30))
+
+        # As Windows PowerShell would see it: not renamed, not half-deleted, reported.
+        $reported = @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $script:GuardRoot -ClassicPathLimit $true 6>&1)
+        ($reported | ForEach-Object { [string]$_ }) -join ' ' | Should -Match 'beyond the classic length limit'
+        Test-Path -LiteralPath (Join-Path $deep 'deep.txt') | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $script:GuardRoot -Force -Directory).Name | Should -Be @(Split-Path -Leaf $long)
+
+        # An engine with long path support removes it.
+        @(Remove-StaleModuleSqlGuardBuildRoots -GuardRoot $script:GuardRoot -ClassicPathLimit $false) | Should -Be @($long)
+        Test-Path -LiteralPath $long | Should -BeFalse
+    }
+
     It 'Finishes a deletion an earlier run was interrupted in' {
         $leftover = New-GuardBuildRoot -GuardRoot $script:GuardRoot -AgeHours 0 -Name ('del-' + [Guid]::NewGuid().ToString('N').Substring(0, 16))
 
@@ -243,6 +387,34 @@ Describe 'Module SQL validator staleness' {
         (Get-Item -LiteralPath $script:RuntimeAssembly).LastWriteTimeUtc = $script:SourcesUtc.AddHours(3)
 
         Get-ModuleSqlValidatorStaleSource -ValidatorPath $script:Validator -PlatformRoot $script:Platform | Should -BeNullOrEmpty
+    }
+
+    It 'Ignores a newer C# file where MSBuild takes no sources from: <StrayFolder>' -ForEach @(
+        @{ StrayFolder = 'Runtime\artifacts\staged' }
+        @{ StrayFolder = 'Runtime\obj' }
+        @{ StrayFolder = 'Runtime\bin\Release' }
+        @{ StrayFolder = 'Runtime\.vs' }
+    ) {
+        # Such a file is never compiled, so no rebuild would ever make the validator
+        # newer than it: counted, it would fail -NoBuild for good.
+        $directory = Join-Path $script:Platform $StrayFolder
+        $null = New-Item -ItemType Directory -Path $directory -Force
+        $stray = Join-Path $directory 'Stray.cs'
+        [IO.File]::WriteAllText($stray, '// not compiled')
+        (Get-Item -LiteralPath $stray).LastWriteTimeUtc = $script:SourcesUtc.AddHours(5)
+
+        Get-ModuleSqlValidatorStaleSource -ValidatorPath $script:Validator -PlatformRoot $script:Platform | Should -BeNullOrEmpty
+    }
+
+    It 'Still counts a C# file in a nested folder that merely shares one of those names' {
+        # Only bin, obj and artifacts directly below the project folder are left out.
+        $directory = Join-Path $script:Platform 'Runtime\Packaging\artifacts'
+        $null = New-Item -ItemType Directory -Path $directory -Force
+        $compiled = Join-Path $directory 'Compiled.cs'
+        [IO.File]::WriteAllText($compiled, '// compiled')
+        (Get-Item -LiteralPath $compiled).LastWriteTimeUtc = $script:SourcesUtc.AddHours(5)
+
+        Get-ModuleSqlValidatorStaleSource -ValidatorPath $script:Validator -PlatformRoot $script:Platform | Should -Be $compiled
     }
 
     It 'Ignores a newer file that the build does not read' {

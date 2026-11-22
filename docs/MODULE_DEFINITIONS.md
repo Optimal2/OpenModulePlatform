@@ -200,13 +200,28 @@ validating when that build is older than the sources it is made from.
 Each normal run marks its isolated build folder as used and removes the folders
 of other callers that are no longer used: those whose repository root no longer
 exists (a test fixture) after an hour, and any folder not used for seven days.
-Only hash-named folders directly below the temporary `omp-module-sql-guard`
-root are considered, links are never followed, and a folder with an open file
-is left alone. `scripts/omp/get-module-sql-validator-identity.ps1` derives the
-validator's cache identity from every file it is built from, following
+Only folders named by a lower-case hash directly below the temporary
+`omp-module-sql-guard` root are considered, links are never followed, and a
+folder with an open file is left alone. A running guard keeps its own folder's
+marker file open for exactly that reason, so a cleanup in another process
+cannot take the folder away under a build. The deletion checks its own
+argument as well and refuses anything that is not such a folder.
+
+`scripts/omp/get-module-sql-validator-identity.ps1` derives the validator's
+cache identity from every file it is built from, following
 `ModuleSqlGuard.csproj` and its project references, so a changed rule under
-`shared/` or in the HostAgent runtime changes the key
-(`scripts/omp/module-sql-validator-support.ps1` holds both lists).
+`shared/` or in the HostAgent runtime changes the key. It leaves out what
+MSBuild leaves out of a project (`bin`, `obj` and `artifacts` directly below
+the project folder, and dot-folders). The script is self-contained: consumer
+test fixtures copy that one file into a stand-in checkout, so it must not
+depend on a neighbouring file. The guard's helper
+(`scripts/omp/module-sql-validator-support.ps1`) takes the source list from it.
+
+Known limits: the build folder is keyed by the caller's root, not by the
+platform checkout, so two platform checkouts used by hand for the same caller
+share one folder; the staleness check compares modification times, so changed
+content with a preserved time is not noticed; and `build/*.targets` files and
+`.editorconfig` are not part of the identity.
 
 This is a mandatory gate beside module-definition and component-version
 validation in `scripts/local-ci.ps1`, the pre-push hook and GitHub CI.

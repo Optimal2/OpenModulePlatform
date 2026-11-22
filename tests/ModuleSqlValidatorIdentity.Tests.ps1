@@ -78,6 +78,68 @@ Describe 'Module SQL validator cache identity' {
         $withOutput.contentSha256 | Should -Be $withSource.contentSha256
     }
 
+    Context 'Copied on its own into a consumer fixture' {
+        # Consumer test suites build a stand-in platform checkout and copy this one script
+        # into it: beside stand-ins for the two validator scripts, with or without a tool
+        # folder, and never with module-sql-validator-support.ps1. The script has to work
+        # there, so it must not depend on any neighbouring file.
+        BeforeEach {
+            $script:Alone = Join-Path $TestDrive ('alone-' + [Guid]::NewGuid().ToString('N'))
+            $script:AloneScripts = Join-Path $script:Alone 'scripts\omp'
+            $null = New-Item -ItemType Directory -Path $script:AloneScripts -Force
+            Set-Content -LiteralPath (Join-Path $script:AloneScripts 'Test-ModuleSqlGuards.ps1') -Value '# guard stand-in' -Encoding ASCII
+            Set-Content -LiteralPath (Join-Path $script:AloneScripts 'validate-module-definitions.ps1') -Value '# definition validator stand-in' -Encoding ASCII
+            Copy-Item -LiteralPath $script:IdentitySource -Destination $script:AloneScripts
+
+            function Complete-AloneFixture {
+                & git -C $script:Alone -c init.defaultBranch=main init --quiet
+                & git -C $script:Alone add -A
+                & git -C $script:Alone -c user.name=omp-test -c user.email=omp-test@example.invalid commit --quiet -m 'fixture commit'
+                if ($LASTEXITCODE -ne 0) { throw 'Could not create the stand-alone identity fixture.' }
+            }
+        }
+
+        It 'Produces an identity with only the two validator stand-ins beside it' {
+            Complete-AloneFixture
+            @(Get-ChildItem -LiteralPath $script:AloneScripts -File).Name | Sort-Object |
+                Should -Be @('get-module-sql-validator-identity.ps1', 'Test-ModuleSqlGuards.ps1', 'validate-module-definitions.ps1')
+
+            $identity = Invoke-ValidatorIdentity -Root $script:Alone
+
+            $identity.schemaVersion | Should -Be 1
+            $identity.platformRoot | Should -Be $script:Alone
+            $identity.contentSha256 | Should -Match '^[0-9a-f]{64}$'
+            $identity.cacheKey | Should -Match '^[0-9a-f]{64}$'
+            (Invoke-ValidatorIdentity -Root $script:Alone).cacheKey | Should -Be $identity.cacheKey
+
+            [IO.File]::AppendAllText((Join-Path $script:AloneScripts 'Test-ModuleSqlGuards.ps1'), 'dirty')
+            (Invoke-ValidatorIdentity -Root $script:Alone).cacheKey | Should -Not -Be $identity.cacheKey
+        }
+
+        It 'Produces an identity with a tool folder that has sources but no project file' {
+            $tool = Join-Path $script:Alone 'tools\ModuleSqlGuard'
+            $null = New-Item -ItemType Directory -Path $tool -Force
+            [IO.File]::WriteAllText((Join-Path $tool 'Guard.cs'), 'clean fixture')
+            Complete-AloneFixture
+
+            $identity = Invoke-ValidatorIdentity -Root $script:Alone
+            $identity.cacheKey | Should -Match '^[0-9a-f]{64}$'
+
+            [IO.File]::AppendAllText((Join-Path $tool 'Guard.cs'), 'dirty')
+            (Invoke-ValidatorIdentity -Root $script:Alone).cacheKey | Should -Not -Be $identity.cacheKey
+            & git -C $script:Alone checkout -- 'tools/ModuleSqlGuard/Guard.cs'
+            (Invoke-ValidatorIdentity -Root $script:Alone).cacheKey | Should -Be $identity.cacheKey
+        }
+
+        It 'Has no reference to a neighbouring script file' {
+            # The cheap guard against the dependency coming back: no dot-sourcing and no
+            # use of its own folder to find another file.
+            $source = [IO.File]::ReadAllText($script:IdentitySource)
+            $source | Should -Not -Match '(?m)^\s*\.\s+\('
+            $source | Should -Not -Match 'Join-Path\s+\$PSScriptRoot\s+''[^''.]'
+        }
+    }
+
     Context 'A validator built from referenced projects and linked rule sources' {
         BeforeEach {
             # The shape of the real validator: the tool project references a runtime
@@ -123,6 +185,8 @@ Describe 'Module SQL validator cache identity' {
             @{ Name = 'a project the validator does not reference'; Path = 'Portal\Page.cs' }
             @{ Name = 'a file beside the rule that no project compiles in'; Path = 'shared\NotCompiledIn.cs' }
             @{ Name = 'build output of a referenced project'; Path = 'Runtime\obj\generated.cs' }
+            @{ Name = 'package output staged below a referenced project'; Path = 'Runtime\artifacts\staged\Copy.cs' }
+            @{ Name = 'an editor folder below a referenced project'; Path = 'Runtime\.vs\cache.cs' }
         ) {
             $original = Invoke-ValidatorIdentity -Root $script:Root
             $target = Join-Path $script:Root $Path
