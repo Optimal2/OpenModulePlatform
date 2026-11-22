@@ -211,6 +211,12 @@ public sealed class AdminPageErrorHandlingTests : IAsyncLifetime
             await onlyConnection.OpenAsync();
 
             string? statusMessage = null;
+            // The description handler reports a refusal as a model error, not as a status
+            // message, and then reloads the page data. With the pool exhausted that reload
+            // fails as well, so the exception leaves the handler whether or not the pool
+            // timeout was first taken for a refusal. What tells the two apart is the model
+            // error the old catch had already added by then.
+            var modelErrors = new List<string>();
             var failure = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
                 switch (handler)
@@ -235,6 +241,9 @@ public sealed class AdminPageErrorHandlingTests : IAsyncLifetime
                         finally
                         {
                             statusMessage = widgets.StatusMessage;
+                            modelErrors.AddRange(widgets.ModelState.Values
+                                .SelectMany(static entry => entry.Errors)
+                                .Select(static error => error.ErrorMessage));
                         }
 
                         break;
@@ -282,6 +291,7 @@ public sealed class AdminPageErrorHandlingTests : IAsyncLifetime
             Assert.IsNotType<PortalRefusalException>(failure);
             Assert.Contains("pool", failure.Message, StringComparison.OrdinalIgnoreCase);
             Assert.True(string.IsNullOrEmpty(statusMessage), $"The pool timeout was shown to the operator: {statusMessage}");
+            Assert.True(modelErrors.Count == 0, "The pool timeout was added to the page as a refusal: " + string.Join("; ", modelErrors));
         });
 
     private SqlConnectionFactory Factory()
