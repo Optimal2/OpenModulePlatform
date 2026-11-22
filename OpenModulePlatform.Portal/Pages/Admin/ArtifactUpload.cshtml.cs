@@ -150,7 +150,14 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
             if (existingIdentity is not null)
             {
-                if (string.Equals(existingIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                // The registered hash may predate the ordinal path ordering; unchanged content
+                // registered that way is the same content, not a replacement.
+                var registeredHashMatch = await ArtifactRegisteredHash.MatchAsync(
+                    package.ArtifactContentPath,
+                    contentHash,
+                    existingIdentity.Sha256,
+                    ct);
+                if (registeredHashMatch != ArtifactRegisteredHashMatch.Mismatch)
                 {
                     if (package.ConfigurationFiles.Count > 0)
                     {

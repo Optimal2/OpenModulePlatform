@@ -15,9 +15,18 @@ public sealed class ArtifactProvisioner
     // and SHA-256 every artifact in full every cycle (R3-D2). Artifacts are
     // immutable, so a matching signature almost always means unchanged content;
     // a periodic forced re-hash still catches rare same-size/mtime corruption.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Signature, string? Hash, DateTimeOffset VerifiedUtc)> _verifiedCache
+    //
+    // LegacyPathOrdering remembers that the entry was accepted through the pre-ordinal
+    // directory hash (see ArtifactRegisteredHash). Hash then holds the REGISTERED value, so
+    // the shortcut below keeps matching, and the periodic re-hash tries the legacy
+    // definition first instead of hashing such an artifact twice every time.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Signature, string? Hash, DateTimeOffset VerifiedUtc, bool LegacyPathOrdering)> _verifiedCache
         = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan ReHashInterval = TimeSpan.FromHours(1);
+
+    // One Information line per artifact and process when an artifact is accepted through
+    // the legacy path ordering: visible in operation, never a per-cycle stream.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> _legacyPathOrderingReported = new();
 
     // R12-F12, host-local half. The missing-hash warning below used to be written at Error
     // on EVERY provisioning of the artifact -- once per artifact per 30-second cycle,
@@ -259,8 +268,9 @@ public sealed class ArtifactProvisioner
         if (File.Exists(localPath) || Directory.Exists(localPath))
         {
             var signature = ComputeCheapSignature(localPath);
+            var hasCachedVerification = _verifiedCache.TryGetValue(localPath, out var cachedVerification);
             if (signature is not null
-                && _verifiedCache.TryGetValue(localPath, out var cachedVerification)
+                && hasCachedVerification
                 && cachedVerification.Signature == signature
                 && DateTimeOffset.UtcNow - cachedVerification.VerifiedUtc < ReHashInterval
                 && (expectedHash is null || string.Equals(cachedVerification.Hash, expectedHash, StringComparison.OrdinalIgnoreCase)))
@@ -268,16 +278,23 @@ public sealed class ArtifactProvisioner
                 return ArtifactProvisioningResult.Succeeded(localPath, cachedVerification.Hash);
             }
 
-            var existingHash = await ArtifactHash.ComputeSha256Async(localPath, cancellationToken);
-            if (expectedHash is null || string.Equals(existingHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+            var existing = await VerifyAgainstRegisteredHashAsync(
+                artifact,
+                localPath,
+                expectedHash,
+                tryLegacyPathOrderingFirst: hasCachedVerification && cachedVerification.LegacyPathOrdering,
+                cancellationToken);
+            if (existing.IsAccepted)
             {
                 if (signature is not null)
                 {
-                    _verifiedCache[localPath] = (signature, existingHash, DateTimeOffset.UtcNow);
+                    _verifiedCache[localPath] = (signature, existing.Hash, DateTimeOffset.UtcNow, existing.LegacyPathOrdering);
                 }
 
-                return ArtifactProvisioningResult.Succeeded(localPath, existingHash);
+                return ArtifactProvisioningResult.Succeeded(localPath, existing.Hash);
             }
+
+            var existingHash = existing.Hash;
 
             // Remove any earlier quarantined copies for this artifact first, so
             // repeated mismatches cannot pile up full copies and fill the cache
@@ -332,14 +349,21 @@ public sealed class ArtifactProvisioner
                 File.Copy(sourcePath, stagingPath, overwrite: false);
             }
 
-            var stagedHash = await ArtifactHash.ComputeSha256Async(stagingPath, cancellationToken);
-            if (expectedHash is not null && !string.Equals(stagedHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+            var staged = await VerifyAgainstRegisteredHashAsync(
+                artifact,
+                stagingPath,
+                expectedHash,
+                tryLegacyPathOrderingFirst: false,
+                cancellationToken);
+            if (!staged.IsAccepted)
             {
                 return ArtifactProvisioningResult.Failed(
                     ArtifactProvisioningState.HashMismatch,
                     localPath,
-                    $"Downloaded artifact hash mismatch. Expected {expectedHash}, actual {stagedHash}.");
+                    $"Downloaded artifact hash mismatch. Expected {expectedHash}, actual {staged.Hash}.");
             }
+
+            var stagedHash = staged.Hash;
 
             OmpReparsePointGuard.EnsureNoReparsePointInPath(
                 Path.GetDirectoryName(localPath)!,
@@ -356,12 +380,91 @@ public sealed class ArtifactProvisioner
                 Directory.Move(stagingPath, localPath);
             }
 
+            if (staged.LegacyPathOrdering && ComputeCheapSignature(localPath) is { } provisionedSignature)
+            {
+                // Not a verification: the timestamp is deliberately expired, so the next cycle
+                // still re-hashes the cached copy exactly as it does for any other artifact.
+                // The entry only carries the knowledge that this artifact matches through the
+                // legacy ordering, so that re-hash reads the tree once instead of twice.
+                _verifiedCache[localPath] = (provisionedSignature, stagedHash, DateTimeOffset.MinValue, true);
+            }
+
             return ArtifactProvisioningResult.Succeeded(localPath, stagedHash);
         }
         finally
         {
             TryDelete(stagingPath);
         }
+    }
+
+    /// <summary>
+    /// Verifies the content at <paramref name="path"/> against the registered hash and
+    /// returns the hash downstream comparisons should see.
+    /// </summary>
+    /// <remarks>
+    /// The canonical directory hash orders relative paths with the ordinal comparer. Rows in
+    /// omp.Artifacts registered before that became the rule carry the hash of the same bytes
+    /// in case-insensitive order, and nothing rewrites them, so a canonical-only comparison
+    /// declares every such artifact corrupt, quarantines the cached copy and then rejects the
+    /// fresh download as well -- on every cycle. ArtifactRegisteredHash accepts the older
+    /// definition; content that really changed matches neither and is still refused.
+    ///
+    /// When the legacy definition is what matches, the REGISTERED value is returned as the
+    /// content hash. That is the value HostArtifactStates.ContentSha256 and
+    /// HostAppDeploymentStates.ContentSha256 already hold for the artifact, so
+    /// ArtifactHash.MatchesDeployedContent keeps treating an unchanged deployment as
+    /// unchanged instead of redeploying everything once.
+    ///
+    /// The legacy hash is computed only after the canonical one failed, or first when the
+    /// artifact is already known to match that way, so an artifact is never hashed twice in
+    /// the same verification unless its content is genuinely wrong.
+    /// </remarks>
+    private async Task<(bool IsAccepted, string Hash, bool LegacyPathOrdering)> VerifyAgainstRegisteredHashAsync(
+        ArtifactDescriptor artifact,
+        string path,
+        string? expectedHash,
+        bool tryLegacyPathOrderingFirst,
+        CancellationToken cancellationToken)
+    {
+        var legacyPathOrderingChecked = false;
+        if (expectedHash is not null && tryLegacyPathOrderingFirst)
+        {
+            if (await ArtifactRegisteredHash.MatchesLegacyPathOrderingAsync(path, expectedHash, cancellationToken))
+            {
+                ReportLegacyPathOrdering(artifact);
+                return (true, expectedHash, true);
+            }
+
+            legacyPathOrderingChecked = true;
+        }
+
+        var actualHash = await ArtifactHash.ComputeSha256Async(path, cancellationToken);
+        if (expectedHash is null || string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, actualHash, false);
+        }
+
+        if (!legacyPathOrderingChecked
+            && await ArtifactRegisteredHash.MatchesLegacyPathOrderingAsync(path, expectedHash, cancellationToken))
+        {
+            ReportLegacyPathOrdering(artifact);
+            return (true, expectedHash, true);
+        }
+
+        return (false, actualHash, false);
+    }
+
+    private void ReportLegacyPathOrdering(ArtifactDescriptor artifact)
+    {
+        if (!_legacyPathOrderingReported.TryAdd(artifact.ArtifactId, 0))
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Artifact content verified through the legacy (case-insensitive) path ordering of the directory hash. ArtifactId={ArtifactId}, Version={Version}. The content is unchanged; omp.Artifacts.Sha256 was registered before the ordering became ordinal and has not been recomputed.",
+            artifact.ArtifactId,
+            artifact.Version);
     }
 
     private static string ResolveSourcePath(HostAgentSettings settings, ArtifactDescriptor artifact)

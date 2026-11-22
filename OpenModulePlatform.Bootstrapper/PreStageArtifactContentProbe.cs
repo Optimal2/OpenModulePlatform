@@ -126,7 +126,7 @@ internal static partial class PreStageArtifactContentProbe
             string? measurementFailure = null;
             try
             {
-                packageSha256 = await ComputeArtifactContentSha256Async(entry, workRoot, cancellationToken);
+                packageSha256 = await ComputeArtifactContentSha256Async(entry, registered.Sha256, workRoot, cancellationToken);
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException)
             {
@@ -147,8 +147,21 @@ internal static partial class PreStageArtifactContentProbe
         return components;
     }
 
+    /// <summary>
+    /// The content hash of the artifact package, expressed in the hash definition the
+    /// registered row uses.
+    /// </summary>
+    /// <remarks>
+    /// The import accepts content whose canonical hash differs from omp.Artifacts.Sha256 only
+    /// because the row was registered with the older, case-insensitive path ordering
+    /// (<see cref="ArtifactRegisteredHash"/>). The gate has to accept exactly what the import
+    /// accepts, so in that case the registered value is reported as the package hash: the
+    /// bytes are the registered bytes. Changed content matches under neither definition and
+    /// is reported with its canonical hash, which the gate then refuses.
+    /// </remarks>
     private static async Task<string> ComputeArtifactContentSha256Async(
         ZipArchiveEntry entry,
+        string registeredSha256,
         string workRoot,
         CancellationToken cancellationToken)
     {
@@ -159,7 +172,15 @@ internal static partial class PreStageArtifactContentProbe
             var packagePath = Path.Join(workPath, "package.zip");
             entry.ExtractToFile(packagePath, overwrite: true);
             var package = new ArtifactPackageExtractor().Extract(packagePath, Path.Join(workPath, "content"));
-            return await ArtifactHash.ComputeSha256Async(package.ArtifactContentPath, cancellationToken);
+            var canonicalSha256 = await ArtifactHash.ComputeSha256Async(package.ArtifactContentPath, cancellationToken);
+            var match = await ArtifactRegisteredHash.MatchAsync(
+                package.ArtifactContentPath,
+                canonicalSha256,
+                registeredSha256,
+                cancellationToken);
+            return match == ArtifactRegisteredHashMatch.LegacyPathOrdering
+                ? registeredSha256.Trim()
+                : canonicalSha256;
         }
         finally
         {

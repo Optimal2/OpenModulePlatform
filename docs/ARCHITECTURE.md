@@ -579,7 +579,14 @@ flowchart LR
 - Package to host: SHA-256 against `omp.Artifacts.Sha256`; directory hashing in
   the Portal, Bootstrapper and HostAgent refuses a linked root, skips linked
   descendants, and orders relative paths with the ordinal comparer on every
-  platform. HostAgent refuses to write its own control paths through overlays
+  platform. That ordering is canonical for everything registered since it was
+  introduced (HostAgent 0.3.340). Older rows were hashed with case-insensitive
+  ordering and are not
+  rewritten, so every comparison of a fresh hash with a registered one also
+  accepts the older ordering when the canonical hash differs
+  (`ArtifactRegisteredHash.cs`); changed content matches neither. See
+  "Artifact content verification" in `docs/HOST_AGENT.md`. HostAgent refuses to
+  write its own control paths through overlays
   (`ArtifactProvisioner.cs`, `ArtifactZipImportService.cs`, `CanonicalRelativePath.cs`, `ArtifactConfigurationFileWriter.cs`).
 - Process to database: each process uses its own connection string. The
   Bootstrapper grants runtime accounts `db_datareader` and `db_datawriter`
@@ -729,7 +736,7 @@ this repository.
 | Package stays in import folder | Import disabled, or file still changing. | `HostAgent:ArtifactZipImport`, HostAgent log |
 | Package in `failed\` | Any item in it failed; see the `.error.txt` beside it. | `ArtifactZipImportService.cs` |
 | New module SQL never runs | `definitionVersion` not bumped. | `omp.ModuleDefinitionDocuments`, `runbooks/schema-ligger-efter-efter-import.md` |
-| Artifact marked corrupt | Hash mismatch against `omp.Artifacts.Sha256`. | `ArtifactProvisioner.cs` |
+| Artifact marked corrupt | Hash mismatch against `omp.Artifacts.Sha256` under both the canonical and the older path ordering. | `ArtifactProvisioner.cs`, `ArtifactRegisteredHash.cs` |
 | Mixed versions warned or blocked | Deploy-set consistency check. | ADR 0002 |
 | Worker restarts then stops | Restart cap reached (5 per 300 s). | `omp.WorkerInstanceRuntimeStates`, WorkerManager log |
 | Worker recycled | Private memory above 1536 MB twice in a row. | WorkerProcessHost log |

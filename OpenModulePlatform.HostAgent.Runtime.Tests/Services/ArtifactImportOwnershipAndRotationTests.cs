@@ -485,6 +485,45 @@ public sealed class ArtifactImportServiceGateTests : IDisposable
         Assert.Equal(0, _repository.RegistrationCalls);
     }
 
+    [Fact]
+    public async Task Reimport_of_unchanged_content_registered_with_the_old_path_ordering_is_identical_not_a_conflict()
+    {
+        // The row was registered before the directory hash ordered paths with the ordinal
+        // comparer, so its Sha256 differs from the hash the import computes today although
+        // the bytes are the same. That must read as "already imported", not as different
+        // content under the same version.
+        var package = CreateOrderSensitiveArtifactPackage("3.0.0", "bravo");
+        var registeredHash = PreOrdinalHashOfPackagePayload(package);
+        Assert.NotEqual(registeredHash, await HashOfPackagePayloadAsync(package));
+        _repository.Artifacts.Add(new FakeArtifact(70, 1, "3.0.0", "web-app", "", "test-app/web-app/3.0.0", registeredHash));
+
+        var result = await ImportAsync("3.0.0", package);
+
+        Assert.Equal(70, result.ArtifactId);
+        Assert.True(result.AdoptedExistingContent);
+        Assert.Contains(result.Status, new[] { "Updated", "Skipped" });
+        Assert.Equal(0, _repository.RegistrationCalls);
+        Assert.Equal(registeredHash, _repository.Artifacts.Single(a => a.ArtifactId == 70).Sha256);
+        var accepted = Assert.Single(_logger.Entries, entry => entry.Message.Contains("legacy", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(LogLevel.Information, accepted.Level);
+        Assert.Contains("ArtifactId=70", accepted.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Reimport_of_changed_content_under_a_hash_registered_with_the_old_path_ordering_is_still_a_conflict()
+    {
+        var registeredHash = PreOrdinalHashOfPackagePayload(CreateOrderSensitiveArtifactPackage("3.0.0", "bravo"));
+        _repository.Artifacts.Add(new FakeArtifact(70, 1, "3.0.0", "web-app", "", "test-app/web-app/3.0.0", registeredHash));
+        var changed = CreateOrderSensitiveArtifactPackage("3.0.0", "BRAVO");
+
+        var conflict = await Assert.ThrowsAsync<ArtifactVersionConflictException>(() => ImportAsync("3.0.0", changed));
+
+        Assert.Equal(registeredHash, conflict.ExistingSha256);
+        Assert.Equal(await HashOfPackagePayloadAsync(changed), conflict.IncomingSha256);
+        Assert.Equal(0, _repository.RegistrationCalls);
+        Assert.Equal(0, _repository.SameIdentityReplaceCalls);
+    }
+
     [SupportedOSPlatform("windows")]
     [SkippableFact]
     public async Task Restore_rejects_a_reparse_point_parent_and_writes_nothing_through_it()
@@ -559,6 +598,40 @@ public sealed class ArtifactImportServiceGateTests : IDisposable
         Write(archive, "payload/index.html", payload);
         Write(archive, $"config/{ConfigPath}", "window.odv = {};");
         return path;
+    }
+
+    /// <summary>
+    /// A package whose payload file names sort differently under the ordinal and the
+    /// case-insensitive comparer, so the two directory hash definitions differ for it.
+    /// </summary>
+    private string CreateOrderSensitiveArtifactPackage(string version, string bravoContent)
+    {
+        var path = Path.Join(_root, $"package-{version}-{Guid.NewGuid():N}.zip");
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        Write(archive, ArtifactPackageExtractor.ManifestEntryName, $$"""
+            {
+              "formatVersion": 1,
+              "payload": { "path": "payload" },
+              "configurationFiles": [ { "relativePath": "{{ConfigPath}}", "source": "config/{{ConfigPath}}" } ]
+            }
+            """);
+        foreach (var (relativePath, content) in PreOrdinalDirectoryHash.OrderSensitiveFiles)
+        {
+            Write(
+                archive,
+                "payload/" + relativePath.Replace('\\', '/'),
+                relativePath == "B.txt" ? bravoContent : content);
+        }
+
+        Write(archive, $"config/{ConfigPath}", "window.odv = {};");
+        return path;
+    }
+
+    private string PreOrdinalHashOfPackagePayload(string packagePath)
+    {
+        var staging = Path.Join(_root, "hash", Guid.NewGuid().ToString("N"));
+        var extracted = new ArtifactPackageExtractor().Extract(packagePath, staging);
+        return PreOrdinalDirectoryHash.Compute(extracted.ArtifactContentPath);
     }
 
     private async Task<string> HashOfPackagePayloadAsync(string packagePath)

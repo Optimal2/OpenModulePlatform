@@ -1595,10 +1595,13 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
             if (existingIdentity is not null)
             {
-                var existingMetadataHashMatches = string.Equals(
-                    existingIdentity.Sha256,
+                // The registered hash may predate the ordinal path ordering; unchanged content
+                // registered that way is identical content, not a version conflict.
+                var existingMetadataHashMatches = await MatchesRegisteredContentHashAsync(
+                    package.ArtifactContentPath,
                     contentHash,
-                    StringComparison.OrdinalIgnoreCase);
+                    existingIdentity,
+                    cancellationToken);
                 var existingMetadataHashMissing = string.IsNullOrWhiteSpace(existingIdentity.Sha256);
                 if ((allowExistingIdentical || package.ConfigurationFiles.Count > 0 || existingMetadataHashMissing)
                     && (existingMetadataHashMatches || existingMetadataHashMissing))
@@ -1869,7 +1872,11 @@ public sealed class ArtifactZipImportService
                     cancellationToken);
                 if (racedIdentity is not null
                     && !string.IsNullOrWhiteSpace(racedIdentity.Sha256)
-                    && string.Equals(racedIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                    && await MatchesRegisteredContentHashAsync(
+                        Directory.Exists(package.ArtifactContentPath) ? package.ArtifactContentPath : finalPath,
+                        contentHash,
+                        racedIdentity,
+                        cancellationToken))
                 {
                     return new ArtifactZipImportResult(
                         racedIdentity.ArtifactId,
@@ -1993,6 +2000,34 @@ public sealed class ArtifactZipImportService
     // provisioning and packaging do.
     private static Task<string> ComputeDirectorySha256Async(string path, CancellationToken cancellationToken)
         => ArtifactHash.ComputeSha256Async(path, cancellationToken);
+
+    /// <summary>
+    /// True when the content at <paramref name="contentPath"/>, whose canonical hash is
+    /// <paramref name="contentHash"/>, is the content registered for
+    /// <paramref name="registered"/> -- under the canonical directory hash or the legacy
+    /// path ordering that older omp.Artifacts.Sha256 values were computed with.
+    /// </summary>
+    private async Task<bool> MatchesRegisteredContentHashAsync(
+        string contentPath,
+        string contentHash,
+        ArtifactZipImportDuplicateInfo registered,
+        CancellationToken cancellationToken)
+    {
+        var match = await ArtifactRegisteredHash.MatchAsync(
+            contentPath,
+            contentHash,
+            registered.Sha256,
+            cancellationToken);
+        if (match == ArtifactRegisteredHashMatch.LegacyPathOrdering)
+        {
+            _logger.LogInformation(
+                "Imported artifact content matches the registered hash through the legacy (case-insensitive) path ordering of the directory hash. ArtifactId={ArtifactId}, Version={Version}. The content is unchanged; omp.Artifacts.Sha256 was registered before the ordering became ordinal and has not been recomputed.",
+                registered.ArtifactId,
+                registered.Version);
+        }
+
+        return match != ArtifactRegisteredHashMatch.Mismatch;
+    }
 
     internal static async Task<bool> RestoreMissingImportedArtifactContentAsync(
         string packageArtifactContentPath,

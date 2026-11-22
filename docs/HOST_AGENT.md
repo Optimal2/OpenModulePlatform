@@ -42,6 +42,70 @@ OMP metadata; it does not infer the latest version from file or folder names.
   - request fields: `artifactId`, optional `desiredLocalPath`
   - response fields: `success`, `state`, `localPath`, `contentSha256`, `errorMessage`
 
+## Artifact content verification
+
+HostAgent verifies every artifact against `omp.Artifacts.Sha256` twice: the copy
+already in the local cache, and a freshly staged copy from the central artifact
+root before it is moved into the cache. A cached copy that fails is moved to
+`<version>.corrupt-<timestamp>` (at most one is kept) and the artifact is staged
+again; a staged copy that fails ends the attempt with provisioning state
+4 (hash mismatch). A verified cached copy is not re-hashed while its size and
+modification-time signature is unchanged, except once an hour.
+
+The hash of a single-file artifact is the SHA-256 of the file. The hash of a
+directory artifact covers every file below it that is not reached through a
+junction or symlink: relative path with `/`, UTF-8, one zero byte, then the file
+content, in sorted relative-path order.
+
+**Canonical ordering.** Relative paths are sorted with the ordinal comparer.
+Everything registered since HostAgent 0.3.340 (and the Portal and Bootstrapper
+built from the same source) uses this definition, in the HostAgent import, the
+Portal import and upload, and the Bootstrapper.
+
+**Rows registered before that.** Earlier versions sorted the paths
+case-insensitively. For most trees both orderings are the same and so is the
+hash, but not for a tree that mixes upper- and lower-case leading characters
+(`B.txt` next to `a.txt`). `omp.Artifacts.Sha256` is not rewritten on upgrade,
+so every comparison between a freshly computed hash and a registered one
+accepts either definition (`ArtifactRegisteredHash` in
+`OpenModulePlatform.Artifacts`):
+
+- The canonical hash is compared first. Only when it differs is the older
+  ordering computed, and only for a directory whose two orderings actually
+  differ, so artifacts registered with the canonical hash cost nothing extra.
+- Both definitions read exactly the same files and bytes with the same link
+  guard. Content that changed matches neither and is refused as before.
+- When the older ordering is what matches, HostAgent reports the registered
+  value as the artifact's content hash. `omp.HostArtifactStates.ContentSha256`
+  and `omp.HostAppDeploymentStates.ContentSha256` therefore keep the values
+  they had before the upgrade and nothing is redeployed because of the
+  ordering change.
+- HostAgent remembers which cached artifacts matched through the older
+  ordering and tries it first on the hourly re-hash, so such an artifact is
+  still read once per verification.
+- The first time an artifact is accepted this way in a process, HostAgent logs
+  one Information line with `ArtifactId` and `Version` ("verified through the
+  legacy (case-insensitive) path ordering"). The imports log the same when a
+  re-imported package matches a row that way.
+
+The same rule applies where a package is compared with an already registered
+version: the HostAgent and Portal package imports, the Portal artifact upload
+and the Bootstrapper pre-stage gate treat unchanged content as identical, not as
+"different content under the same version".
+
+Not covered: the check that rejects a package whose content is byte-identical
+to an artifact of a *different* component looks the canonical hash up in
+`omp.Artifacts.Sha256`, so it does not find a twin that is still registered
+with the older ordering. That check guards against a packaging mistake, not
+against tampering.
+
+**Possible follow-up, not implemented.** Nothing rewrites the older values.
+Recomputing `omp.Artifacts.Sha256` with the canonical ordering is a data
+migration that needs its own decision: it has to read every artifact from the
+central store, it changes the value every host compares against, and the
+`ContentSha256` columns above would have to move with it or each affected app
+is redeployed once. Until then the two-definition comparison has to stay.
+
 ## SQL objects
 
 - `omp.HostArtifactRequirements`

@@ -1676,10 +1676,22 @@ public sealed class PortableModulePackageService
 
             if (existingIdentity is not null)
             {
-                var existingMetadataHashMatches = string.Equals(
-                    existingIdentity.Sha256,
+                // The registered hash may predate the ordinal path ordering; unchanged content
+                // registered that way is identical content, not a conflict.
+                var registeredHashMatch = await ArtifactRegisteredHash.MatchAsync(
+                    package.ArtifactContentPath,
                     contentHash,
-                    StringComparison.OrdinalIgnoreCase);
+                    existingIdentity.Sha256,
+                    ct);
+                if (registeredHashMatch == ArtifactRegisteredHashMatch.LegacyPathOrdering)
+                {
+                    _logger.LogInformation(
+                        "Imported artifact content matches the registered hash through the legacy (case-insensitive) path ordering of the directory hash. ArtifactId={ArtifactId}, Version={Version}. The content is unchanged; omp.Artifacts.Sha256 was registered before the ordering became ordinal and has not been recomputed.",
+                        existingIdentity.ArtifactId,
+                        existingIdentity.Version);
+                }
+
+                var existingMetadataHashMatches = registeredHashMatch != ArtifactRegisteredHashMatch.Mismatch;
                 var existingMetadataHashMissing = string.IsNullOrWhiteSpace(existingIdentity.Sha256);
                 if (!existingMetadataHashMatches && !existingMetadataHashMissing)
                 {

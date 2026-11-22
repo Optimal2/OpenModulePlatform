@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -175,14 +176,108 @@ public sealed class ArtifactProvisionerTests : IDisposable
         Assert.Equal("source-content", await File.ReadAllTextAsync(result.LocalPath));
     }
 
-    private ArtifactProvisioner CreateProvisioner()
+    // The three tests below cover an artifact whose omp.Artifacts.Sha256 was registered
+    // before the directory hash ordered relative paths with the ordinal comparer. The
+    // registered value comes from PreOrdinalDirectoryHash, an independent copy of the old
+    // definition, and the tree is one for which the two orderings really differ.
+
+    [Fact]
+    public async Task EnsureAsync_LocalCopyRegisteredWithTheOldPathOrdering_IsAcceptedAndNotQuarantined()
+    {
+        var localPath = Path.Join(_localRoot, "pkg", "target", "1.0");
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(localPath);
+        var registeredHash = PreOrdinalDirectoryHash.Compute(localPath);
+        Assert.NotEqual(registeredHash, await HashAsync(localPath));
+        var logger = new RecordingLogger();
+        var provisioner = CreateProvisioner(logger);
+
+        var first = await provisioner.EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+        var second = await provisioner.EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+
+        Assert.True(first.IsSuccess, first.ErrorMessage);
+        Assert.True(second.IsSuccess, second.ErrorMessage);
+        Assert.Equal(localPath, first.LocalPath);
+        // Downstream comparisons (HostArtifactStates.ContentSha256 against the deployed
+        // hash) must keep seeing the registered value, or everything redeploys once.
+        Assert.Equal(registeredHash, first.ContentHash);
+        Assert.Equal(registeredHash, second.ContentHash);
+        Assert.Empty(Directory.GetFileSystemEntries(Path.GetDirectoryName(localPath)!, "*.corrupt-*"));
+        Assert.Equal("bravo", await File.ReadAllTextAsync(Path.Join(localPath, "B.txt")));
+        // Visible in operation, but once per artifact and process, not once per cycle.
+        var accepted = Assert.Single(logger.Entries, entry => entry.Message.Contains("legacy", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(LogLevel.Information, accepted.Level);
+        Assert.Contains("ArtifactId=1", accepted.Message, StringComparison.Ordinal);
+        Assert.Contains("Version=1.0", accepted.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_DownloadRegisteredWithTheOldPathOrdering_IsAccepted()
+    {
+        var sourceDir = Path.Join(_centralRoot, "dir");
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(sourceDir);
+        var registeredHash = PreOrdinalDirectoryHash.Compute(sourceDir);
+        Assert.NotEqual(registeredHash, await HashAsync(sourceDir));
+        var provisioner = CreateProvisioner();
+
+        var downloaded = await provisioner.EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+        var verifiedFromCache = await provisioner.EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+
+        Assert.True(downloaded.IsSuccess, downloaded.ErrorMessage);
+        Assert.Equal(registeredHash, downloaded.ContentHash);
+        Assert.Equal("alpha-y", await File.ReadAllTextAsync(Path.Join(downloaded.LocalPath, "alpha", "y")));
+        Assert.True(verifiedFromCache.IsSuccess, verifiedFromCache.ErrorMessage);
+        Assert.Equal(registeredHash, verifiedFromCache.ContentHash);
+        Assert.Empty(Directory.GetFileSystemEntries(Path.GetDirectoryName(downloaded.LocalPath)!, "*.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task EnsureAsync_ChangedContentUnderAHashRegisteredWithTheOldPathOrdering_IsStillRefused()
+    {
+        var sourceDir = Path.Join(_centralRoot, "dir");
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(sourceDir);
+        var registeredHash = PreOrdinalDirectoryHash.Compute(sourceDir);
+        var localPath = Path.Join(_localRoot, "pkg", "target", "1.0");
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(localPath);
+        // Same file set and sizes, different bytes, in both the cached copy and the source.
+        await File.WriteAllTextAsync(Path.Join(localPath, "a.txt"), "ALPHA");
+        await File.WriteAllTextAsync(Path.Join(sourceDir, "B.txt"), "BRAVO");
+
+        var result = await CreateProvisioner().EnsureAsync(CreateDescriptor("dir", registeredHash), CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ArtifactProvisioningState.HashMismatch, result.State);
+        Assert.Contains("Downloaded artifact hash mismatch", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(localPath));
+        var quarantined = Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(localPath)!, "*.corrupt-*"));
+        Assert.Equal("ALPHA", await File.ReadAllTextAsync(Path.Join(quarantined, "a.txt")));
+    }
+
+    private ArtifactProvisioner CreateProvisioner(ILogger<ArtifactProvisioner>? logger = null)
     {
         var settings = new HostAgentSettings
         {
             CentralArtifactRoot = _centralRoot,
             LocalArtifactCacheRoot = _localRoot
         };
-        return new ArtifactProvisioner(new TestOptionsMonitor<HostAgentSettings>(settings), NullLogger<ArtifactProvisioner>.Instance);
+        return new ArtifactProvisioner(new TestOptionsMonitor<HostAgentSettings>(settings), logger ?? NullLogger<ArtifactProvisioner>.Instance);
+    }
+
+    private sealed class RecordingLogger : ILogger<ArtifactProvisioner>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (Entries)
+            {
+                Entries.Add((logLevel, formatter(state, exception)));
+            }
+        }
     }
 
     private ArtifactDescriptor CreateDescriptor(string relativePath, string? sha256, string? desiredLocalPath = null)

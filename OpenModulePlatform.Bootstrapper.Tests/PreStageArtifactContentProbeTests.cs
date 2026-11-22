@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Services;
 
 namespace OpenModulePlatform.Bootstrapper.Tests;
@@ -112,6 +113,69 @@ public sealed class PreStageArtifactContentProbeTests : IDisposable
         var component = Assert.Single(components);
         Assert.Null(component.PackageSha256);
         Assert.True(PreStageVersionGate.Evaluate(components, databaseChecked: true, databaseFailure: null).MayProceed);
+    }
+
+    [Fact]
+    public async Task UnchangedContentRegisteredWithTheOldPathOrderingPassesAndChangedContentIsStillRefused()
+    {
+        // omp.Artifacts.Sha256 values registered before the directory hash ordered paths
+        // with the ordinal comparer differ from today's hash of the same bytes whenever the
+        // two orderings disagree ("B.txt" and "a.txt"). The import accepts those, so the
+        // gate has to as well; the legacy value itself is pinned against an independent copy
+        // of the old definition in ArtifactRegisteredHashTests.
+        var universal = BuildOrderSensitiveUniversalPackage("bravo");
+        var canonicalHash = await HashOfOrderSensitiveContentAsync("bravo", legacyPathOrdering: false);
+        var registeredHash = await HashOfOrderSensitiveContentAsync("bravo", legacyPathOrdering: true);
+        Assert.NotEqual(canonicalHash, registeredHash);
+
+        var unchanged = await PreStageArtifactContentProbe.MeasureAsync(
+            universal,
+            (_, _) => Task.FromResult<PreStageRegisteredArtifact?>(new("0.3.316", registeredHash)),
+            Path.Join(_root, "work"),
+            CancellationToken.None);
+
+        Assert.Equal(registeredHash, Assert.Single(unchanged).PackageSha256);
+        Assert.True(PreStageVersionGate.Evaluate(unchanged, databaseChecked: true, databaseFailure: null).MayProceed);
+
+        var changed = await PreStageArtifactContentProbe.MeasureAsync(
+            BuildOrderSensitiveUniversalPackage("BRAVO"),
+            (_, _) => Task.FromResult<PreStageRegisteredArtifact?>(new("0.3.316", registeredHash)),
+            Path.Join(_root, "work"),
+            CancellationToken.None);
+
+        Assert.Equal(
+            await HashOfOrderSensitiveContentAsync("BRAVO", legacyPathOrdering: false),
+            Assert.Single(changed).PackageSha256);
+        Assert.False(PreStageVersionGate.Evaluate(changed, databaseChecked: true, databaseFailure: null).MayProceed);
+    }
+
+    private string BuildOrderSensitiveUniversalPackage(string bravoText)
+    {
+        var artifactPath = Path.Join(_root, Guid.NewGuid().ToString("N") + ".zip");
+        using (var artifact = ZipFile.Open(artifactPath, ZipArchiveMode.Create))
+        {
+            WriteEntry(artifact, "B.txt", bravoText);
+            WriteEntry(artifact, "a.txt", "alpha");
+        }
+
+        var universalPath = Path.Join(_root, Guid.NewGuid().ToString("N") + ".zip");
+        using (var universal = ZipFile.Open(universalPath, ZipArchiveMode.Create))
+        {
+            universal.CreateEntryFromFile(artifactPath, "artifacts/" + PackageName);
+        }
+
+        return universalPath;
+    }
+
+    private async Task<string> HashOfOrderSensitiveContentAsync(string bravoText, bool legacyPathOrdering)
+    {
+        var directory = Path.Join(_root, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Join(directory, "B.txt"), bravoText);
+        await File.WriteAllTextAsync(Path.Join(directory, "a.txt"), "alpha");
+        return legacyPathOrdering
+            ? await ArtifactRegisteredHash.ComputeLegacyDirectorySha256Async(directory, CancellationToken.None)
+            : await ArtifactHash.ComputeSha256Async(directory, CancellationToken.None);
     }
 
     private string BuildUniversalPackage(string endpointsText, string artifactFolder = "artifacts/")
