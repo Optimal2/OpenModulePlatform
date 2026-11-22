@@ -203,6 +203,29 @@ public sealed class ArtifactRegistrationHashTests : IClassFixture<ArtifactRegist
     }
 
     [Fact]
+    public async Task A_replacement_that_fails_to_be_written_is_not_reported_as_done()
+    {
+        // The line says "replaced". It must not be in the log of a run whose update failed
+        // and left the registered value in place.
+        var (relativePath, storePath) = WriteArtifactInStore();
+        var registeredHash = PreOrdinalDirectoryHash.Compute(storePath);
+        var (appId, artifactId) = await InsertRegisteredArtifactAsync(relativePath, registeredHash);
+        await File.WriteAllTextAsync(Path.Join(storePath, "B.txt"), "BRAVO");
+        // Longer than the RelativePath column, so the update itself is refused.
+        var unstorableRelativePath = relativePath + "/" + new string('x', 600);
+
+        SqlException? failure = null;
+        var lines = await CaptureInstallLogAsync(async () =>
+        {
+            failure = await Assert.ThrowsAsync<SqlException>(() => RegisterAsync(appId, unstorableRelativePath, storePath));
+        });
+
+        Assert.NotNull(failure);
+        Assert.Equal(registeredHash, await ReadSha256Async(artifactId));
+        Assert.DoesNotContain(lines, line => line.Contains("replaced the registered SHA-256", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Keeping_or_first_writing_a_hash_is_not_reported_as_a_replacement()
     {
         var (unchangedPath, unchangedStore) = WriteArtifactInStore();
@@ -271,13 +294,23 @@ public sealed class ArtifactRegistrationHashTests : IClassFixture<ArtifactRegist
             ]
         };
 
-        await CaptureInstallLogAsync(() => InstallationEngine.RegisterPackageArtifactsAsync(config));
+        var beforeFirstRun = await SnapshotDeploymentStateAsync();
+        var firstRunLines = await CaptureInstallLogAsync(() => InstallationEngine.RegisterPackageArtifactsAsync(config));
         var afterFirstRun = await SnapshotDeploymentStateAsync();
         var secondRunLines = await CaptureInstallLogAsync(() => InstallationEngine.RegisterPackageArtifactsAsync(config));
         var afterSecondRun = await SnapshotDeploymentStateAsync();
 
         // The first run met a hash registered with the old ordering and left it alone.
         Assert.Equal(registeredHash, await ReadSha256Async(webArtifactId));
+        // It changed or removed nothing that was there, and added exactly what was new in
+        // the package: the host-agent artifact and the desired state that points at it.
+        Assert.Empty(beforeFirstRun.Except(afterFirstRun, StringComparer.Ordinal));
+        var addedByFirstRun = afterFirstRun.Except(beforeFirstRun, StringComparer.Ordinal).ToList();
+        Assert.Equal(2, addedByFirstRun.Count);
+        Assert.Single(addedByFirstRun, row => row.StartsWith("omp.Artifacts|", StringComparison.Ordinal)
+            && row.Contains(agentTarget, StringComparison.Ordinal));
+        Assert.Single(addedByFirstRun, row => row.StartsWith("omp.HostAgentDesiredStates|", StringComparison.Ordinal));
+        Assert.DoesNotContain(firstRunLines, line => line.Contains("replaced the registered SHA-256", StringComparison.Ordinal));
         // The second run found everything as the first left it.
         Assert.Equal(afterFirstRun, afterSecondRun);
         Assert.DoesNotContain(secondRunLines, line => line.Contains("replaced the registered SHA-256", StringComparison.Ordinal));

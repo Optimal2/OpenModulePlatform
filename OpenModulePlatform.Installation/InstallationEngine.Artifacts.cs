@@ -625,6 +625,17 @@ SELECT @artifactId;
             packageType,
             targetName);
         var (sha256, match) = await ResolveSha256ToRegisterAsync(targetPath, canonicalSha256, registeredSha256);
+        var artifactId = await UpsertArtifactMetadataAsync(
+            connection,
+            appId,
+            version,
+            packageType,
+            targetName,
+            relativePath,
+            sha256);
+
+        // Reported only after the row has been written: a line that says "replaced" must
+        // not be left in the log by a run whose update then failed.
         if (match == ArtifactRegisteredHashMatch.LegacyPathOrdering)
         {
             InstallOutput.Info(
@@ -639,14 +650,7 @@ SELECT @artifactId;
                 $"> Artifact metadata {displayName ?? relativePath}: content differs from the registered version {version} ({packageType}, {targetName}); replaced the registered SHA-256 {registeredSha256.Trim()} with {sha256}. Apps using this artifact are redeployed.");
         }
 
-        return await UpsertArtifactMetadataAsync(
-            connection,
-            appId,
-            version,
-            packageType,
-            targetName,
-            relativePath,
-            sha256);
+        return artifactId;
     }
 
     /// <summary>
