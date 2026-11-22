@@ -630,6 +630,14 @@ SELECT @artifactId;
             InstallOutput.Info(
                 $"> Artifact metadata {displayName ?? relativePath}: content is unchanged; kept the SHA-256 registered with the legacy (case-insensitive) path ordering for version {version}.");
         }
+        else if (match == ArtifactRegisteredHashMatch.Mismatch && !string.IsNullOrWhiteSpace(registeredSha256))
+        {
+            // Replacing a registered hash is what makes HostAgent redeploy every app that
+            // uses the artifact. Leave a trace of it: an unexpected redeployment has to be
+            // attributable to the run, the identity and the two values afterwards.
+            InstallOutput.Info(
+                $"> Artifact metadata {displayName ?? relativePath}: content differs from the registered version {version} ({packageType}, {targetName}); replaced the registered SHA-256 {registeredSha256.Trim()} with {sha256}. Apps using this artifact are redeployed.");
+        }
 
         return await UpsertArtifactMetadataAsync(
             connection,

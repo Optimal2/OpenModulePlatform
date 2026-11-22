@@ -145,6 +145,258 @@ public sealed class ArtifactRegistrationHashTests : IClassFixture<ArtifactRegist
         Assert.Equal(ArtifactRegisteredHashMatch.Mismatch, match);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Reregistering_a_row_whose_stored_hash_is_missing_writes_the_canonical_hash(string? storedHash)
+    {
+        // The missing value is in the database row itself, not handed to a helper: the
+        // registration has to read it, recognise it as "no hash" and fill it in.
+        var (relativePath, storePath) = WriteArtifactInStore();
+        var (appId, artifactId) = await InsertRegisteredArtifactAsync(relativePath, storedHash);
+
+        var reregisteredId = await RegisterAsync(appId, relativePath, storePath);
+
+        Assert.Equal(artifactId, reregisteredId);
+        Assert.Equal(InstallationEngine.ComputeDirectorySha256(storePath), await ReadSha256Async(artifactId));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Reregistering_unchanged_content_keeps_a_stored_hash_with_surrounding_whitespace(bool legacyPathOrdering)
+    {
+        // A hand-edited row can carry blanks around the value. It still identifies the same
+        // content, so it is kept exactly as stored rather than "repaired" into a new value.
+        var (relativePath, storePath) = WriteArtifactInStore();
+        var hash = legacyPathOrdering
+            ? PreOrdinalDirectoryHash.Compute(storePath)
+            : InstallationEngine.ComputeDirectorySha256(storePath);
+        var storedHash = "  " + hash + " ";
+        var (appId, artifactId) = await InsertRegisteredArtifactAsync(relativePath, storedHash);
+
+        await RegisterAsync(appId, relativePath, storePath);
+
+        Assert.Equal(storedHash, await ReadSha256Async(artifactId));
+    }
+
+    [Fact]
+    public async Task Replacing_a_registered_hash_is_recorded_in_the_install_log_with_identity_and_both_values()
+    {
+        var (relativePath, storePath) = WriteArtifactInStore();
+        var registeredHash = PreOrdinalDirectoryHash.Compute(storePath);
+        var (appId, artifactId) = await InsertRegisteredArtifactAsync(relativePath, registeredHash);
+        await File.WriteAllTextAsync(Path.Join(storePath, "B.txt"), "BRAVO");
+
+        var lines = await CaptureInstallLogAsync(() => RegisterAsync(appId, relativePath, storePath));
+
+        var newHash = await ReadSha256Async(artifactId);
+        Assert.NotEqual(registeredHash, newHash);
+        var replaced = Assert.Single(lines, line => line.Contains("replaced the registered SHA-256", StringComparison.Ordinal));
+        Assert.Contains(relativePath, replaced, StringComparison.Ordinal);
+        Assert.Contains(Version, replaced, StringComparison.Ordinal);
+        Assert.Contains(PackageType, replaced, StringComparison.Ordinal);
+        Assert.Contains(TargetName, replaced, StringComparison.Ordinal);
+        Assert.Contains(registeredHash, replaced, StringComparison.Ordinal);
+        Assert.Contains(newHash!, replaced, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Keeping_or_first_writing_a_hash_is_not_reported_as_a_replacement()
+    {
+        var (unchangedPath, unchangedStore) = WriteArtifactInStore();
+        var (unchangedAppId, _) = await InsertRegisteredArtifactAsync(unchangedPath, PreOrdinalDirectoryHash.Compute(unchangedStore));
+        var (newPath, newStore) = WriteArtifactInStore();
+        var newAppId = await InsertAppAsync();
+        var (emptyPath, emptyStore) = WriteArtifactInStore();
+        var (emptyAppId, _) = await InsertRegisteredArtifactAsync(emptyPath, null);
+
+        var lines = await CaptureInstallLogAsync(async () =>
+        {
+            await RegisterAsync(unchangedAppId, unchangedPath, unchangedStore);
+            await RegisterAsync(newAppId, newPath, newStore);
+            await RegisterAsync(emptyAppId, emptyPath, emptyStore);
+        });
+
+        Assert.DoesNotContain(lines, line => line.Contains("replaced the registered SHA-256", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Running_the_whole_package_registration_twice_on_an_unchanged_package_changes_no_hash_and_no_deployment_state()
+    {
+        // The complete installer step, not the helper it calls: resolve the app from the
+        // package file name, register, move the desired-state pointers. The web artifact was
+        // registered and deployed before the ordering changed; the host-agent artifact is new.
+        var suffix = Guid.NewGuid().ToString("N");
+        var webAppKey = "pkg-web-" + suffix;
+        var agentAppKey = "pkg-agent-" + suffix;
+        var hostKey = "pkg-host-" + suffix;
+        var webAppId = await _fixture.InsertAppAsync(webAppKey);
+        await _fixture.InsertAppAsync(agentAppKey, "HostAgent");
+        var webTarget = $"web/{suffix}/{Version}";
+        var agentTarget = $"hostagent/{suffix}/{Version}";
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(Path.Join(_storeRoot, webTarget));
+        PreOrdinalDirectoryHash.WriteOrderSensitiveTree(Path.Join(_storeRoot, agentTarget));
+        var registeredHash = PreOrdinalDirectoryHash.Compute(Path.Join(_storeRoot, webTarget));
+        var (_, webArtifactId) = await InsertRegisteredArtifactAsync(webTarget, registeredHash, webAppId);
+        await ArrangeDeployedAppInstanceAsync(webAppId, webArtifactId, hostKey, registeredHash);
+
+        var connection = new SqlConnectionStringBuilder(ArtifactRegistrationHashFixture.ConnectionString);
+        var config = new BootstrapConfig
+        {
+            ArtifactStoreRoot = _storeRoot,
+            Sql = new SqlBootstrapOptions
+            {
+                Server = connection.DataSource,
+                Database = connection.InitialCatalog,
+                IntegratedSecurity = connection.IntegratedSecurity,
+                UserId = connection.UserID,
+                Password = connection.Password,
+                TrustServerCertificate = connection.TrustServerCertificate
+            },
+            HostAgent = new HostAgentInstallOptions { HostKey = hostKey },
+            Artifacts =
+            [
+                new ArtifactPayloadOptions
+                {
+                    Source = $"{ArtifactRegistrationHashFixture.ModuleKey}__{webAppKey}__{PackageType}__{TargetName}__{Version}.zip",
+                    Target = webTarget
+                },
+                new ArtifactPayloadOptions
+                {
+                    Source = $"{ArtifactRegistrationHashFixture.ModuleKey}__{agentAppKey}__host-agent__omp-hostagent__{Version}.zip",
+                    Target = agentTarget
+                }
+            ]
+        };
+
+        await CaptureInstallLogAsync(() => InstallationEngine.RegisterPackageArtifactsAsync(config));
+        var afterFirstRun = await SnapshotDeploymentStateAsync();
+        var secondRunLines = await CaptureInstallLogAsync(() => InstallationEngine.RegisterPackageArtifactsAsync(config));
+        var afterSecondRun = await SnapshotDeploymentStateAsync();
+
+        // The first run met a hash registered with the old ordering and left it alone.
+        Assert.Equal(registeredHash, await ReadSha256Async(webArtifactId));
+        // The second run found everything as the first left it.
+        Assert.Equal(afterFirstRun, afterSecondRun);
+        Assert.DoesNotContain(secondRunLines, line => line.Contains("replaced the registered SHA-256", StringComparison.Ordinal));
+        Assert.DoesNotContain(secondRunLines, line => line.Contains("Artifact desired state", StringComparison.Ordinal));
+        Assert.DoesNotContain(secondRunLines, line => line.Contains("HostAgent desired state", StringComparison.Ordinal));
+        // The state really was there to be disturbed.
+        Assert.Contains(afterFirstRun, row => row.StartsWith("omp.AppInstances|", StringComparison.Ordinal));
+        Assert.Contains(afterFirstRun, row => row.StartsWith("omp.HostAgentDesiredStates|", StringComparison.Ordinal));
+        Assert.Contains(
+            afterFirstRun,
+            row => row.StartsWith("omp.HostAppDeploymentStates|", StringComparison.Ordinal)
+                && row.Contains(registeredHash, StringComparison.Ordinal));
+    }
+
+    private static async Task<List<string>> CaptureInstallLogAsync(Func<Task> action)
+    {
+        var original = InstallOutput.Current;
+        var sink = new CollectingProgress();
+        try
+        {
+            InstallOutput.Current = sink;
+            await action();
+        }
+        finally
+        {
+            InstallOutput.Current = original;
+        }
+
+        return sink.Lines;
+    }
+
+    /// <summary>
+    /// A host with one enabled app instance that already runs the artifact, and the rows
+    /// HostAgent wrote for it, carrying the hash it was provisioned and deployed with.
+    /// </summary>
+    private async Task ArrangeDeployedAppInstanceAsync(int appId, int artifactId, string hostKey, string deployedHash)
+    {
+        await using var conn = new SqlConnection(ArtifactRegistrationHashFixture.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            @"
+DECLARE @instanceId uniqueidentifier = NEWID();
+DECLARE @hostId uniqueidentifier = NEWID();
+DECLARE @moduleInstanceId uniqueidentifier = NEWID();
+DECLARE @appInstanceId uniqueidentifier = NEWID();
+INSERT INTO omp.Instances (InstanceId, InstanceKey, DisplayName) VALUES (@instanceId, @hostKey, @hostKey);
+INSERT INTO omp.Hosts (HostId, InstanceId, HostKey) VALUES (@hostId, @instanceId, @hostKey);
+INSERT INTO omp.ModuleInstances (ModuleInstanceId, InstanceId, ModuleId, ModuleInstanceKey, DisplayName)
+VALUES (@moduleInstanceId, @instanceId, @moduleId, @hostKey, @hostKey);
+INSERT INTO omp.AppInstances (AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, ArtifactId)
+VALUES (@appInstanceId, @moduleInstanceId, @hostId, @appId, @hostKey, @hostKey, @artifactId);
+INSERT INTO omp.HostArtifactStates (HostId, ArtifactId, ProvisioningState, ContentSha256)
+VALUES (@hostId, @artifactId, 2, @deployedHash);
+INSERT INTO omp.HostAppDeploymentStates (HostId, AppInstanceId, ArtifactId, DeploymentState, ContentSha256)
+VALUES (@hostId, @appInstanceId, @artifactId, 2, @deployedHash);",
+            conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@moduleId", _fixture.ModuleId);
+        cmd.Parameters.AddWithValue("@appId", appId);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@deployedHash", deployedHash);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Every row of the tables a registration can move, as text. omp.Artifacts is read
+    /// without UpdatedUtc, which the registration stamps on every run by design.
+    /// </summary>
+    private static async Task<List<string>> SnapshotDeploymentStateAsync()
+    {
+        var queries = new (string Name, string Sql)[]
+        {
+            ("omp.Artifacts", "SELECT ArtifactId, AppId, Version, PackageType, TargetName, RelativePath, Sha256, IsEnabled FROM omp.Artifacts"),
+            ("omp.AppInstances", "SELECT * FROM omp.AppInstances"),
+            ("omp.InstanceTemplateAppInstances", "SELECT * FROM omp.InstanceTemplateAppInstances"),
+            ("omp.WorkerInstances", "SELECT * FROM omp.WorkerInstances"),
+            ("omp.HostAgentDesiredStates", "SELECT * FROM omp.HostAgentDesiredStates"),
+            ("omp.HostArtifactStates", "SELECT * FROM omp.HostArtifactStates"),
+            ("omp.HostAppDeploymentStates", "SELECT * FROM omp.HostAppDeploymentStates")
+        };
+        var rows = new List<string>();
+        await using var conn = new SqlConnection(ArtifactRegistrationHashFixture.ConnectionString);
+        await conn.OpenAsync();
+        foreach (var (name, sql) in queries)
+        {
+            await using var cmd = new SqlCommand(sql, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var values = new string[reader.FieldCount];
+                for (var i = 0; i < reader.FieldCount; i++)
+                {
+                    values[i] = reader.GetName(i) + "=" + (reader.GetValue(i) switch
+                    {
+                        DBNull => "<null>",
+                        DateTime dateTime => dateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                        byte[] bytes => Convert.ToHexString(bytes),
+                        IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+                        var other => other.ToString() ?? string.Empty
+                    });
+                }
+
+                rows.Add(name + "|" + string.Join("|", values));
+            }
+        }
+
+        rows.Sort(StringComparer.Ordinal);
+        return rows;
+    }
+
+    private sealed class CollectingProgress : IInstallProgress
+    {
+        public List<string> Lines { get; } = [];
+
+        public void Info(string message) => Lines.Add(message);
+
+        public void Error(string message) => Lines.Add(message);
+    }
+
     private (string RelativePath, string StorePath) WriteArtifactInStore()
     {
         var relativePath = $"web/{Guid.NewGuid():N}/{Version}";
@@ -197,9 +449,12 @@ public sealed class ArtifactRegistrationHashTests : IClassFixture<ArtifactRegist
             CancellationToken.None);
     }
 
-    private async Task<(int AppId, int ArtifactId)> InsertRegisteredArtifactAsync(string relativePath, string sha256)
+    private async Task<(int AppId, int ArtifactId)> InsertRegisteredArtifactAsync(
+        string relativePath,
+        string? sha256,
+        int? existingAppId = null)
     {
-        var appId = await InsertAppAsync();
+        var appId = existingAppId ?? await InsertAppAsync();
         await using var conn = new SqlConnection(ArtifactRegistrationHashFixture.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = new SqlCommand(
@@ -213,7 +468,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);",
         cmd.Parameters.AddWithValue("@packageType", PackageType);
         cmd.Parameters.AddWithValue("@targetName", TargetName);
         cmd.Parameters.AddWithValue("@relativePath", relativePath);
-        cmd.Parameters.AddWithValue("@sha256", sha256);
+        cmd.Parameters.AddWithValue("@sha256", (object?)sha256 ?? DBNull.Value);
         return (appId, Convert.ToInt32(await cmd.ExecuteScalarAsync()));
     }
 
@@ -250,7 +505,11 @@ public sealed class ArtifactRegistrationHashFixture : IAsyncLifetime
 
     public static string ConnectionString { get; } = ForDatabase(DatabaseName);
 
+    public const string ModuleKey = "installation-registration-hash";
+
     private int _moduleId;
+
+    public int ModuleId => _moduleId;
 
     public async Task InitializeAsync()
     {
@@ -307,14 +566,15 @@ DROP DATABASE [{DatabaseName}];",
         }
     }
 
-    public Task<int> InsertAppAsync(string appKey)
+    public Task<int> InsertAppAsync(string appKey, string appType = "web")
         => ScalarAsync(
             @"
 INSERT INTO omp.Apps (ModuleId, AppKey, DisplayName, AppType)
-VALUES (@moduleId, @appKey, @appKey, N'web');
+VALUES (@moduleId, @appKey, @appKey, @appType);
 SELECT CAST(SCOPE_IDENTITY() AS int);",
             ("@moduleId", (object)_moduleId),
-            ("@appKey", (object)appKey));
+            ("@appKey", (object)appKey),
+            ("@appType", (object)appType));
 
     private static string ForDatabase(string databaseName)
     {
