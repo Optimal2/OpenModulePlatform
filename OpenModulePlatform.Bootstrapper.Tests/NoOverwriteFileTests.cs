@@ -477,6 +477,7 @@ public sealed class NoOverwriteFileTests : IDisposable
         FileStream? reader = null;
         var readerReleased = new ManualResetEventSlim(false);
         var claimStillVisible = false;
+        var retryObserved = false;
         Exception? publishException;
         try
         {
@@ -502,16 +503,51 @@ public sealed class NoOverwriteFileTests : IDisposable
                     // writer's own claim occupies it.
                     claimStillVisible = File.Exists(path);
 
-                    // Release the reader shortly afterwards, the way a scanner
-                    // moves on. The delay only has to outlast the first
-                    // rename attempt, which happens right after this seam.
-                    Task.Run(() =>
+                    // Release the reader the way a scanner moves on, but only
+                    // once the publisher has made a rename attempt that failed:
+                    // the publisher then parks in its retry delay, which is the
+                    // only place this thread waits, and that state is what the
+                    // releasing thread looks for.
+                    //
+                    // This used to be a timer on the thread pool ("release after
+                    // 300 ms"). The pool is shared with every test running in
+                    // parallel, and when it was saturated the work item did not
+                    // even start inside the publisher's two-second window, so
+                    // the publish reported a replacement that never happened.
+                    // A timer also proved nothing about the order: on a slow
+                    // run it could fire before the first attempt and leave the
+                    // retry untested. A thread of its own that follows the
+                    // publisher's state depends on neither.
+                    var publisher = Thread.CurrentThread;
+                    var releaser = new Thread(() =>
                     {
-                        Thread.Sleep(300);
+                        var giveUp = System.Diagnostics.Stopwatch.StartNew();
+                        var wait = new SpinWait();
+                        while ((publisher.ThreadState & System.Threading.ThreadState.WaitSleepJoin) == 0)
+                        {
+                            if (giveUp.Elapsed > TimeSpan.FromSeconds(30))
+                            {
+                                // Never seen waiting: release anyway so nothing
+                                // hangs, and let the assertion below say why.
+                                reader?.Dispose();
+                                reader = null;
+                                readerReleased.Set();
+                                return;
+                            }
+
+                            wait.SpinOnce();
+                        }
+
+                        retryObserved = true;
                         reader?.Dispose();
                         reader = null;
                         readerReleased.Set();
-                    });
+                    })
+                    {
+                        IsBackground = true,
+                        Name = "NoOverwriteFile claim reader release"
+                    };
+                    releaser.Start();
                 }));
         }
         finally
@@ -523,6 +559,10 @@ public sealed class NoOverwriteFileTests : IDisposable
         // The measured state: the released claim still owns the name.
         Assert.True(claimStillVisible, "The delete-pending claim stopped being visible, so the window was not measured.");
         Assert.Null(publishException);
+        // The reader was still attached when the publisher first tried: the
+        // success below came from waiting for the pending delete, not from
+        // finding the name free.
+        Assert.True(retryObserved, "The publisher was never seen waiting after a failed rename, so the retry was not exercised.");
         Assert.Equal("mine", File.ReadAllText(path));
         Assert.Equal([path], Directory.GetFiles(_testRoot));
     }
