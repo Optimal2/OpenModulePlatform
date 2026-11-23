@@ -4,15 +4,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.1" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="10.0.15" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.15" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.15" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
-    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
-    <PackageVersion Include="Microsoft.Playwright" Version="1.64.1" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
+    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.154.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.65.1" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
@@ -21,7 +21,7 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.15" />
-    <PackageVersion Include="HtmlSanitizer" Version="11.0.16" />
+    <PackageVersion Include="HtmlSanitizer" Version="11.0.26" />
     <PackageVersion Include="Markdig" Version="1.6.0" />
     <!--
       Roslyn/SDK coupling (verified 2026-08-31):
@@ -30,37 +30,36 @@
       Microsoft.CodeAnalysis.CSharp and loaded as a build-time analyzer into
       every SDK-style web project (Directory.Build.targets), i.e. into the
       SDK's own compiler host. An analyzer built against a NEWER Roslyn than
-      the host fails to load (build error); older-than-host is fine. So the
-      package pin must stay <= the Roslyn of the oldest allowed SDK band
-      (10.0.404 -> Roslyn 5.9). Keep CSharp and CSharp.Workspaces aligned with
-      that host version and coordinate future Roslyn updates with global.json.
-      The 5.9 upgrade was validated end-to-end; the analyzer still uses only
-      long-stable Roslyn APIs.
+      the host fails to load. Keep the analyzer's CSharp reference at or below
+      the Roslyn version in the oldest supported SDK (10.0.404 -> Roslyn 5.9).
+      The analyzer test project uses CSharp.Workspaces in its own test process
+      and can use a newer Roslyn runtime. The analyzer's private CSharp
+      reference keeps its build pinned to the SDK host's version.
       Microsoft.CodeAnalysis.Analyzers (RS rule analyzers, PrivateAssets=all)
       is build-time-only and version-independent; it may float freely.
     -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.12.0" />
     <PackageVersion Include="NLog.Database" Version="6.2.2" />
-    <PackageVersion Include="NLog.Extensions.Hosting" Version="6.2.2" />
-    <PackageVersion Include="NLog.Web.AspNetCore" Version="6.2.2" />
+    <PackageVersion Include="NLog.Extensions.Hosting" Version="6.3.0" />
+    <PackageVersion Include="NLog.Web.AspNetCore" Version="6.3.0" />
     <PackageVersion Include="System.DirectoryServices.AccountManagement" Version="10.0.15" />
     <PackageVersion Include="System.Management" Version="10.0.15" />
     <!--
       Security floor for a transitive dependency (GHSA-846f-f764-76mx /
       CVE-2026-84008 and GHSA-2fmv-rv2c-59x7 / CVE-2026-70162, fixed in 9.0.21
-      on the 9.0 line). Microsoft.Data.SqlClient only requires >= 9.0.18. The
-      floor tracks the current 10.0 servicing line (all consumers are net10.0).
+      on the 9.0 line). Microsoft.Data.SqlClient 7.1.2 requires >= 9.0.21 on
+      that line. Keep the direct references on the current 10.0 servicing
+      line for our net10.0 consumers.
       CentralPackageTransitivePinningEnabled is deliberately NOT enabled, so
       this PackageVersion only takes effect where a project references the
       package directly: every project whose Microsoft.Data.SqlClient restore
       pulls Pkcs carries a matching Pkcs PackageReference, and the analyzer
       test project does so for its Roslyn testing chain. The Bootstrapper
       (net10.0-windows) is exempt: that SqlClient target group takes Pkcs
-      in-box from Microsoft.WindowsDesktop.App and restores no Pkcs package. Remove these
-      references once Microsoft.Data.SqlClient itself requires a fixed version.
+      in-box from Microsoft.WindowsDesktop.App and restores no Pkcs package.
     -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.15" />
