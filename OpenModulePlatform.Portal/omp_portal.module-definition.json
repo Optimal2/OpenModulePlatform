@@ -3,11 +3,11 @@
   "moduleKey": "omp_portal",
   "definitionVersion": "0.3.555",
   "module": {
-    "displayName": "OpenModulePlatform Portal",
-    "moduleType": "Portal",
+    "displayName": "OMP Portal",
+    "moduleType": "WebAppModule",
     "schemaName": "omp_portal",
     "description": "The OpenModulePlatform portal and administration UI.",
-    "sortOrder": 0,
+    "sortOrder": 100,
     "isEnabled": true
   },
   "apps": [
