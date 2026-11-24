@@ -65,9 +65,10 @@ also:
 This rule applies to platform-core definitions (for example
 `omp_core.module-definition.json`) as well as module-specific definitions.
 Never change module SQL and rely on a later artifact import to "pick it up";
-artifact import is version-gated and will skip the new SQL unless
-`definitionVersion` is newer than the version already applied in the target
-database.
+artifact import fails when a document with the same module key and
+`definitionVersion` already exists with different content (unattended HostAgent
+folder imports require a new `definitionVersion`), and reuses the existing
+document when the content is identical.
 
 ## Security / antivirus compatibility
 
