@@ -111,7 +111,7 @@ only primary visible option. Alternate Windows credentials and local password
 sign-in are hidden behind the "Other sign-in options" disclosure and should be
 used only when the normal AD flow cannot be used.
 
-Logout is posted to `/auth/logout`. It always clears the shared OMP session cookie and the active role cookie, then redirects the user back to `/auth/login`.
+Logout is posted to `/auth/logout`. It always clears the shared OMP session cookie (`SignOutAsync` in `OpenModulePlatform.Auth/Program.cs`), then redirects the user back to `/auth/login`. It does not clear the active role cookie (`omp_active_role`): nothing in the Auth app touches it, and the only writer that deletes it is the set-active-role handler for an invalid selection (`ActiveRoleCookie.Clear` in `OpenModulePlatform.Web.Shared`). A role id left over from a previous session is re-validated against the newly signed-in user's own roles before use (`RbacService.ResolveActiveRole`), so it can never grant a role the user does not have.
 
 When the current OMP session came from the configured OIDC / AD FS provider, OMP also invokes ASP.NET Core's standard OpenID Connect sign-out flow after clearing the OMP cookie. This is a best-effort federated logout redirect to the provider's published end-session endpoint. If the provider metadata does not expose an end-session endpoint, OMP completes local logout and returns to the login page.
 
@@ -736,12 +736,12 @@ For access that should apply broadly across applications, prefer the built-in
 `Everyone` or `AuthenticatedUsers` roles. Keep app-specific roles for cases
 where the role has a real business meaning beyond a single permission bundle.
 
-The Portal role editor currently supports adding `OmpUser` and `ADUser`
+The Portal role editor supports adding `OmpUser`, `ADUser`, and `ADGroup`
 principals directly. `OmpUser` suggestions come from active `omp.users` rows;
-`ADUser` suggestions come from distinct existing `ADUser` rows in
-`omp.RolePrincipals`. `ADGroup` remains part of the RBAC model and existing
-assignments continue to resolve, but direct AD group assignment in the editor is
-left disabled until group selection has a dedicated workflow.
+`ADUser` and `ADGroup` suggestions come from distinct existing rows of that
+type in `omp.RolePrincipals`. AD groups are entered one per line as SIDs or
+`DOMAIN\Group` names; a local group name is resolved to its SID when the
+Portal host can translate it (`Pages/Admin/Rbac/Role.cshtml.cs`).
 
 For local password users, create the OMP user and local login together from
 `/admin/users/create` when possible. For an existing OMP user, link the `lpwd`

@@ -45,10 +45,12 @@ cannot accidentally leave a user with no way to sign in. A successful removal
 rotates the user's security stamp and ends existing sessions at their next
 request.
 
-The Portal role editor currently exposes `OmpUser` and `ADUser` as addable
-principal types. Existing `ADGroup` assignments still resolve, but adding new AD
-group assignments is disabled in the editor until group selection has its own
-workflow.
+The Portal role editor supports adding `OmpUser`, `ADUser`, and `ADGroup`
+principals. OMP users are ticked in a searchable list, while AD users and AD
+groups are pasted as newline-separated text; groups are entered as SIDs or
+`DOMAIN\Group` names, and a local group name is resolved to its SID when the
+Portal host can translate it (`Pages/Admin/Rbac/Role.cshtml`,
+`Role.cshtml.cs`).
 
 For broad app access, prefer adding permissions to the built-in `Everyone` or
 `AuthenticatedUsers` roles instead of creating one role per app. These built-in
