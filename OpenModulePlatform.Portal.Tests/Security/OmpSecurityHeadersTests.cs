@@ -152,20 +152,25 @@ public sealed class OmpSecurityHeadersTests
     }
 
     [Fact]
-    public async Task HeaderSetEarlierByApp_Wins()
+    public async Task HeaderSetEarlierByApp_WinsWithoutBaselineFallbackWarning()
     {
-        var (app, client) = await StartAppAsync(configure: app =>
-            app.Use((context, next) =>
-            {
-                context.Response.Headers["Content-Security-Policy-Report-Only"] = "default-src 'none'";
-                return next();
-            }));
+        var loggerProvider = new CapturingLoggerProvider();
+        var (app, client) = await StartAppAsync(
+            configure: app =>
+                app.Use((context, next) =>
+                {
+                    context.Response.Headers["Content-Security-Policy-Report-Only"] = "default-src 'none'";
+                    return next();
+                }),
+            loggerProvider: loggerProvider);
         await using var _ = app;
 
         var response = await client.GetAsync("/");
 
         var policy = Assert.Single(response.Headers.GetValues("Content-Security-Policy-Report-Only"));
         Assert.Equal("default-src 'none'", policy);
+        Assert.DoesNotContain(loggerProvider.Entries, entry =>
+            entry.Category == "OpenModulePlatform.Web.Shared.Security.CspConfiguration");
     }
 
     [Fact]

@@ -155,10 +155,10 @@ and does not replace this policy.
 > (`OpenModulePlatform.Web.Shared/Security/OmpContentSecurityPolicy.cs`), and that baseline
 > still carries `script-src 'self' 'unsafe-inline'`. So an app whose `Policy` key is dropped —
 > by a hand-edited `appsettings.json`, or by a config file copied forward from an older
-> artifact version — returns to allowing inline script. `UseOmpSecurityHeaders` now logs a
-> startup warning under `OpenModulePlatform.Web.Shared.Security.CspConfiguration` whenever an
-> enabled CSP configuration uses this fallback. The warning names the missing configuration
-> key and explicitly states that the baseline permits inline scripts. The baseline cannot yet
+> artifact version — returns to allowing inline script if the app has no policy of its own.
+> `UseOmpSecurityHeaders` logs a warning under `OpenModulePlatform.Web.Shared.Security.CspConfiguration`
+> the first time it emits the shared baseline. The warning names the missing configuration
+> key and states that the baseline permits inline scripts. The baseline cannot yet
 > drop that permission because the Content module editor and the example viewer pages still
 > have executable inline blocks (see the migration plan below). When you change an app's
 > configuration, assert the emitted `Content-Security-Policy` header rather than assuming the
@@ -170,16 +170,12 @@ and does not replace this policy.
 > `script-src 'unsafe-inline'`) and logs a warning when the key is missing, and the
 > non-skippable `IFrameModuleInlineScriptGuardTests` fail the build if the key
 > disappears from the shipped appsettings.json. Apps without their own middleware
-> policy still fall back to the shared baseline described above. That fallback is
-> no longer silent: it is the case the startup warning reports.
+> policy still fall back to the shared baseline described above. The shared warning
+> reports the first response that uses that fallback.
 >
-> The startup warning is decided from the configuration key alone
-> (`Enabled` and an empty `Policy`), not from the header the app ends up sending.
-> An app that supplies its policy in its own middleware and has no `Policy` key
-> therefore logs the warning although it does not serve the baseline, and the
-> iFrame module without the key logs both this warning and its own. Treat the
-> warning as "the `Policy` key is missing here", and check the emitted header to
-> see which policy is in force.
+> If the app supplies the configured CSP header, the shared middleware skips the
+> fallback and its warning. With the `Policy` key missing, the iFrame module emits
+> its tightened policy and logs only its own missing-key warning.
 
 - **Portal** — baseline plus `blob:` in `img-src`/`media-src` (webamp unzips
   skins in JS and serves sprites via `URL.createObjectURL`; track/album-art

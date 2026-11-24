@@ -15,7 +15,7 @@ namespace OpenModulePlatform.Web.Shared.Analyzers
     /// <remarks>
     /// No CodeFixProvider is implemented for these diagnostics. A fix would need to insert
     /// AddOmpWebDefaults/UseOmpWebDefaults calls into Program.cs, but the diagnostics are
-    /// reported at compilation start with <see cref="Location.None"/>, and real projects use
+    /// reported at compilation end with <see cref="Location.None"/>, and real projects use
     /// varying patterns (top-level statements, generic TAppResource, named arguments),
     /// making a low-risk generic fix impractical. Configuration of skipped projects is
     /// supported via the MSBuild property <c>OmpWebDefaultsAnalyzerSkipProjects</c>.

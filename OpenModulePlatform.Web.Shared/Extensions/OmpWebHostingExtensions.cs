@@ -43,7 +43,7 @@ namespace OpenModulePlatform.Web.Shared.Extensions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The shared defaults deliberately stay small: Razor Pages, shared OMP cookie
+/// The shared defaults are deliberately centralised: Razor Pages, shared OMP cookie
 /// authentication, optional forwarded-header support, and the shared services that
 /// every OMP web application depends on.
 /// </para>
@@ -935,14 +935,6 @@ public static class OmpWebHostingExtensions
     }
 
     /// <summary>
-    /// Redirect responses carry no body. Announce that with an explicit
-    /// Content-Length: 0 instead of letting in-process IIS chunk-frame the
-    /// empty body; a scanning middlebox that re-frames chunked responses can
-    /// otherwise surface the terminating "0" chunk as the whole page, which
-    /// users have hit intermittently after POST-redirect flows. Part of
-    /// UseOmpWebDefaults; apps that wire their own pipeline call it directly.
-    /// </summary>
-    /// <summary>
     /// Registers the platform's forwarded-headers policy for an app that builds its own
     /// pipeline instead of going through <see cref="AddOmpWebDefaults{TAppResource}"/>.
     /// </summary>
@@ -970,6 +962,14 @@ public static class OmpWebHostingExtensions
         return services;
     }
 
+    /// <summary>
+    /// Redirect responses carry no body. Announce that with an explicit
+    /// Content-Length: 0 instead of letting in-process IIS chunk-frame the
+    /// empty body; a scanning middlebox that re-frames chunked responses can
+    /// otherwise surface the terminating "0" chunk as the whole page, which
+    /// users have hit intermittently after POST-redirect flows. Part of
+    /// UseOmpWebDefaults; apps that wire their own pipeline call it directly.
+    /// </summary>
     public static IApplicationBuilder UseOmpRedirectContentLength(this IApplicationBuilder app)
     {
         return app.Use(static async (context, next) =>
@@ -1000,25 +1000,21 @@ public static class OmpWebHostingExtensions
             .GetSection($"{optionsSectionName}:SecurityHeaders:ContentSecurityPolicy")
             .Get<ContentSecurityPolicyOptions>() ?? new ContentSecurityPolicyOptions();
 
-        if (cspOptions.Enabled && string.IsNullOrWhiteSpace(cspOptions.Policy))
-        {
-            app.ApplicationServices
+        // An app middleware registered later can still supply its own header. Defer the
+        // warning until OnStarting so it fires only when this middleware actually emits
+        // the weaker baseline, and log it only once per application.
+        var baselineFallbackLogger = cspOptions.Enabled && string.IsNullOrWhiteSpace(cspOptions.Policy)
+            ? app.ApplicationServices
                 .GetRequiredService<ILoggerFactory>()
                 .CreateLogger("OpenModulePlatform.Web.Shared.Security.CspConfiguration")
-                .LogWarning(
-                    "No Content-Security-Policy policy is configured for section {OptionsSection}. " +
-                    "The shared baseline is in use and permits inline scripts through script-src 'unsafe-inline'. " +
-                    "Configure {OptionsSection}:SecurityHeaders:ContentSecurityPolicy:Policy to retain a stricter policy.",
-                    optionsSectionName,
-                    optionsSectionName);
-        }
+            : null;
+        var baselineFallbackWarningLogged = 0;
 
         return app.Use(async (context, next) =>
         {
-            context.Response.OnStarting(static state =>
+            context.Response.OnStarting(() =>
             {
-                var (httpContext, csp) = ((HttpContext, ContentSecurityPolicyOptions))state;
-                var headers = httpContext.Response.Headers;
+                var headers = context.Response.Headers;
 
                 SetHeaderIfMissing(headers, "X-Content-Type-Options", "nosniff");
                 SetHeaderIfMissing(headers, "Referrer-Policy", "same-origin");
@@ -1030,27 +1026,42 @@ public static class OmpWebHostingExtensions
                 // own pipeline, or overrides it via configuration. Report-only
                 // is the rollout default; enforcement is a config flip. See
                 // docs/CONTENT_SECURITY_POLICY.md.
-                if (csp.Enabled)
+                if (cspOptions.Enabled)
                 {
-                    SetHeaderIfMissing(
-                        headers,
-                        csp.ReportOnly
-                            ? "Content-Security-Policy-Report-Only"
-                            : "Content-Security-Policy",
-                        OmpContentSecurityPolicy.Build(csp, httpContext.Request.PathBase));
+                    var headerName = cspOptions.ReportOnly
+                        ? "Content-Security-Policy-Report-Only"
+                        : "Content-Security-Policy";
+                    if (!headers.ContainsKey(headerName))
+                    {
+                        if (baselineFallbackLogger is not null
+                            && Interlocked.Exchange(ref baselineFallbackWarningLogged, 1) == 0)
+                        {
+                            baselineFallbackLogger.LogWarning(
+                                "No Content-Security-Policy policy is configured for section {OptionsSection}. " +
+                                "The shared baseline is in use and permits inline scripts through script-src 'unsafe-inline'. " +
+                                "Configure {OptionsSection}:SecurityHeaders:ContentSecurityPolicy:Policy to retain a stricter policy.",
+                                optionsSectionName,
+                                optionsSectionName);
+                        }
+
+                        SetHeaderIfMissing(
+                            headers,
+                            headerName,
+                            OmpContentSecurityPolicy.Build(cspOptions, context.Request.PathBase));
+                    }
                 }
 
                 // HSTS only over HTTPS: a plain-HTTP internal deployment never
                 // emits it (and browsers ignore it there anyway), so this is
                 // safe without a config knob while adding downgrade protection
                 // wherever TLS is used (R3-E10).
-                if (httpContext.Request.IsHttps)
+                if (context.Request.IsHttps)
                 {
                     SetHeaderIfMissing(headers, "Strict-Transport-Security", "max-age=31536000; includeSubDomains");
                 }
 
                 return Task.CompletedTask;
-            }, (context, cspOptions));
+            });
 
             await next();
         });

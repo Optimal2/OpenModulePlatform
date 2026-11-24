@@ -124,8 +124,9 @@ public sealed class SqlConnectionFactory
     {
         // ShouldSerialize reports whether the keyword was present in the configured string,
         // which is what separates "the operator chose 15 seconds" from "nobody chose
-        // anything and the driver default applied". Verified against Microsoft.Data
-        // .SqlClient 7.0.2: false for an absent keyword, true for one written out.
+        // anything and the driver default applied". Verified against the Microsoft.Data.SqlClient
+        // version pinned in Directory.Packages.props, 7.1.2 at the time of writing: false for
+        // an absent keyword, true for one written out.
         if (!builder.ShouldSerialize(ConnectTimeoutKeyword))
         {
             builder.ConnectTimeout = DefaultConnectTimeoutSeconds;
