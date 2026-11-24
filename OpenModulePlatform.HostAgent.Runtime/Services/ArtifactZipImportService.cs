@@ -151,9 +151,10 @@ public sealed class ArtifactZipImportService
     /// running configuration, and the only signal about the artifacts keeping it off was a
     /// per-artifact line in ArtifactProvisioner written only while that artifact is being
     /// provisioned -- so an artifact this host never provisions was completely invisible,
-    /// and the gap was a number nobody could see, let alone drive to zero. Measured on
-    /// A development host 2026-08-16: 29 of 372 enabled artifacts have no Sha256, and none of the
-    /// 29 is referenced by anything enabled, so the flag could be turned on there today.
+    /// and the gap was a number nobody could see, let alone drive to zero. On 2026-08-16,
+    /// an audit on a development host found that 29 of 372 enabled artifacts had no SHA-256 hash.
+    /// None of the 29 was referenced by an enabled app instance, worker instance, or host
+    /// artifact requirement, so hash enforcement could be enabled on that host.
     /// That is exactly the conclusion this audit is meant to make reachable without a
     /// hand-written query against the production database.
     ///

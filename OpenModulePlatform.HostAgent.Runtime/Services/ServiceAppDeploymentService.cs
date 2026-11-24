@@ -21,8 +21,8 @@ public sealed class ServiceAppDeploymentService
     private static readonly TimeSpan StartAttemptResetWindow = TimeSpan.FromMinutes(30);
     private readonly ConcurrentDictionary<string, StartAttemptState> _consecutiveStartAttemptsByServiceName = new(StringComparer.OrdinalIgnoreCase);
 
-    // Artifacts already warned about for a replaced literal ConnectionStrings:OmpDb. The
-    // replacement runs every deployment cycle; warn again for each artifact version.
+    // Configuration preparation can replace a literal ConnectionStrings:OmpDb on each deploy pass.
+    // Warn once for each artifact ID and version during this deployment service's lifetime.
     private readonly ConcurrentDictionary<(int ArtifactId, string Version), byte> _replacedOmpConnectionStringArtifacts = new();
 
     private sealed record StartAttemptState(int Count, DateTime LastAttemptUtc);
