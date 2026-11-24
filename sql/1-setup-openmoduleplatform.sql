@@ -1357,7 +1357,7 @@ GO
 -- which is precisely why they go. The new SourceDatabaseId column is both the fix and
 -- the marker that says the purge has happened, so this runs exactly once.
 -- This migration is written as row removal plus ALTER, not by discarding the table, and that
--- is not cosmetic. Module definition SQL runs through ValidateReadOnlyModuleDefinitionSql on
+-- is not cosmetic. Module definition SQL runs through ValidateSafeModuleDefinitionSql on
 -- the import path, which refuses any script that discards a data-bearing root (a database, a
 -- schema or a table) while explicitly allowing bounded schema maintenance: indexes,
 -- constraints and columns. The first version discarded the table outright; the import rejected
@@ -1366,10 +1366,10 @@ GO
 -- items failed and none of the R12 work reached the host. The guard is right -- a module
 -- definition must not be able to discard a table -- so the migration is written to fit it.
 --
--- Note for whoever edits this next: those guards are regular expressions over the RAW script
--- text and do NOT strip comments. Naming the forbidden statements in prose here blocks the
--- import exactly as effectively as writing them as code -- both earlier drafts of this very
--- paragraph did, once for each rule. Describe them; do not spell them.
+-- Note for whoever edits this next: the import guards blank comments and string literals
+-- before scanning (and the ownership guard parses the script), so naming the forbidden
+-- statements in prose here does NOT block the import. Describe them anyway rather than
+-- spelling them: quoted keywords in comments read as code and invite copy-paste mistakes.
 -- scripts/omp/Test-ModuleSqlGuards.ps1 checks a script against all four rules locally, which
 -- is considerably faster than learning them one failed import at a time.
 IF OBJECT_ID(N'omp.QueryCostSnapshots', N'U') IS NOT NULL
