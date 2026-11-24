@@ -56,8 +56,10 @@ registrations.
 - **Module/plugin pattern:** compile-time composition via project reference
   to Web.Shared; the contract is `AddOmpWebDefaults<TAppResource>` +
   `UseOmpWebDefaults`, enforced by Roslyn analyzer OMPWEB001/002
-  (`OpenModulePlatform.Web.Shared.Analyzers/OmpWebDefaultsAnalyzer.cs:13`)
-  and `scripts/omp/validate-webshared-contracts.ps1:244-252`.
+  (`OpenModulePlatform.Web.Shared.Analyzers/OmpWebDefaultsAnalyzer.cs:13`).
+  `scripts/omp/validate-webshared-contracts.ps1` also runs in the local gate and
+  CI, fails on invalid shared project paths or consumer declarations, and
+  reports Razor, startup and topbar findings as informational warnings.
 - **Hosted services:** exactly one — `PushEventDispatcherHostedService :
   BackgroundService` (`OpenModulePlatform.Web.Shared/Notifications/PushEventDispatcherHostedService.cs:11`),
   registered conditionally at `OmpWebHostingExtensions.cs:205` behind

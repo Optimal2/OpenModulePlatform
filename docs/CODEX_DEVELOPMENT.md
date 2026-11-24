@@ -88,6 +88,10 @@ Use the narrowest level that gives real confidence:
 - C# changes: `dotnet build OpenModulePlatform.slnx`
 - Publish script changes: parse the changed `.ps1` file with `System.Management.Automation.Language.Parser`
 - Script-logic changes to `scripts/omp/bump-version.ps1`, `scripts/omp/validate-component-versions*.ps1`, `scripts/omp/get-ci-version-matrix.ps1`, or `scripts/omp/assert-tests-executed.ps1`: run `scripts/omp/run-script-tests.ps1` (Pester 6 suites, pinned to Pester 6.1.0; also blocking in pre-push and CI)
+- Web.Shared contract changes: run `.\scripts\omp\validate-webshared-contracts.ps1`.
+  The local gate (`scripts/local-ci.ps1`, used by the pre-push hook) and CI fail
+  on invalid shared project paths or consumer declarations. Razor, startup and
+  topbar warnings are informational and do not fail the scan.
 - SQL changes: review idempotency, rerun only when the task explicitly requires local data mutation. If the changed SQL is referenced by a module definition `sqlScripts[].path`, run `.\scripts\dev\embed-module-definition-sql.ps1` before `.\scripts\omp\validate-module-definitions.ps1`.
 - Formatting hygiene: `git diff --check`
 - Local web visibility: publish/update the runtime, then verify the relevant localhost URL

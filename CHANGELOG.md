@@ -438,6 +438,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Web.Shared contract validation restored.**
+  `scripts/omp/validate-webshared-contracts.ps1` accepts a shared project
+  declared as a source directory, while `.csproj` entries must still name
+  existing files. Razor, startup and topbar warnings apply only to Web.Shared
+  consumers and remain informational. The scanner again runs as a blocking step
+  in the local gate and CI after falling out when the pre-push hook started
+  delegating to `scripts/local-ci.ps1`.
+
 - **Consumer builds and validators cannot silently select different platform
   checkouts.** The shared `Resolve-OmpPlatformRoot` implementation and canonical
   `resolve-platform-root.ps1` wrapper reject conflicting `OMP_PLATFORM_ROOT` and
