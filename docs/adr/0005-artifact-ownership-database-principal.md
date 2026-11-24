@@ -9,12 +9,14 @@ operator-gated and is intentionally not implemented here.**
 
 Commit `c3558c36` ("Guard module SQL artifact ownership") added a text-based
 guard, mirrored in three places
-(`OpenModulePlatform.Bootstrapper/Program.cs`,
+(`OpenModulePlatform.Installation/InstallationEngine.Sql.cs`,
 `OpenModulePlatform.HostAgent.Runtime/Services/OmpHostArtifactRepository.cs`,
 `OpenModulePlatform.Portal/Services/OmpAdminRepository.Editor.cs`), that blocks
 module-definition SQL from writing `omp.Artifacts` and the artifact pointer
 columns `omp.AppInstances.ArtifactId` and
 `omp.InstanceTemplateAppInstances.DesiredArtifactId`.
+
+(The third mirror originally lived in `OpenModulePlatform.Bootstrapper/Program.cs` as added by `c3558c36`; the first-install-chain extraction moved it to `InstallationEngine.Sql.cs`, leaving only a delegating `ValidateSafeModuleDefinitionSql` wrapper in `Program.cs`.)
 
 An independent review (2026-09-01) ran a probe harness against the compiled
 validators and found multiple independent bypasses. The 2026-09-02 hardening
