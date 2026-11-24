@@ -322,8 +322,8 @@ END;";
     /// package content is unchanged against that baseline (three-way rule).
     /// Rows without a baseline are operator-owned content with no package to
     /// compare against; they are carried forward when the target row is still
-    /// pristine package content, and reported as Conflict only when the target
-    /// itself already carries an operator edit that must not be overwritten.
+    /// pristine package content. A target that already carries an operator
+    /// edit is left untouched and is not reported.
     /// </summary>
     public const string CarryForwardOperatorEdits = ResolveContinuitySource + @"
 
