@@ -658,7 +658,7 @@ COMMIT TRANSACTION;";
     }
 
     /// <summary>
-    /// Downgrades worker runtime rows on this host that still claim Starting or Running but
+    /// Downgrades worker runtime rows on this host that still claim Starting, Running or Draining but
     /// have not been written for <paramref name="staleAfterSeconds"/>, and recomputes the
     /// app-instance summaries they feed. Returns the number of rows downgraded.
     /// </summary>

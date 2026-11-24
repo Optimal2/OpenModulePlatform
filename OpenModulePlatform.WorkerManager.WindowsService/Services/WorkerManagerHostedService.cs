@@ -180,7 +180,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         // the ProvisioningState=2 requirement makes the resolve flap during the very
         // host deploy that triggers the comparison, and recycling a healthy worker over
         // a transient bookkeeping gap is the failure mode R6-F2 exists to prevent. The
-        // eleven ordinary definition fields are still compared sharply either way.
+        // thirteen ordinary definition fields are still compared sharply either way.
         ResolvedWorkerProcessHost? cycleHost = null;
         try
         {

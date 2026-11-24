@@ -18,9 +18,10 @@ public sealed class WorkerManagerSettings
     public int StopTimeoutSeconds { get; set; } = 15;
 
     /// <summary>
-    /// How long a configuration-change drain may run before the manager starts
-    /// warning that the restart is deferred. The worker is never killed when
-    /// the timeout passes; the restart simply waits for the in-flight job.
+    /// How long a configuration-change drain may run while the worker still reports
+    /// an in-flight job before the manager proceeds with the restart. The normal stop
+    /// path then applies, including a forced kill after <see cref="StopTimeoutSeconds"/>
+    /// if graceful shutdown fails; the interrupted job returns to pending when its lease expires.
     /// </summary>
     public int DrainTimeoutSeconds { get; set; } = 900;
 
