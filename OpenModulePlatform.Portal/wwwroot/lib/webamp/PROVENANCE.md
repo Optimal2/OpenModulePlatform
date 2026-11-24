@@ -33,14 +33,16 @@ bearbetning av Nullsofts original.
 koden och verifierade 2026-09-02:
 
 - `initialSkin` sätts alltid till det första registrerade skinnet
-  (`OpenModulePlatform.Portal/wwwroot/js/portal-dashboard.js:2312`), och den listan
-  innehåller bara WINOMP
-  (`OpenModulePlatform.Portal/Pages/Shared/_DashboardMusicPlayerWidget.cshtml:21`).
+  (`OpenModulePlatform.Portal/wwwroot/js/portal-dashboard.js:2360`,
+  `initialSkin: skins[0].url`), och den listan innehåller bara WINOMP
+  (`OpenModulePlatform.Portal/Pages/Shared/_DashboardMusicPlayerWidget.cshtml:19-22`,
+  `webampSkins`; WINOMP-posten på rad 21).
 - Spelaren visas först när WINOMP-skinnet bekräftat laddats — ingen blink av originalet
   vid sidladdning. Ett laddningsfel faller till den klassiska spelaren, inte till
   originalskinnet.
 - Menyvalet `<Base Skin>` saneras bort ur skinmenyn
-  (`portal-dashboard.js:2379-2382`, exakt lövmatchning).
+  (`portal-dashboard.js:2429-2431`, exakt lövmatchning på
+  `item.textContent.trim() === '<Base Skin>'`).
 
 Originalets bytes ligger kvar i bundelfilen — den är avsiktligt bit-identisk med
 npm-artefakten (939 674 byte, verifierat 2026-09-02) — men kan inte renderas i widgeten.

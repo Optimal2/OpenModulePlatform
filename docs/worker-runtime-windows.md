@@ -27,9 +27,15 @@ the child host uses to resolve an `IWorkerModuleFactory` from the plugin.
 
 ## Discovery and placement
 
-Database discovery requires enabled and allowed app/worker rows in the running
-desired state, an enabled host, a bound enabled artifact, an install path, and an
-enabled app-worker definition for the configured runtime kind.
+Database discovery (`OmpDatabaseWorkerInstanceCatalog`) starts from explicit
+`omp.WorkerInstances` rows for the configured host key, with one implicit row per
+`omp.AppInstances` row where no explicit worker rows exist. A row is selected only
+when the app/worker rows are enabled and allowed with `DesiredState` equal to the
+configured `WorkerManager:OmpDatabase:RunningDesiredState`, the host is pinned or
+the role placement resolves to exactly one host, the bound artifact is enabled with
+a runtime-compatible package type, an install path and a non-empty
+`PluginRelativePath` resolve inside it, and an enabled app-worker definition exists
+for the configured runtime kind.
 
 An explicit worker `HostId` takes precedence over the app instance's `HostId`.
 Without a concrete host pin, the selected host role must resolve to exactly one

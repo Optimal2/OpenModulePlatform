@@ -12,19 +12,21 @@ Current state:
 - requests graceful shutdown through a named OS event and kills the child only if it does not exit in time
 - supports two worker catalogs:
   - `Configuration` for conservative local bootstrap and testing
-  - `OmpDatabase` for real discovery from `omp.AppInstances` on the current host
+  - `OmpDatabase` for real discovery from `omp.WorkerInstances` on the current host (an app instance with no explicit worker rows contributes one implicit row from `omp.AppInstances`)
 - publishes manager heartbeat back to `omp.Hosts` when running in `OmpDatabase` mode
 - publishes observed worker runtime state back to `omp.WorkerInstanceRuntimeStates`, aggregated into `omp.AppInstanceRuntimeStates`
 - records which artifact version each worker process was actually started from, and which WorkerProcessHost build it was launched with
 - updates `omp.AppInstances.LastSeenUtc` while a manager-driven worker is observed as starting or running
 
-OMP database discovery currently resolves workers by joining:
+OMP database discovery (`Services/OmpDatabaseWorkerInstanceCatalog.cs`) currently resolves workers by joining:
 
+- `omp.WorkerInstances` (explicit rows; unioned with one implicit row per `omp.AppInstances` row that has no explicit worker rows)
 - `omp.AppInstances`
-- `omp.Hosts`
 - `omp.Apps`
-- `omp.Artifacts`
 - `omp.AppWorkerDefinitions`
+- `omp.Artifacts`
+- `omp.HostDeploymentAssignments` for role-based placement (`omp.Hosts` only supplies the host-key lookup and the role host counts)
+- `omp.HostArtifactStates`, only when `WorkerManager:OmpDatabase:UseHostArtifactCache` is set
 
 The `omp.AppWorkerDefinitions` table is the minimal metadata contract for manager-driven plugin workers. It binds an app definition to:
 

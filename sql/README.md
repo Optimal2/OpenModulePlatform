@@ -49,10 +49,11 @@ mirrors the root flow above, numbered prefix included:
 
 0. `0-validate-<module>.sql`
    - Verifies that the module-owned schema, tables, and required columns exist.
-     Every schema-owning first-party module and every example module ships one.
-     `OpenModulePlatform.Auth` and `OpenModulePlatform.Web.ContextGuardModule`
-     have no module-owned SQL scripts; Context Guard's v1 stores are in process
-     memory (see below).
+     Every schema-owning first-party module and every example module ships one,
+     including `OpenModulePlatform.Auth`
+     (`OpenModulePlatform.Auth/sql/0-validate-omp-auth.sql`). Only
+     `OpenModulePlatform.Web.ContextGuardModule` has no module-owned SQL
+     scripts; Context Guard's v1 stores are in process memory (see below).
 
 1. `1-setup-<module>.sql`
    - Creates only the module-owned schema and tables.
@@ -73,12 +74,15 @@ lowercase, while `OpenModulePlatform.Web.ContentWebAppModule/Sql`,
 folders are capitalized. `OpenModulePlatform.Web.ContextGuardModule` has no SQL
 folder. Match the folder that already exists rather than assuming one casing.
 
-`OpenModulePlatform.Auth` is the exception to the pattern. It is platform
-infrastructure rather than a user-facing module, so it owns no schema and has
-only `2-initialize-omp-auth.sql`, which seeds the `/auth` web-app registration
-rows into the core `omp` schema. It requires the root `1-setup-*` and
-`2-initialize-*` scripts to have run first, and it is wired into installs
-through `OpenModulePlatform.Auth/omp_auth.module-definition.json` and the
+`OpenModulePlatform.Auth` follows the numbered pattern with
+`0-validate-omp-auth.sql`, `1-setup-omp-auth.sql` (creates the `omp_auth`
+schema and `omp_auth.ActivityLog`), and `2-initialize-omp-auth.sql`, which
+seeds the `/auth` web-app registration rows into the core `omp` schema. The
+Auth app's own data (users, providers, sessions) lives in the core `omp`
+schema; `omp_auth` holds only the user log the Portal's user log page reads.
+It requires the root `1-setup-*` and `2-initialize-*` scripts to have run
+first, and it is wired into installs through
+`OpenModulePlatform.Auth/omp_auth.module-definition.json` and the
 HostAgent-first packager (`scripts/deployment/package-hostagent-first.ps1`).
 
 `OpenModulePlatform.Web.ContextGuardModule` also owns no runtime SQL objects.
@@ -88,8 +92,9 @@ keeps pending hand-offs and live contexts in process memory. See
 
 ## Schema names
 
-- `omp` is the core OpenModulePlatform schema. `OpenModulePlatform.Auth` also
-  seeds into it rather than owning a schema.
+- `omp` is the core OpenModulePlatform schema. `OpenModulePlatform.Auth`
+  seeds its registration rows into it and additionally owns the `omp_auth`
+  schema (`omp_auth.ActivityLog`).
 - `omp_portal` is the OMP Portal module schema.
 - `omp_content` is the first-party content module schema.
 - `omp_iframe` is the first-party iframe module schema.
@@ -101,7 +106,7 @@ Modules outside this repository own their schemas in their own repositories and
 follow the same numbered pattern there (verified 2026-08-27):
 `omp_contoso` (Contoso), `omp_globex` (Globex), `omp_fabrikam` (Fabrikam),
 `omp_northwind` (Northwind) and `omp_adventureworks` (AdventureWorks).
-Tailwind is the second exception alongside `OpenModulePlatform.Auth`: it owns
+Tailwind is the other exception alongside `OpenModulePlatform.Web.ContextGuardModule`: it owns
 no schema and its only OMP script, `Sql/01_initialize_tailwind_metadata.sql`
 in the Tailwind repository,
 seeds permissions into `omp` — note that it also uses a different file-naming
