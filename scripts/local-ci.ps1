@@ -192,6 +192,10 @@ try {
         & (Join-Path $repoRoot 'scripts\omp\validate-component-versions.ps1') -BaseCommit $BaseCommit
     }
 
+    Invoke-Step 'Validate Web.Shared contracts' {
+        & (Join-Path $repoRoot 'scripts\omp\validate-webshared-contracts.ps1')
+    }
+
     Invoke-Step 'Analyze PowerShell scripts' {
         & (Join-Path $repoRoot 'scripts\omp\run-script-analyzer.ps1')
     }

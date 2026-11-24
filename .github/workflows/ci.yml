@@ -233,6 +233,10 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit '${{ steps.base.outputs.sha }}'
 
+      - name: Validate Web.Shared contracts
+        shell: pwsh
+        run: .\scripts\omp\validate-webshared-contracts.ps1
+
       - name: Analyze PowerShell scripts (security + PS5.1 compat)
         shell: pwsh
         run: .\scripts\omp\run-script-analyzer.ps1
