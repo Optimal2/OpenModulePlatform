@@ -94,8 +94,12 @@ repositories through `HostAgentFirst.AdditionalModuleDefinitionFiles`.
 
 HostAgent may later help move module definition files into the database, but SQL
 execution should still be guarded by a database lock or a central controller so
-only one applier can run a definition version. Portal currently uses
-`sp_getapplock` before executing module-definition repair SQL.
+only one applier can run a definition version. Portal, HostAgent, and the
+Installation/Bootstrapper path all take the same `sp_getapplock`
+(`omp.module-definition-sql-repair`) before executing module-definition repair
+SQL: Portal and HostAgent through the shared `ModuleDefinitionSqlRepairScope`,
+and Installation/Bootstrapper through
+`InstallationEngine.AcquireModuleDefinitionSqlExecutionLockAsync`.
 
 ## Module SQL safety guard
 
@@ -450,9 +454,13 @@ operator transport should use universal packages. Portal can download the stored
 normalized JSON from each module-definition edit page so an applied definition
 can be moved from one OMP installation to another.
 
-The older `scripts/dev/embed-module-definition-sql.ps1` helper is retained only
-for legacy JSON-only definitions. Portal executes repairs on the configured OMP
-database connection, so module definition SQL must not switch databases.
+The `scripts/dev/embed-module-definition-sql.ps1` helper refreshes the embedded
+SQL (`inlineSql`/`content` and `sha256`) in module-definition JSON files from
+the module-owned `.sql` files. Re-run it after any module SQL change: the
+module-definition and component-version validators fail on stale embeddings,
+and the installer package refresh runs it automatically. Portal executes
+repairs on the configured OMP database connection, so module definition SQL
+must not switch databases.
 
 The embed helper normalizes each SQL file's line endings to the form
 `.gitattributes` declares for the file (`git check-attr text eol`: `eol=crlf`
