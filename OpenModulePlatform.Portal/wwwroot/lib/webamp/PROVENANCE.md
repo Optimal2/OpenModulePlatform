@@ -34,7 +34,8 @@ koden och verifierade 2026-09-02:
 
 - `initialSkin` sätts alltid till det första registrerade skinnet
   (`OpenModulePlatform.Portal/wwwroot/js/portal-dashboard.js:2360`,
-  `initialSkin: skins[0].url`), och den listan innehåller bara WINOMP
+  `initialSkin: skins.length ? { url: skins[0].url } : undefined`), och den
+  listan innehåller bara WINOMP
   (`OpenModulePlatform.Portal/Pages/Shared/_DashboardMusicPlayerWidget.cshtml:19-22`,
   `webampSkins`; WINOMP-posten på rad 21).
 - Spelaren visas först när WINOMP-skinnet bekräftat laddats — ingen blink av originalet
