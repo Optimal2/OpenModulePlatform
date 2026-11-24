@@ -97,14 +97,7 @@
         @if (Model.ActiveWidgets.Count == 0)
         {
             <div class="portal-dashboard__empty" data-dashboard-empty>
-                @if (Model.CanEditDashboard)
-                {
-                    <span>@L["No widgets have been added yet."]</span>
-                }
-                else
-                {
-                    <span>@L["No widgets have been added yet."]</span>
-                }
+                <span>@L["No widgets have been added yet."]</span>
             </div>
         }
         else

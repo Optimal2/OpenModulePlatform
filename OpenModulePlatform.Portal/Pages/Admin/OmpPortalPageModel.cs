@@ -33,10 +33,9 @@ public abstract class OmpPortalPageModel : OmpSecurePageModel<PortalResource>
     }
 
     /// <summary>
-    /// Portal resource localizer. The admin pages' <c>T()</c> helper targets
-    /// SharedResource, so page-specific texts (including localized exception
-    /// display via <see cref="PortalTextLocalizer"/>) resolve through this
-    /// localizer instead.
+    /// Portal resource localizer for page-specific texts, including localized exception
+    /// display via <see cref="PortalTextLocalizer"/>. It targets the same
+    /// <see cref="PortalResource"/> as the base <c>T()</c> helper.
     /// </summary>
     protected IStringLocalizer<PortalResource> PortalLocalizer =>
         HttpContext.RequestServices.GetRequiredService<IStringLocalizer<PortalResource>>();

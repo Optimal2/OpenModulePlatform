@@ -1364,13 +1364,14 @@ WHERE HostId = @HostId;";
     /// already gone.
     /// </summary>
     /// <remarks>
-    /// omp.Hosts has fifteen FK children and there is no ON DELETE CASCADE anywhere in the
-    /// host/artifact/app-instance core, so a missing child is a hard runtime error rather than
-    /// a silent orphan. This method handled seven of them, which meant that any host that had
-    /// ever run a HostAgent -- and therefore had lease, runtime-state and resource rows --
-    /// could not be deleted from the Portal at all; the transaction rolled back on the first
-    /// FK and the operator saw a raw SQL error. The FK-ordered version already existed as
-    /// OmpHostArtifactRepository.Maintenance DeleteOrphanHostAsync (R8-P3-1 / R7-F23).
+    /// The statement list below clears or unlinks the core omp.Hosts FK children, except
+    /// AppDeploymentLeases, which is removed by ON DELETE CASCADE. A missing child is a hard
+    /// runtime error rather than a silent orphan. The previous version handled seven of them,
+    /// which meant that any host that had ever run a HostAgent -- and therefore had lease,
+    /// runtime-state and resource rows -- could not be deleted from the Portal at all; the
+    /// transaction rolled back on the first FK and the operator saw a raw SQL error. The
+    /// FK-ordered version already existed as OmpHostArtifactRepository.Maintenance
+    /// DeleteOrphanHostAsync (R8-P3-1 / R7-F23).
     ///
     /// Module-owned rows that reference the host are released first, in the same transaction, by
     /// the host-removed runtime maintenance steps the applied module definitions declare -- the

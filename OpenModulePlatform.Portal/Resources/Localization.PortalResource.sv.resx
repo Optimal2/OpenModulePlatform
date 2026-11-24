@@ -1791,7 +1791,6 @@
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>Artefakten kunde inte väljas som önskad version automatiskt. Välj den från installationsmallens sida.</value></data>
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Öppna toppmenyer vid hovring</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>När detta är avstängt öppnas menyer bara med klick eller kortkommando.</value></data>
-  <data name="Mute toast notifications" xml:space="preserve"><value>Tysta toastnotiser</value></data>
   <data name="Definition versions" xml:space="preserve"><value>Definitionsversioner</value></data>
   <data name="Module definition versions" xml:space="preserve"><value>Moduldefinitionsversioner</value></data>
   <data name="Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review." xml:space="preserve"><value>Moduldefinitioner beskriver databas- och metadatakontraktet som artefaktversioner valideras mot. Äldre definitionsversioner finns kvar för granskning.</value></data>
@@ -2437,7 +2436,6 @@
   <data name="Invalid image type." xml:space="preserve"><value>Ogiltig bildtyp.</value></data>
   <data name="Image is too large." xml:space="preserve"><value>Bilden är för stor.</value></data>
   <data name="Select a profile image file." xml:space="preserve"><value>Välj en profilbildsfil.</value></data>
-  <data name="Profile image saved." xml:space="preserve"><value>Profilbilden har sparats.</value></data>
   <data name="Profile image removed." xml:space="preserve"><value>Profilbilden har tagits bort.</value></data>
   <data name="Use a PNG, JPEG, or WebP image up to 2 MB." xml:space="preserve"><value>Använd en PNG-, JPEG- eller WebP-bild på högst 2 MB.</value></data>
   <data name="Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow." xml:space="preserve"><value>Importera och exportera OMP-installationsobjekt med det universella modulpaketsformatet. Äldre enskilda paketformat hålls avsiktligt utanför det här flödet.</value></data>

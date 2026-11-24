@@ -295,7 +295,6 @@
   <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>The artifact could not be selected as the desired version automatically. Choose it from the installation template page.</value></data>
   <data name="Open topbar menus on hover" xml:space="preserve"><value>Open topbar menus on hover</value></data>
   <data name="When this is turned off, menus open only by click or keyboard shortcut." xml:space="preserve"><value>When this is turned off, menus open only by click or keyboard shortcut.</value></data>
-  <data name="Mute toast notifications" xml:space="preserve"><value>Mute toast notifications</value></data>
   <data name="Artifact package editor" xml:space="preserve"><value>Artifact package editor</value></data>
   <data name="Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files." xml:space="preserve"><value>Use this editor to create manifest-based artifact packages with a deployable payload and deployment-owned configuration files.</value></data>
   <data name="Open package editor" xml:space="preserve"><value>Open package editor</value></data>
@@ -743,7 +742,6 @@
   <data name="Invalid image type." xml:space="preserve"><value>Invalid image type.</value></data>
   <data name="Image is too large." xml:space="preserve"><value>Image is too large.</value></data>
   <data name="Select a profile image file." xml:space="preserve"><value>Select a profile image file.</value></data>
-  <data name="Profile image saved." xml:space="preserve"><value>Profile image saved.</value></data>
   <data name="Profile image removed." xml:space="preserve"><value>Profile image removed.</value></data>
   <data name="Use a PNG, JPEG, or WebP image up to 2 MB." xml:space="preserve"><value>Use a PNG, JPEG, or WebP image up to 2 MB.</value></data>
   <data name="Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow." xml:space="preserve"><value>Import and export OMP installation objects with the universal module package format. Individual legacy package formats are intentionally kept out of this workflow.</value></data>
