@@ -13,6 +13,15 @@ OpenModulePlatform.Web.Shared and checks that each consumer:
   or _Imports.razor.
 * References the shared OMP topbar (PortalTopBar) in its layout file.
 
+A sharedProjects entry may point at a .csproj project file (which must exist
+as a file) or at a source directory (which must exist as a directory); a
+missing path is a hard error naming the projectPath. The Razor, startup and
+topbar checks above apply only to consumers of OpenModulePlatform.Web.Shared
+(OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj), so each
+Web.Shared consumer is scanned once and non-Web.Shared consumers of other
+shared entries get no Web.Shared warnings. Unknown consumers and missing
+consumer project directories still fail validation.
+
 Warnings are informational and do not cause a non-zero exit code, because some
 consumers legitimately do not use all Web.Shared features.
 #>
@@ -141,6 +150,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 }
 
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
+$webSharedProjectPath = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj'))
 $manifestPath = Join-Path $repositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     throw "Component manifest not found: $manifestPath"
@@ -177,7 +187,6 @@ foreach ($sharedProject in $sharedProjects) {
     }
 
     $projectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
-    $description = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'description')
     $consumerKeys = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'consumers')
 
     if ([string]::IsNullOrWhiteSpace($projectPath)) {
@@ -186,8 +195,12 @@ foreach ($sharedProject in $sharedProjects) {
     }
 
     $sharedProjectFullPath = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $projectPath))
-    if (-not (Test-Path -LiteralPath $sharedProjectFullPath -PathType Leaf)) {
-        [void]$hardErrors.Add("Shared project file was not found: $projectPath")
+    # A .csproj entry must be an existing file; anything else denotes a source
+    # directory and must exist as a directory (Container, not Any, so a stray
+    # file at a directory path still fails).
+    $expectedPathType = if ($projectPath -like '*.csproj') { 'Leaf' } else { 'Container' }
+    if (-not (Test-Path -LiteralPath $sharedProjectFullPath -PathType $expectedPathType)) {
+        [void]$hardErrors.Add("Shared project path is missing or has the wrong type: $projectPath")
         continue
     }
 
@@ -216,6 +229,13 @@ foreach ($sharedProject in $sharedProjects) {
         $projectDir = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $relativeProjectDir))
         if (-not (Test-Path -LiteralPath $projectDir -PathType Container)) {
             [void]$hardErrors.Add("Project directory for consumer '$consumerKeyString' was not found: $relativeProjectDir")
+            continue
+        }
+
+        if ($sharedProjectFullPath -ine $webSharedProjectPath) {
+            # Not a Web.Shared entry: existence and consumer wiring above are
+            # validated, but the Razor/startup/topbar warnings below apply
+            # only to Web.Shared consumers.
             continue
         }
 
