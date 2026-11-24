@@ -6,7 +6,8 @@
 
 .DESCRIPTION
     publish-all.ps1 -CleanOutput, merge-universal-package-objects.ps1,
-    scripts/dev/test-deterministic-web-publish.ps1 and
+    scripts/dev/test-deterministic-web-publish.ps1,
+    scripts/deployment/build-fresh-install-package.ps1, and
     scripts/deployment/package-hostagent-first.ps1 each remove a folder with
     Remove-Item -Recurse. Nothing checked what that folder held, and a consumer
     repository's CI once deleted the tracked artifacts/README.md of this

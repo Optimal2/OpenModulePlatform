@@ -116,8 +116,9 @@ function Assert-OmpArtifactPackageHasNoRuntimeConfiguration {
     # entry may be a runtime configuration file. At build time the whole
     # artifact zip is scanned (covers legacy whole-zip payloads) plus one level
     # of the nested payload zip used by the current package format
-    # (payload/artifact.zip). Configuration-section entries are stored with an
-    # index prefix (configuration/000-name.ext) and never match the rule.
+    # (payload/artifact.zip). Generated configuration-section entries are numbered
+    # from 001 (configuration/001-name.ext). Some callers explicitly use 000.
+    # The numeric prefix prevents a match against the runtime configuration rule.
     $offenders = [System.Collections.Generic.List[string]]::new()
 
     $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
