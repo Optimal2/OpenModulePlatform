@@ -150,6 +150,12 @@ function Invoke-Guard {
     }
     $bytKatalog = -not [string]::IsNullOrEmpty($WorkingDirectory)
     if ($bytKatalog) { Push-Location -LiteralPath $WorkingDirectory }
+    # The guard's verdict is its exit code, read below. Under Windows
+    # PowerShell 5.1 (CI's Pester shell) with the file-level 'Stop', a guard
+    # that writes to stderr turns '2>&1' into a terminating RemoteException
+    # before $LASTEXITCODE is read; pwsh 7 does not, so this only fails in CI.
+    # Function scope: the caller's preference is untouched.
+    $ErrorActionPreference = 'Continue'
     try {
         $out = & powershell.exe @argsLista 2>&1 | Out-String
         $kod = $LASTEXITCODE
