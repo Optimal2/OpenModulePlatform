@@ -100,7 +100,11 @@
 // reload or a bookmark keeps the filters. A failed fetch falls back to the
 // plain submit. The row search is client-side only: typing filters the loaded
 // rows through the list component's own search, nothing is sent to the
-// server, and Enter does nothing.
+// server, and Enter does nothing. The server search below the bar is the
+// opposite: its field is named Q, a submit searches the server with GET, and
+// the search starts from the default page size (Take is left out of its
+// query). Typing there fetches in place after a beat, like a picker change;
+// the plain GET submit of its own form is the fallback.
 (() => {
     'use strict';
 
@@ -116,11 +120,16 @@
 
     // The row search input is replaced by a clone after every swap (see
     // rebindSearch), so it is always looked up live, never held in a variable.
+    // The server search form is swapped back from the response the same way,
+    // so its inputs are looked up live too.
     const currentSearch = () => form.querySelector('.activity-bar__search');
+    const qformOf = () => document.getElementById('activity-qsearch-form');
+    const currentQ = () => qformOf()?.querySelector('input[name="Q"]') ?? null;
     const clear = form.querySelector('[data-activity-clear]');
 
     // Clear is greyed out by the server while nothing is filtered; text in the
-    // row search is something to clear too, so it enables the link on its own.
+    // row search or the server search is something to clear too, so either
+    // enables the link on its own.
     const serverClearDisabled = () => clear?.dataset.serverDisabled === 'true';
     const rememberClearState = () => {
         if (clear) {
@@ -131,7 +140,7 @@
         if (!clear) {
             return;
         }
-        const disabled = serverClearDisabled() && !(currentSearch()?.value.trim());
+        const disabled = serverClearDisabled() && !(currentSearch()?.value.trim()) && !(currentQ()?.value.trim());
         if (disabled) {
             clear.setAttribute('aria-disabled', 'true');
             clear.setAttribute('tabindex', '-1');
@@ -142,16 +151,44 @@
     };
     rememberClearState();
 
-    const buildUrl = () => {
-        const params = new URLSearchParams(new FormData(form));
-        // Empty fields make no filter; leave them out so the address stays short.
+    // Empty fields make no filter; leave them out so the address stays short.
+    const dropEmptyParams = (params) => {
         Array.from(params.keys()).forEach((key) => {
             if (params.getAll(key).every((value) => value === '')) {
                 params.delete(key);
             }
         });
+    };
+
+    const buildUrl = () => {
+        const params = new URLSearchParams(new FormData(form));
+        // Q lives in its own form, but an in-place change of the bar must
+        // keep an active server search: merge the live text.
+        params.delete('Q');
+        const q = currentQ()?.value.trim() ?? '';
+        if (q !== '') {
+            params.set('Q', q);
+        }
+        dropEmptyParams(params);
         const query = params.toString();
         const base = form.getAttribute('action') || window.location.pathname;
+        return query ? `${base}?${query}` : base;
+    };
+
+    // The server search query: the bar's live values plus the live Q, but
+    // never Take, so the search starts from the default page size.
+    const buildQSearchUrl = () => {
+        const params = new URLSearchParams(new FormData(form));
+        params.delete('Take');
+        params.delete('Q');
+        const q = currentQ()?.value.trim() ?? '';
+        if (q !== '') {
+            params.set('Q', q);
+        }
+        dropEmptyParams(params);
+        const query = params.toString();
+        const qform = qformOf();
+        const base = qform?.getAttribute('action') || form.getAttribute('action') || window.location.pathname;
         return query ? `${base}?${query}` : base;
     };
 
@@ -180,13 +217,18 @@
     };
 
     let pending = null;
-    const refresh = async () => {
+    const refresh = async (url) => {
         if (!results || typeof window.fetch !== 'function' || typeof DOMParser !== 'function') {
+            // The fallback is the same URL as a plain navigation: it carries
+            // the live query including Q, which the bar form alone has not.
+            if (typeof url === 'string') {
+                window.location.assign(url);
+                return;
+            }
             submit();
             return;
         }
 
-        const url = buildUrl();
         pending?.abort();
         const controller = new AbortController();
         pending = controller;
@@ -228,13 +270,52 @@
                 });
                 window.ompPicker?.sync(picker);
             });
+            // The page-size radio follows the same rule: a server search
+            // answers with the default size, and the bar shows it instead of
+            // the size the search started from.
+            const freshTake = doc.querySelector('#activity-filter-form input[name="Take"]:checked');
+            if (freshTake) {
+                form.querySelectorAll('input[name="Take"]').forEach((input) => {
+                    input.checked = input.value === freshTake.value;
+                });
+                const rowsPicker = form.querySelector('details[data-omp-picker-plain]');
+                const rowsLabel = rowsPicker?.querySelector('[data-omp-picker-label]');
+                if (rowsLabel) {
+                    rowsLabel.textContent = freshTake.value;
+                }
+                if (rowsPicker) {
+                    window.ompPicker?.sync(rowsPicker);
+                }
+            }
+            // The server search form is the response's fresh copy: its hidden
+            // filter copies, its Clear link and its disabled state follow the
+            // answer, so the plain GET fallback stays correct after in-place
+            // changes. Focus returns to the new field when it was there.
+            const qform = qformOf();
+            const freshQForm = doc.querySelector('#activity-qsearch-form');
+            if (qform && freshQForm) {
+                const hadFocus = qform.contains(document.activeElement);
+                const caret = currentQ()?.selectionStart ?? null;
+                qform.replaceWith(freshQForm);
+                if (hadFocus) {
+                    const next = currentQ();
+                    next?.focus();
+                    if (next && caret !== null) {
+                        try { next.setSelectionRange(caret, caret); } catch { /* not text-like */ }
+                    }
+                }
+                bindQForm();
+                syncClear();
+            }
             window.history.replaceState(null, '', url);
             rebindSearch();
         } catch (error) {
             if (error?.name === 'AbortError') {
                 return;
             }
-            submit();
+            // A failed fetch falls back to the plain navigation of the same
+            // URL, not to the bar form submit, so an active Q survives it.
+            window.location.assign(url);
             return;
         } finally {
             if (pending === controller) {
@@ -246,18 +327,33 @@
 
     // A change waits a beat before fetching: arrow keys browsing a picker
     // fire one change per step, and only the value the user settles on
-    // should reach the server.
+    // should reach the server. Typing in the server search waits the same
+    // beat; an explicit submit searches at once. Every trigger shares one
+    // timer, so one fetch follows however many controls changed.
     let changeTimer = 0;
     const refreshSoon = () => {
         window.clearTimeout(changeTimer);
-        changeTimer = window.setTimeout(refresh, 250);
+        changeTimer = window.setTimeout(() => refresh(buildUrl()), 250);
+    };
+    const refreshQSoon = () => {
+        window.clearTimeout(changeTimer);
+        changeTimer = window.setTimeout(() => refresh(buildQSearchUrl()), 250);
     };
     form.querySelectorAll('[data-activity-submit]').forEach((field) => {
         field.addEventListener('change', refreshSoon);
     });
     form.addEventListener('omp-daterange-change', refreshSoon);
+    // An implicit submit of the bar (Enter on a picker control) fetches in
+    // place with the live query instead of reloading; the same URL is the
+    // fallback navigation when the swap is not available.
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        window.clearTimeout(changeTimer);
+        refresh(buildUrl());
+    });
     // Enter in the row search must not submit the form: the text only filters
-    // the loaded rows.
+    // the loaded rows. Enter in the server search submits its own form, and
+    // that text searches the server.
     const blockEnter = (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -268,11 +364,52 @@
         initialSearch.addEventListener('input', syncClear);
         initialSearch.addEventListener('keydown', blockEnter);
     }
-    // Clear puts every control back in place: the row search emptied, every
-    // picker row off, the period on its neutral preset. Each of those fires
-    // the change the bar already listens to, so one debounced fetch follows
-    // and the address is rewritten; the link's own navigation is the
-    // fallback when the swap is not available.
+    // The server search form is swapped from the response after every fetch,
+    // so its listeners are (re)bound to the live form, like the row search.
+    // A submit searches at once without Take; typing waits the shared beat.
+    // The Clear link only empties the field and fires the same input event,
+    // so one debounced fetch keeps the other filters and drops Q.
+    const bindQForm = () => {
+        const qform = qformOf();
+        const q = currentQ();
+        if (q && !q.dataset.qsearchBound) {
+            q.dataset.qsearchBound = 'true';
+            q.addEventListener('input', () => {
+                syncClear();
+                refreshQSoon();
+            });
+        }
+        if (qform && !qform.dataset.qsearchBound) {
+            qform.dataset.qsearchBound = 'true';
+            qform.addEventListener('submit', (event) => {
+                event.preventDefault();
+                window.clearTimeout(changeTimer);
+                refresh(buildQSearchUrl());
+            });
+            qform.querySelector('[data-activity-clear-q]')?.addEventListener('click', (event) => {
+                const link = event.currentTarget;
+                if (link?.getAttribute('aria-disabled') === 'true') {
+                    event.preventDefault();
+                    return;
+                }
+                if (!results || typeof window.fetch !== 'function') {
+                    return;
+                }
+                event.preventDefault();
+                const field = currentQ();
+                if (field && field.value) {
+                    field.value = '';
+                    field.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+        }
+    };
+    bindQForm();
+    // Clear puts every control back in place: the row search and the server
+    // search emptied, every picker row off, the period on its neutral
+    // preset. Each of those fires the change the bar already listens to, so
+    // one debounced fetch follows and the address is rewritten; the link's
+    // own navigation is the fallback when the swap is not available.
     if (clear) {
         clear.addEventListener('click', (event) => {
             if (clear.getAttribute('aria-disabled') === 'true') {
@@ -287,6 +424,11 @@
             if (search && search.value) {
                 search.value = '';
                 search.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            const q = currentQ();
+            if (q && q.value) {
+                q.value = '';
+                q.dispatchEvent(new Event('input', { bubbles: true }));
             }
             form.querySelectorAll('details[data-activity-picker]').forEach((picker) => {
                 const on = Array.from(picker.querySelectorAll('input:checked'));

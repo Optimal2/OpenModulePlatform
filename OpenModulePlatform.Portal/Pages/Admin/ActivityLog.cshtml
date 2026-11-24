@@ -21,15 +21,17 @@
 <div asp-validation-summary="All" class="field-validation-error"></div>
 <p class="muted">@OmpTime.TimeZoneId</p>
 <section class="card top-gap">
-    @* One row: row search, user, modules, period and Clear, then Rows on the
-       right. Every choice applies as soon as it is made: the page script
-       fetches the page with the new query and swaps the results in place, so
-       nothing reloads visibly (a plain GET submit is the fallback). The row
-       search is the list component's own search over the loaded rows and
-       nothing else: it has no name, so it never reaches the server, and the
-       rows it hid come back as soon as it is emptied. User, modules and rows
-       are shared pickers (omp-picker) dressed like the period picker, so the
-       four dropdowns read as one family. *@
+    @* One row: row search, user, modules, period and Reset, then Rows on
+       the right. Every choice applies as soon as it is made: the page
+       script fetches the page with the new query and swaps the results in
+       place, so nothing reloads visibly (a plain GET submit is the
+       fallback). The row search is the list component's own search over
+       the loaded rows and nothing else: it has no name, so it never
+       reaches the server, and the rows it hid come back as soon as it is
+       emptied. User, modules and rows are shared pickers (omp-picker)
+       dressed like the period picker, so the four dropdowns read as one
+       family. The server search below it is the opposite: its field is
+       named Q and reaches the server with GET. *@
     <form method="get" class="activity-bar" id="activity-filter-form" data-enhance="false">
         <input type="search"
                class="list-search activity-bar__search"
@@ -125,11 +127,12 @@
             <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>
         </span>
         @* Reset is a link back to the unfiltered page, next to the filters it
-           puts back; the page script resets the bar in place instead and lets
-           the usual fetch swap the results, so nothing reloads. It is greyed
-           out while there is nothing to reset (the script also enables it as
-           soon as the row search holds text). "Reset" for the whole bar,
-           "Clear" for one field in a panel: two words for two reaches. *@
+           puts back; the page script resets the bar in place instead (the
+           server search field below too) and lets the usual fetch swap the
+           results, so nothing reloads. It is greyed out while there is
+           nothing to reset (the script also enables it as soon as the row
+           search or the server search holds text). "Reset" for the whole
+           bar, "Clear" for one field: two words for two reaches. *@
         <a class="btn btn-danger activity-bar__clear"
            href="@Url.Content("~/admin/activitylog")"
            data-activity-clear
@@ -155,6 +158,40 @@
                 </div>
             </details>
         </div>
+    </form>
+    @* The server search: a second GET form with the same filter state as
+       hidden fields, so the search keeps every other active filter. Its
+       only visible field is named Q; Take is left out on purpose, so the
+       search starts from the default page size. The page script merges
+       the live Q into its in-place fetch and swaps this form back from
+       the response, so the hidden copies and the Clear link stay fresh;
+       a plain GET submit is the fallback. Clear removes Q and keeps the
+       other filters. *@
+    <form method="get" class="activity-bar" id="activity-qsearch-form" data-enhance="false">
+        @foreach (var id in Model.UserIds)
+        {
+            <input type="hidden" name="UserIds" value="@id" />
+        }
+        @foreach (var module in Model.Modules)
+        {
+            <input type="hidden" name="Modules" value="@module" />
+        }
+        <input type="hidden" name="Range" value="@(!string.IsNullOrWhiteSpace(Model.Range) ? Model.Range : (Model.From.HasValue || Model.To.HasValue ? "custom" : "all"))" />
+        <input type="hidden" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+        <input type="hidden" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+        <input type="search"
+               class="list-search activity-bar__search"
+               name="Q"
+               value="@Model.Q"
+               placeholder="@L["Server search"]"
+               aria-label="@L["Server search"]"
+               title="@L["Searches all matching rows on the server, not just the loaded ones."]" />
+        <button type="submit" class="btn btn-secondary">@L["Search"]</button>
+        <a class="btn btn-secondary"
+           href="@(HttpContext.Request.Path + Model.ClearQQuery)"
+           data-activity-clear-q
+           aria-disabled="@(string.IsNullOrWhiteSpace(Model.Q) ? "true" : null)"
+           tabindex="@(string.IsNullOrWhiteSpace(Model.Q) ? "-1" : null)">@L["Clear"]</a>
     </form>
 </section>
 

@@ -126,6 +126,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Server-side text search on the user log and the system log.** Both pages
+  have a "Server search" field whose text travels with GET as `Q` (the row
+  search still filters only the loaded rows in the browser). The search keeps
+  every other active filter and starts from the default page size, and its
+  Clear action removes the text but keeps the rest.
+
 - **.NET 10 servicing and runtime update advisory.** The SDK floor is
   `10.0.404`, central Microsoft packages use the `10.0.15` runtime band, and
   assemblies carry the recommended runtime as metadata. Portal administrators

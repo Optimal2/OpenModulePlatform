@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/ActivityLog.cshtml.cs
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Services;
@@ -62,6 +63,45 @@ public sealed class ActivityLogModel : OmpPortalPageModel
 
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
     public bool HasFilter => UserIds.Any(id => id > 0) || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
+
+    /// <summary>
+    /// The query string of this page with the current filters but without Q: the
+    /// clear-search action removes the text and keeps everything else. Take is
+    /// left out on purpose, so the unfiltered view starts from the default size.
+    /// </summary>
+    public string ClearQQuery
+    {
+        get
+        {
+            var query = new QueryBuilder();
+            foreach (var id in UserIds)
+            {
+                query.Add("UserIds", id.ToString(CultureInfo.InvariantCulture));
+            }
+
+            foreach (var module in Modules.Where(m => !string.IsNullOrWhiteSpace(m)))
+            {
+                query.Add("Modules", module);
+            }
+
+            if (!string.IsNullOrWhiteSpace(Range))
+            {
+                query.Add("Range", Range);
+            }
+
+            if (From.HasValue)
+            {
+                query.Add("From", From.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            }
+
+            if (To.HasValue)
+            {
+                query.Add("To", To.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            }
+
+            return query.ToQueryString().ToString();
+        }
+    }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {

@@ -3229,6 +3229,8 @@
   <data name="Search and tick OMP users in the list, or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Search and tick OMP users in the list, or paste AD users/groups as newline-separated text.</value></data>
   <data name="Row search" xml:space="preserve"><value>Row search</value></data>
   <data name="Filters the loaded rows as you type." xml:space="preserve"><value>Filters the loaded rows as you type.</value></data>
+  <data name="Server search" xml:space="preserve"><value>Server search</value></data>
+  <data name="Searches all matching rows on the server, not just the loaded ones." xml:space="preserve"><value>Searches all matching rows on the server, not just the loaded ones.</value></data>
   <data name="Since the start" xml:space="preserve"><value>Since the start</value></data>
   <data name="Today" xml:space="preserve"><value>Today</value></data>
   <data name="Last {0} days" xml:space="preserve"><value>Last {0} days</value></data>

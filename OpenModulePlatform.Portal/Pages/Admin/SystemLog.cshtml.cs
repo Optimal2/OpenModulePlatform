@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/SystemLog.cshtml.cs
 using System.Globalization;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
@@ -69,6 +70,45 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
     public bool HasFilter => Processes.Length > 0 || Levels.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
+
+    /// <summary>
+    /// The query string of this page with the current filters but without Q: the
+    /// clear-search action removes the text and keeps everything else. Take is
+    /// left out on purpose, so the unfiltered view starts from the default size.
+    /// </summary>
+    public string ClearQQuery
+    {
+        get
+        {
+            var query = new QueryBuilder();
+            foreach (var process in Processes.Where(p => !string.IsNullOrWhiteSpace(p)))
+            {
+                query.Add("Processes", process);
+            }
+
+            foreach (var level in Levels.Where(l => !string.IsNullOrWhiteSpace(l)))
+            {
+                query.Add("Levels", level);
+            }
+
+            if (!string.IsNullOrWhiteSpace(Range))
+            {
+                query.Add("Range", Range);
+            }
+
+            if (From.HasValue)
+            {
+                query.Add("From", FieldValue(From));
+            }
+
+            if (To.HasValue)
+            {
+                query.Add("To", FieldValue(To));
+            }
+
+            return query.ToQueryString().ToString();
+        }
+    }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {

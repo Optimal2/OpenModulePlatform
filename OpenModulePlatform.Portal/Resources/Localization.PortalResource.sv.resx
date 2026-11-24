@@ -3148,6 +3148,8 @@
   <data name="Search and tick OMP users in the list, or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Sök och markera OMP-användare i listan, eller klistra in AD-användare/-grupper som radbruten text.</value></data>
   <data name="Row search" xml:space="preserve"><value>Radsök</value></data>
   <data name="Filters the loaded rows as you type." xml:space="preserve"><value>Filtrerar de laddade raderna medan du skriver.</value></data>
+  <data name="Server search" xml:space="preserve"><value>Serversök</value></data>
+  <data name="Searches all matching rows on the server, not just the loaded ones." xml:space="preserve"><value>Söker i alla matchande rader på servern, inte bara de inlästa.</value></data>
   <data name="Since the start" xml:space="preserve"><value>Sedan start</value></data>
   <data name="Today" xml:space="preserve"><value>Idag</value></data>
   <data name="Last {0} days" xml:space="preserve"><value>Senaste {0} dagarna</value></data>
