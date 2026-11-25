@@ -61,40 +61,26 @@ Describe 'Shared tooling version bump regressions' {
         (Get-Content $widgetPath -Raw | ConvertFrom-Json).packageVersion | Should -Be '1.0.1'
     }
 
-    It 'Rejects SemVer regression <Current> -> <Next> without writing' -ForEach @(
-        @{ Current = '1.2.3'; Next = '1.2.3-beta.1' }
-        @{ Current = '1.2.3-beta.2'; Next = '1.2.3-alpha.1' }
-        @{ Current = '1.2.3-beta.10'; Next = '1.2.3-beta.2' }
-        @{ Current = '1.2.3-beta.1'; Next = '1.2.3-beta' }
-        @{ Current = '1.2.3-alpha'; Next = '1.2.3-9' }
-        @{ Current = '1.2.3-a'; Next = '1.2.3-Z' }
+    It 'Refuses explicit version <Version> before writing' -ForEach @(
+        @{ Version = '1.2.3-beta' }
+        @{ Version = '1.2.3-01a' }
     ) {
-        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-        $manifest.repositoryVersion = $Current
-        $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
-        $before = (Get-TestFileHash $manifestPath)
-        $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = $Next }
+        $before = Get-TestFileHash $manifestPath
+        $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = $Version }
         $result.Failed | Should -BeTrue
-        # Windows PowerShell 5.1 wraps Out-String at the console width, so match across line breaks.
-        ($result.Errors -replace '\s+', '') | Should -Match 'RefusingtoregressrepositoryVersion'
+        ($result.Errors -replace '\s+', '') | Should -Match ([regex]::Escape("Version'$Version'isnotallowed:OMPversionsmustbeplain"))
         (Get-TestFileHash $manifestPath) | Should -Be $before
     }
 
-    It 'Accepts SemVer progression or metadata equality <Current> -> <Next>' -ForEach @(
-        @{ Current = '1.2.3-beta.2'; Next = '1.2.3-beta.10' }
-        @{ Current = '1.2.3-beta'; Next = '1.2.3-beta.1' }
-        @{ Current = '1.2.3-9'; Next = '1.2.3-alpha' }
-        @{ Current = '1.2.3-beta.1'; Next = '1.2.3' }
-        @{ Current = '1.2.3+z'; Next = '1.2.3+a' }
-        @{ Current = '1.2.3-beta.1+z'; Next = '1.2.3-beta.1+a' }
-        @{ Current = '1.2.3'; Next = '1.2.4-alpha' }
-    ) {
+    It 'Refuses an existing suffixed repositoryVersion even when skipping the repository bump' {
         $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-        $manifest.repositoryVersion = $Current
+        $manifest.repositoryVersion = '1.2.3+z'
         $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
-        $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = $Next }
-        $result.Failed | Should -BeFalse
-        (Get-Content $manifestPath -Raw | ConvertFrom-Json).repositoryVersion | Should -Be $Next
+        $before = Get-TestFileHash $manifestPath
+        $result = Invoke-IsolatedBump $bump @{ ComponentKey = @('test_app'); SkipRepositoryVersion = $true }
+        $result.Failed | Should -BeTrue
+        ($result.Errors -replace '\s+', '') | Should -Match "Version'1\.2\.3\+z'isnotallowed:OMPversionsmustbeplain"
+        (Get-TestFileHash $manifestPath) | Should -Be $before
     }
 
     It 'Rejects a missing selected definition before writing any selected file' {
@@ -111,17 +97,17 @@ Describe 'Shared tooling version bump regressions' {
         (Get-TestFileHash $definitionPath) | Should -Be $definitionBefore
     }
 
-    It 'Orders compatible artifact caps with the same SemVer precedence' -ForEach @(
-        @{ Cap = '1.2.3-beta.2'; Next = '1.2.3-beta.10'; Expected = '1.2.3-beta.10' }
-        @{ Cap = '1.2.3-beta.2'; Next = '1.2.3'; Expected = '1.2.3' }
-        @{ Cap = '1.2.3'; Next = '1.2.3-beta.2'; Expected = '1.2.3' }
-    ) {
+    It 'Refuses a suffixed compatible artifact cap before writing' {
         $definition = Get-Content $definitionPath -Raw | ConvertFrom-Json
-        $definition.compatibleArtifacts | ForEach-Object { $_ | Add-Member maxVersion $Cap }
+        $definition.compatibleArtifacts | ForEach-Object { $_ | Add-Member maxVersion '1.2.3-beta.2' }
         $definition | ConvertTo-Json -Depth 8 | Set-Content $definitionPath -Encoding UTF8
-        $result = Invoke-IsolatedBump $bump @{ ComponentKey = @('test_app'); Version = $Next; SkipRepositoryVersion = $true }
-        $result.Failed | Should -BeFalse
-        (Get-Content $definitionPath -Raw | ConvertFrom-Json).compatibleArtifacts[0].maxVersion | Should -Be $Expected
+        $manifestBefore = Get-TestFileHash $manifestPath
+        $definitionBefore = Get-TestFileHash $definitionPath
+        $result = Invoke-IsolatedBump $bump @{ ComponentKey = @('test_app'); Version = '1.2.3' }
+        $result.Failed | Should -BeTrue
+        ($result.Errors -replace '\s+', '') | Should -Match "Version'1\.2\.3-beta\.2'isnotallowed:.*compatibleArtifacts\.maxVersion"
+        (Get-TestFileHash $manifestPath) | Should -Be $manifestBefore
+        (Get-TestFileHash $definitionPath) | Should -Be $definitionBefore
     }
 
     It 'Preserves the bytes and version of a canonical BOM-bearing definition' {

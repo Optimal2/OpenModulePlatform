@@ -55,6 +55,10 @@ interactive double-click flow.
 .\scripts\omp\bump-version.ps1 -AllWidgets
 ```
 
+The bump script accepts only plain major.minor.patch (X.Y.Z). It refuses
+prerelease and build suffixes in explicit or existing versions before writing
+any files.
+
 Double-click `bump-version.cmd` for an interactive version bump. The default
 interactive choice is all artifact components and patch version bump; module
 definition versions are bumped only when selected. This command changes files,

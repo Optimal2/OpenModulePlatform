@@ -32,8 +32,7 @@ source-spelling assertion:
   4. The numeric version core has to stay inside the range the platform can
      parse and order: 0..2147483647 for every major, minor and patch, with
      ASCII digits and no leading zeroes. The helper used to normalise a
-     leading zero away ('01.2.3' became '1.2.4'), to accept a numeric
-     prerelease identifier with a leading zero, to accept a core written with
+     leading zero away ('01.2.3' became '1.2.4'), to accept a core written with
      non-ASCII digits, and to write a core above the Int32 range -- a version
      the platform does not reject but orders wrongly, because
      ArtifactVersionComparer falls back to an ordinal string comparison once
@@ -248,7 +247,7 @@ Describe 'Bump-Version: the numeric version core stays inside the supported rang
         $manifest.components[0].version | Should -Be '01.2.3'
     }
 
-    It 'Refuses a prerelease identifier that carries a leading zero' {
+    It 'Refuses a numeric prerelease suffix' {
         $repoRoot = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
         $bumpScriptPath = New-BumpVersionCoreRepository -RootPath $repoRoot
         $before = Get-BumpVersionTreeHash -RootPath $repoRoot
@@ -264,6 +263,7 @@ Describe 'Bump-Version: the numeric version core stays inside the supported rang
 
         $changed.Count | Should -Be 0
         $result.ExitCode | Should -Be 1
+        ($result.Output -replace '\s+', '') | Should -Match "Version'1\.2\.3-01'isnotallowed:OMPversionsmustbeplain"
     }
 
     It 'Refuses a numeric core written with non-ASCII digits' {
@@ -366,9 +366,11 @@ Describe 'Bump-Version: the numeric version core stays inside the supported rang
         $manifest.components[0].version | Should -Be '0.0.1'
     }
 
-    It 'Still accepts an alphanumeric prerelease identifier and build metadata that carry leading zeroes' {
+    It 'Refuses a version containing both prerelease and build suffixes' {
         $repoRoot = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
         $bumpScriptPath = New-BumpVersionCoreRepository -RootPath $repoRoot
+        $manifestPath = Join-Path $repoRoot 'omp-components.json'
+        $before = Get-BumpVersionFileHash -Path $manifestPath
 
         $result = Invoke-BumpVersionScript -BumpScriptPath $bumpScriptPath -Parameters @{
             ComponentKey = @('test_app')
@@ -376,9 +378,9 @@ Describe 'Bump-Version: the numeric version core stays inside the supported rang
             SkipRepositoryVersion = $true
         }
 
-        $result.ExitCode | Should -Be 0
-        $manifest = Get-Content -LiteralPath (Join-Path $repoRoot 'omp-components.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-        $manifest.components[0].version | Should -Be '1.2.3-01a+001'
+        $result.ExitCode | Should -Be 1
+        ($result.Output -replace '\s+', '') | Should -Match "Version'1\.2\.3-01a\+001'isnotallowed:OMPversionsmustbeplain"
+        (Get-BumpVersionFileHash -Path $manifestPath) | Should -Be $before
     }
 }
 

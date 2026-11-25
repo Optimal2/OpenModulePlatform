@@ -126,6 +126,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Plain OMP versions.** The version bump tool requires plain
+  major.minor.patch (X.Y.Z) and refuses prerelease and build suffixes before
+  writing any files.
+
 - **Server-side text search on the user log and the system log.** Both pages
   have a "Server search" field whose text travels with GET as `Q` (the row
   search still filters only the loaded rows in the browser). The search keeps

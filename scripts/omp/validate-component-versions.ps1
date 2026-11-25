@@ -68,6 +68,16 @@ if (-not (Test-Path -LiteralPath $helpersPath -PathType Leaf)) {
 }
 . $helpersPath
 
+function Get-VersionFormatError {
+    param([string]$Value, [string]$Field)
+
+    if ($Value -match '^\d+\.\d+(?:\.\d+)?[-+]') {
+        return "Version '$Value' is not allowed: OMP versions must be plain major.minor.patch (three numeric segments, X.Y.Z) with no prerelease or build suffix. Field: $Field."
+    }
+
+    return "$Field '$Value' does not match the expected major.minor or major.minor.patch format."
+}
+
 function Build-WebSharedForBinaryIdentity {
     <#
     .SYNOPSIS
@@ -225,7 +235,7 @@ if ([string]::IsNullOrWhiteSpace($repositoryVersion)) {
     Add-ValidationError -Errors $errors -Message 'repositoryVersion is missing or empty in omp-components.json.'
 }
 elseif (-not (Test-SemverLikeVersion -Value $repositoryVersion)) {
-    Add-ValidationError -Errors $errors -Message "repositoryVersion '$repositoryVersion' does not match the expected major.minor or major.minor.patch format."
+    Add-ValidationError -Errors $errors -Message (Get-VersionFormatError -Value $repositoryVersion -Field 'repositoryVersion')
 }
 
 # ---------------------------------------------------------------------------
@@ -334,7 +344,7 @@ foreach ($component in @($manifest.components)) {
         Add-ValidationError -Errors $errors -Message "Component '$componentKey' is missing version."
     }
     elseif (-not (Test-SemverLikeVersion -Value $componentVersion)) {
-        Add-ValidationError -Errors $errors -Message "Component '$componentKey' version '$componentVersion' does not match the expected major.minor or major.minor.patch format."
+        Add-ValidationError -Errors $errors -Message (Get-VersionFormatError -Value $componentVersion -Field "Component '$componentKey' version")
     }
     else {
         $componentVersionCount++
@@ -352,7 +362,7 @@ foreach ($component in @($manifest.components)) {
         }
 
         if (-not (Test-SemverLikeVersion -Value $minWorkerHostVersion)) {
-            Add-ValidationError -Errors $errors -Message "Component '$componentKey' minWorkerHostVersion '$minWorkerHostVersion' does not match the expected major.minor or major.minor.patch format."
+            Add-ValidationError -Errors $errors -Message (Get-VersionFormatError -Value $minWorkerHostVersion -Field "Component '$componentKey' minWorkerHostVersion")
         }
     }
 

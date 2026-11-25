@@ -104,7 +104,9 @@ Follow these rules strictly:
 The canonical version-bumping script is `scripts/omp/bump-version.ps1`. It
 updates repositoryVersion, component versions, module-definition
 versions, compatibleArtifacts.maxVersion, dashboard widget versions, and
-supports cascade-bumps from shared projects. Use it for all routine bumps:
+supports cascade-bumps from shared projects. The bump script accepts only plain
+major.minor.patch (X.Y.Z) and refuses prerelease and build suffixes in
+explicit or existing versions. Use it for all routine bumps:
 
 ```powershell
 .\scripts\omp\bump-version.ps1 -ComponentKey omp-auth-web
