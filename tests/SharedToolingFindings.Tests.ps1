@@ -72,6 +72,29 @@ Describe 'Shared tooling version bump regressions' {
         (Get-TestFileHash $manifestPath) | Should -Be $before
     }
 
+    It 'Refuses to lower repositoryVersion from <CurrentVersion> to <Version> without writing' -ForEach @(
+        @{ CurrentVersion = '2.0.0'; Version = '1.0.0' }
+        @{ CurrentVersion = '1.2.10'; Version = '1.2.9' }
+    ) {
+        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        $manifest.repositoryVersion = $CurrentVersion
+        $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
+        $before = Get-TestFileHash $manifestPath
+        $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = $Version }
+        $result.Failed | Should -BeTrue
+        ($result.Errors -replace '\s+', '') | Should -Match ([regex]::Escape("RefusingtoregressrepositoryVersionfrom'$CurrentVersion'to'$Version'"))
+        (Get-TestFileHash $manifestPath) | Should -Be $before
+    }
+
+    It 'Accepts a higher repositoryVersion from 1.2.9 to 1.2.10' {
+        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        $manifest.repositoryVersion = '1.2.9'
+        $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
+        $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = '1.2.10' }
+        $result.Failed | Should -BeFalse
+        (Get-Content $manifestPath -Raw | ConvertFrom-Json).repositoryVersion | Should -Be '1.2.10'
+    }
+
     It 'Refuses an existing suffixed repositoryVersion even when skipping the repository bump' {
         $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
         $manifest.repositoryVersion = '1.2.3+z'
