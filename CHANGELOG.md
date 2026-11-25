@@ -438,6 +438,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Log text search keeps its path and live text.** The Clear links on the user
+  log and system log include the request path base, so they keep the other
+  filters and remove Q when the Portal is hosted below a sub-path. During
+  in-place searches, the refreshed form keeps the Q text, focus and caret that
+  are live in the browser, and an older response can no longer overwrite newer
+  results or rewrite the address bar.
+
 - **Web.Shared contract validation restored.**
   `scripts/omp/validate-webshared-contracts.ps1` accepts a shared project
   declared as a source directory, while `.csproj` entries must still name

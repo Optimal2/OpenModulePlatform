@@ -217,6 +217,7 @@
     };
 
     let pending = null;
+    let requestSequence = 0;
     const refresh = async (url) => {
         if (!results || typeof window.fetch !== 'function' || typeof DOMParser !== 'function') {
             // The fallback is the same URL as a plain navigation: it carries
@@ -229,6 +230,7 @@
             return;
         }
 
+        const requestId = ++requestSequence;
         pending?.abort();
         const controller = new AbortController();
         pending = controller;
@@ -241,10 +243,16 @@
                 headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
                 signal: controller.signal
             });
+            if (requestId !== requestSequence) {
+                return;
+            }
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
             const html = await response.text();
+            if (requestId !== requestSequence) {
+                return;
+            }
             const doc = new DOMParser().parseFromString(html, 'text/html');
             const fresh = doc.querySelector('[data-activity-results]');
             if (!fresh) {
@@ -294,8 +302,13 @@
             const qform = qformOf();
             const freshQForm = doc.querySelector('#activity-qsearch-form');
             if (qform && freshQForm) {
+                const current = currentQ();
+                const freshQ = freshQForm.querySelector('input[name="Q"]');
+                if (current && freshQ) {
+                    freshQ.value = current.value;
+                }
                 const hadFocus = qform.contains(document.activeElement);
-                const caret = currentQ()?.selectionStart ?? null;
+                const caret = current?.selectionStart ?? null;
                 qform.replaceWith(freshQForm);
                 if (hadFocus) {
                     const next = currentQ();
@@ -310,7 +323,7 @@
             window.history.replaceState(null, '', url);
             rebindSearch();
         } catch (error) {
-            if (error?.name === 'AbortError') {
+            if (requestId !== requestSequence || error?.name === 'AbortError') {
                 return;
             }
             // A failed fetch falls back to the plain navigation of the same

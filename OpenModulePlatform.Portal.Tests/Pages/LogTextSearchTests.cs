@@ -132,6 +132,22 @@ public sealed class LogTextSearchTests : IAsyncLifetime
         });
 
     [Fact]
+    public Task ActivityLogClearSearch_WithPathBase_KeepsFiltersAndDropsQ()
+        => PageHandlerHarness.InEnglishAsync(async () =>
+        {
+            using var server = Server();
+            using var client = server.CreateClient();
+            using var response = await client.GetAsync("/omp/admin/activitylog?Modules=logtextsearchmod&Range=all&Q=alpha");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var html = await response.Content.ReadAsStringAsync();
+            var href = ClearQHref(html);
+            Assert.StartsWith("/omp/admin/activitylog", href, StringComparison.Ordinal);
+            Assert.Contains("Modules=logtextsearchmod", href, StringComparison.Ordinal);
+            Assert.Contains("Range=all", href, StringComparison.Ordinal);
+            Assert.DoesNotContain("Q=", href, StringComparison.Ordinal);
+        });
+
+    [Fact]
     public Task SystemLogPage_RendersServerSearchFieldWithCurrentValue()
         => PageHandlerHarness.InEnglishAsync(async () =>
         {
@@ -160,6 +176,22 @@ public sealed class LogTextSearchTests : IAsyncLifetime
             // The clear-search link drops Q and keeps the other filters.
             var href = ClearQHref(html);
             Assert.Equal("/admin/systemlog?Processes=Portal", href);
+        });
+
+    [Fact]
+    public Task SystemLogClearSearch_WithPathBase_KeepsFiltersAndDropsQ()
+        => PageHandlerHarness.InEnglishAsync(async () =>
+        {
+            using var server = Server();
+            using var client = server.CreateClient();
+            using var response = await client.GetAsync("/omp/admin/systemlog?Processes=Portal&Levels=Warn&Q=warning");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var html = await response.Content.ReadAsStringAsync();
+            var href = ClearQHref(html);
+            Assert.StartsWith("/omp/admin/systemlog", href, StringComparison.Ordinal);
+            Assert.Contains("Processes=Portal", href, StringComparison.Ordinal);
+            Assert.Contains("Levels=Warn", href, StringComparison.Ordinal);
+            Assert.DoesNotContain("Q=", href, StringComparison.Ordinal);
         });
 
     private static string ClearQHref(string html)
@@ -197,6 +229,7 @@ public sealed class LogTextSearchTests : IAsyncLifetime
         })
         .Configure(app =>
         {
+            app.UsePathBase("/omp");
             app.Use((context, next) =>
             {
                 context.User = new(new ClaimsIdentity(

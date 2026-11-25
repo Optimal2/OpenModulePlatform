@@ -188,7 +188,7 @@
                title="@L["Searches all matching rows on the server, not just the loaded ones."]" />
         <button type="submit" class="btn btn-secondary">@L["Search"]</button>
         <a class="btn btn-secondary"
-           href="@(HttpContext.Request.Path + Model.ClearQQuery)"
+           href="@(Url.Content("~/admin/activitylog") + Model.ClearQQuery)"
            data-activity-clear-q
            aria-disabled="@(string.IsNullOrWhiteSpace(Model.Q) ? "true" : null)"
            tabindex="@(string.IsNullOrWhiteSpace(Model.Q) ? "-1" : null)">@L["Clear"]</a>
