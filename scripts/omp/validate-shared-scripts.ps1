@@ -282,7 +282,15 @@ $consumerRoot = [System.IO.Path]::GetFullPath($ConsumerRepositoryRoot).TrimEnd('
 # validators. In particular, conflicting OMP_PLATFORM_ROOT and
 # OpenModulePlatformRoot values fail before a build and this guard can select
 # different checkouts.
-$resolvedPlatform = Resolve-OmpPlatformRoot -RepositoryRoot $consumerRoot -PlatformRepositoryRoot $PlatformRepositoryRoot
+try {
+    $resolvedPlatform = Resolve-OmpPlatformRoot -RepositoryRoot $consumerRoot -PlatformRepositoryRoot $PlatformRepositoryRoot
+}
+catch {
+    # Callers read $LASTEXITCODE; a resolver exception must not bypass their
+    # normal error handling or prevent their validation summary from printing.
+    Write-Host "Shared scripts: platform root resolution failed: $($_.Exception.Message)"
+    exit 1
+}
 $platformSource = $resolvedPlatform.Source
 $platformRoot = $resolvedPlatform.Root
 $platformRootNamed = $resolvedPlatform.Named
