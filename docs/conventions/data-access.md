@@ -138,7 +138,7 @@ This document records a read-only audit performed on 2026-07-16. The per-reposit
 4. **Transaction handling inconsistency.** `Tailwind` has **no transactions** at all. `Contoso`, `Fabrikam`, and `Northwind` rely mostly on implicit/auto-commit transactions, with only a few explicit `SqlTransaction` paths. Some `Contoso` SQL batches contain server-side `BEGIN TRANSACTION` without a client-side transaction. This makes cross-operation consistency hard to reason about.
 5. **Parameterization style.** Most repos use `cmd.Parameters.AddWithValue(...)`, which can cause plan-cache pollution and implicit type/size issues. `Northwind` and parts of `OpenModulePlatform`/`Globex` use explicit `SqlParameter` with `SqlDbType`, which is safer.
 6. **Module-schema ownership.** `Fabrikam` and `Tailwind` do not declare FKs from module tables into `omp.*`. `AdventureWorks` supports a legacy mode that bypasses the module-definition SQL entirely. `ODVGateway` declares a schema name but owns no database objects.
-7. **Stored procedures.** Only `Contoso` has a runtime-called stored procedure; the rest use inline SQL. OpenModulePlatform core setup has a few placeholder procs, but they are not business-logic procs.
+7. **Stored procedures.** Among the consumer repositories only `Contoso` has a runtime-called stored procedure; the rest use inline SQL. OpenModulePlatform core setup defines five procedures with real bodies (see section 1): `omp.MaterializeInstanceTemplate` and `omp.RequestHostDeployment` carry business logic, the other three serve telemetry retention.
 
 ---
 

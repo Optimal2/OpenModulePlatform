@@ -13,8 +13,8 @@ Security issues should be reported privately before public disclosure.
 
 ## Reporting a vulnerability
 
-Use GitHub private vulnerability reporting for the repository if that feature is enabled.
-If private vulnerability reporting is not enabled, contact the project maintainers through a private channel before disclosing details publicly.
+Use GitHub private vulnerability reporting for the repository (the Security tab, "Report a vulnerability"); it is enabled for this repository.
+If you cannot use it, contact the project maintainers through a private channel before disclosing details publicly.
 
 Please include, when possible:
 

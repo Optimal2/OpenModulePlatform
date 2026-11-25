@@ -45,7 +45,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — missing.
 - **`Directory.Build.props`** — present, only version/company metadata (`:3-12`).
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.200` (`:3-4`).
+- **`global.json`** — pins SDK `10.0.404` (`:3-4`).
 - **`.csproj`** — all projects target `net10.0` with `Nullable`/`ImplicitUsings` enabled (e.g. `Contoso.Web.csproj:3-5`). No analyzer references, no `TreatWarningsAsErrors`, no `AnalysisLevel`.
 
 ### ExampleModule (fabrikam-web)
@@ -53,7 +53,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — missing.
 - **`Directory.Build.props`** — present. Sets `TargetFramework` `net10.0` (`:3`), `Nullable` `enable` (`:4`), `ImplicitUsings` `enable` (`:5`), and explicitly `TreatWarningsAsErrors` `false` (`:6`). Does not set `LangVersion` or `AnalysisLevel`.
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`. (Was the preview
+- **`global.json`** — pins SDK `10.0.404` with `rollForward: latestFeature`. (Was the preview
   build `10.0.100-preview.4.25258.110` at the original audit; corrected 2026-09-04.)
 - **`.csproj`** — no project-level overrides found; all inherit from `Directory.Build.props`.
 
@@ -62,7 +62,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — missing.
 - **`Directory.Build.props`** — identical shape to fabrikam-web: `TargetFramework` `net10.0` (`:3`), `Nullable` `enable` (`:4`), `ImplicitUsings` `enable` (`:5`), `TreatWarningsAsErrors` `false` (`:6`).
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`, same as fabrikam-web.
+- **`global.json`** — pins SDK `10.0.404` with `rollForward: latestFeature`, same as fabrikam-web.
   (Both were on that preview build at the original audit; corrected 2026-09-04.)
 - **`.csproj`** — no project-level overrides found.
 
@@ -77,7 +77,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
   assembly bytes (OMP artifact identity is manifest version + payload SHA-256, so an embedded
   commit made every build look like new artifact content).
 - **`Directory.Packages.props`** — present, CPM enabled.
-- **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`.
+- **`global.json`** — pins SDK `10.0.404` with `rollForward: latestFeature`.
 - **`.csproj`** — single project `AdventureWorks.Web.RazorPages.csproj`,
   now inheriting framework and analysis settings from `Directory.Build.props` and package versions
   from CPM. References `OpenModulePlatform.Web.Shared`.
@@ -105,7 +105,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — missing.
 - **`Directory.Build.props`** — present, only version/company metadata (`:3-12`).
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.200` (`:3-4`).
+- **`global.json`** — pins SDK `10.0.404` (`:3-4`).
 - **`.csproj`** — all projects target `net10.0` with `Nullable`/`ImplicitUsings` enabled (e.g. `Globex.Web.csproj:3-5`). No analyzer settings, no `TreatWarningsAsErrors`, no `AnalysisLevel`.
 
 ### ODVGateway
@@ -113,7 +113,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — present (`:1`). `root = true` (`:1`), `charset = utf-8` (`:4`), `end_of_line = crlf` (`:5`), `insert_final_newline = true` (`:6`), space indent 4 (`:7-8`), JSON/MD/YAML 2 spaces (`:10`).
 - **`Directory.Build.props`** — present. Sets `TreatWarningsAsErrors` `false` (`:3`), `AnalysisLevel` `latest` (`:4`), and `EnforceCodeStyleInBuild` `true` (`:5`). Does **not** set `Nullable`, `ImplicitUsings`, or `LangVersion`.
 - **`Directory.Packages.props`** — missing (CPM not enabled).
-- **`global.json`** — pins SDK `10.0.300` (`:3-4`).
+- **`global.json`** — pins SDK `10.0.404` (`:3-4`).
 - **`.csproj`** — `ODVGateway.csproj` targets `net10.0` (`:3`), `Nullable`/`ImplicitUsings` enabled (`:4-5`), and includes package metadata (`:8-12`). Inline `PackageReference` versions.
 
 ### OpenDocViewer
@@ -137,15 +137,17 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 | Repository | `.editorconfig` | CPM | `Nullable` | `ImplicitUsings` | `TreatWarningsAsErrors` | `LangVersion` | `AnalysisLevel` | `EnforceCodeStyleInBuild` | Analyzers | `global.json` | JS lint | JS format | TS config |
 |------------|-----------------|-----|------------|------------------|--------------------------|---------------|-----------------|---------------------------|-----------|---------------|---------|-----------|-----------|
 | OpenModulePlatform | yes (LF) | yes | enable | enable | — | default* | — | — | analyzer project only | 10.0.404 | — | — | — |
-| contoso-web | no | yes | enable | enable | — | default | — | — | none | 10.0.200 | — | — | — |
-| fabrikam-web | no | yes | enable | enable | false | default | — | — | none | 10.0.302 | — | — | — |
-| northwind-web | no | yes | enable | enable | false | default | — | — | none | 10.0.302 | — | — | — |
-| adventureworks-web | yes (CRLF) | yes | enable | enable | false | latest | latest | — | none | 10.0.302 | — | — | — |
+| contoso-web | no | yes | enable | enable | — | default | — | — | none | 10.0.404 | — | — | — |
+| fabrikam-web | no | yes | enable | enable | false | default | — | — | none | 10.0.404 | — | — | — |
+| northwind-web | no | yes | enable | enable | false | default | — | — | none | 10.0.404 | — | — | — |
+| adventureworks-web | yes (CRLF) | yes | enable | enable | false | latest | latest | — | none | 10.0.404 | — | — | — |
 | tailwind-web | yes (CRLF) | yes | enable | enable | false | latest | latest | — | none | none | — | — | — |
-| globex-web | no | yes | enable | enable | — | default | — | — | none | 10.0.200 | — | — | — |
-| ODVGateway | yes (CRLF) | no | enable | enable | false | default | latest | true | none | 10.0.300 | — | — | — |
+| globex-web | no | yes | enable | enable | — | default | — | — | none | 10.0.404 | — | — | — |
+| ODVGateway | yes (CRLF) | no | enable | enable | false | default | latest | true | none | 10.0.404 | — | — | — |
 | OpenDocViewer | no | — | — | — | — | — | — | — | — | — | ESLint flat | implicit Prettier | none |
 | AgentDocMap | no | — | — | — | — | — | — | — | — | — | none | none | none |
+
+The `global.json` column was re-measured on 2026-11-25 after the SDK floor was raised to `10.0.404` on 2026-11-11.
 
 \* `OpenModulePlatform.Web.Shared.Analyzers.csproj` pins `LangVersion` to `9.0` because it targets `netstandard2.0`.
 
@@ -180,7 +182,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
    - `EnforceCodeStyleInBuild` `true`
    - `TreatWarningsAsErrors` `true` for CI/release builds; `false` for local inner-loop builds can be allowed via a condition.
 3. **`Directory.Packages.props`** at repository root with `ManagePackageVersionsCentrally` `true`.
-4. **`global.json`** pinning a stable SDK (e.g. `10.0.200` or `10.0.300`) with `rollForward: latestFeature`.
+4. **`global.json`** pinning a stable SDK at or above the current floor (e.g. `10.0.404`) with `rollForward: latestFeature`.
 5. **Analyzers** — use the built-in SDK analyzers via `AnalysisLevel`/`EnforceCodeStyleInBuild`. Add project-specific analyzer packages (e.g. Roslyn analyzers, xUnit analyzers) only where needed.
 
 ### JavaScript / npm repositories
@@ -204,7 +206,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 ### fabrikam-web / northwind-web
 - Add `.editorconfig`.
 - Decide on `TreatWarningsAsErrors`: recommend `true` in CI, `false` locally. Add `AnalysisLevel` `latest` and `EnforceCodeStyleInBuild` `true`.
-- Keep CPM. (`global.json` already pins the stable `10.0.302` SDK; the preview-SDK pin from the original audit was corrected 2026-09-04.)
+- Keep CPM. (`global.json` already pins the stable `10.0.404` SDK; the preview-SDK pin from the original audit was corrected 2026-09-04.)
 
 ### adventureworks-web
 - Already in place (corrected 2026-09-04): `.editorconfig`, root `Directory.Build.props`, `Directory.Packages.props` with CPM, and a `global.json` SDK pin. No structural additions remain; only alignment items such as line endings and `TreatWarningsAsErrors` policy are open.

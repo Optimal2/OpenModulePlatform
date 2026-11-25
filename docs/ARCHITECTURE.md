@@ -606,7 +606,7 @@ flowchart LR
 | Store | What it records | Writer |
 |---|---|---|
 | `omp.AuditLog` (Actor, Action, TargetType, TargetId, BeforeJson, AfterJson) | Host deployment requests, config overlay changes including deletions, user merges. | `OmpAdminRepository.WriteAuditLogAsync`, `OmpAdminRepository.OverlayAdministration.cs`, `OmpUserAdminRepository.cs` |
-| `omp_auth.ActivityLog` | `session.signed_in`, `session.signed_out`, `user.registered`. Failed sign-ins are not recorded here. | `Auth/ActivityLog/ActivityLogWriter.cs`, `Services/SignInActivityLog.cs` |
+| `omp_auth.ActivityLog` | `session.signed_in`, `session.signed_out`, `user.registered`. Failed sign-ins are not recorded here. | `OpenModulePlatform.Web.Shared/ActivityLog/ActivityLogWriter.cs`, `Services/SignInActivityLog.cs` |
 | `omp_portal.ActivityLog` | Role changes, universal package imports, maintenance scans, HostAgent upgrade requests, app pool recycles, messaging events. | Portal pages and services |
 | `omp.ModuleDefinitionSqlExecutions` | Every module SQL script run, with hash and status. | HostAgent, Bootstrapper |
 | `omp.SystemLog` | Warnings and errors from all processes except WorkerProcessHost. | NLog database target |
