@@ -50,6 +50,13 @@ Describe 'local-ci shared file propagation' {
     }
 
     BeforeEach {
+        $previousGitAllowProtocol = $env:GIT_ALLOW_PROTOCOL
+        $allowedProtocols = @($env:GIT_ALLOW_PROTOCOL -split ':' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($allowedProtocols -notcontains 'file') {
+            $allowedProtocols += 'file'
+        }
+        $env:GIT_ALLOW_PROTOCOL = $allowedProtocols -join ':'
+
         $fixture = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $root = Join-Path $fixture 'repositories with spaces'
         $platform = Join-Path $root 'Platform'
@@ -77,12 +84,31 @@ Describe 'local-ci shared file propagation' {
         $validatorPath = Join-Path $platform 'scripts/omp/validate-shared-file-propagation.ps1'
     }
 
+    AfterEach {
+        $env:GIT_ALLOW_PROTOCOL = $previousGitAllowProtocol
+    }
+
     It 'exits 0 when the consumer copies are identical' {
         $result = Invoke-FixtureValidation
 
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Match 'Consumer: OK \([1-9][0-9]* files identical; no upstream configured\)'
         $result.Output | Should -Match 'Shared file propagation: OK for 1 consumer\(s\)'
+    }
+
+    It 'fails closed when the canonical inventory is empty' {
+        $inventoryValidatorPath = Join-Path $platform 'scripts/omp/validate-shared-scripts.ps1'
+        $validator = [IO.File]::ReadAllText($inventoryValidatorPath)
+        $validator = $validator -replace '(?ms)^\$sharedScripts = @\(.*?^\)', '$sharedScripts = @()'
+        $validator = $validator -replace '(?ms)^\$sharedWebBuildFiles = @\(.*?^\)', '$sharedWebBuildFiles = @()'
+        $validator = $validator -replace '(?ms)^\$sharedPesterStepFiles = @\(.*?^\)', '$sharedPesterStepFiles = @()'
+        [IO.File]::WriteAllText($inventoryValidatorPath, $validator, [Text.Encoding]::ASCII)
+
+        $result = Invoke-FixtureValidation
+
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match 'inventory.*empty'
+        $result.Output | Should -Not -Match 'Shared file propagation: OK'
     }
 
     It 'exits non-zero when a consumer copy differs' {

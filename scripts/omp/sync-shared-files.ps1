@@ -246,6 +246,9 @@ function Invoke-OmpSharedFileSync {
         $platform = Resolve-OmpSharedFilePlatformRoot -Path $PlatformRepositoryRoot
         $validator = Join-Path $platform 'scripts/omp/validate-shared-scripts.ps1'
         $inventory = @(Get-OmpSharedFileInventory -ValidatorPath $validator | Sort-Object -Unique)
+        if ($inventory.Count -eq 0) {
+            throw "Shared file inventory in '$validator' is empty; expected at least one canonical file."
+        }
         $canonical = @{}
 
         foreach ($consumer in (Get-OmpSharedFileConsumers -PlatformRepositoryRoot $platform -ConsumerRoot $ConsumerRoot)) {

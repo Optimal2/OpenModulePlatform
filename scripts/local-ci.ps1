@@ -203,9 +203,11 @@ try {
         & (Join-Path $repoRoot 'scripts\omp\validate-webshared-contracts.ps1')
     }
 
-    # Exit 3 means no drift, but at least one consumer could not be measured.
-    # It remains visible in the summary without making a single-checkout CI or
-    # a deliberately stale sibling checkout a platform-gate failure.
+    # Exit 3 means no measured drift, but at least one consumer could not be measured
+    # (for example, no checkout or one behind its recorded upstream). A checkout
+    # without an upstream, including detached HEAD, is measured: stale carried
+    # files there are DRIFT and exit 1. Exit 3 stays visible in the summary
+    # without making a single-checkout CI a platform-gate failure.
     Invoke-Step 'Validate shared file propagation' -NotMeasuredExitCode 3 {
         & (Join-Path $repoRoot 'scripts\omp\validate-shared-file-propagation.ps1')
     }

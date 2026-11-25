@@ -9,8 +9,9 @@ ambiguous. Numbers are never reused for a different check and never renumbered;
 new checks get the next unused number.
 
 That numbering contract is upheld by this document and by review — **no guard
-enforces it**. Check 15 byte-compares only `validate-component-versions.helpers.ps1`
-and `bump-version.ps1`; `validate-component-versions.ps1` itself is deliberately
+enforces it**. Check 15 covers the three canonical shared-file lists
+`$sharedScripts`, `$sharedWebBuildFiles` and `$sharedPesterStepFiles` in
+`validate-shared-scripts.ps1`; `validate-component-versions.ps1` itself is deliberately
 repo-local (see the next section), so nothing would mechanically catch a repository
 that gave `Check 21` a different meaning. Verified 2026-09-08 by extracting every
 `Check N` declaration from all nine validators: checks 1–10, 12, 13, 15 and 16 do
@@ -32,8 +33,10 @@ Two layers, deliberately separated:
   `scripts/omp/bump-version.ps1`, and -- in every repository that runs Pester
   suites or carries a copy of either file -- the canonical Pester step
   `scripts/omp/run-script-tests.ps1` plus `scripts/omp/pester-bootstrap.ps1`.
-  Never edit a copy repo-locally: change the canonical file here and
-  redistribute in the same change.
+  Never edit a copy repo-locally: change the canonical file here, run
+  `scripts/omp/sync-shared-files.ps1`, and commit the copies in each consumer
+  in the same change. The platform local gate step `Validate shared file
+  propagation` fails on drift in a measured consumer copy.
 - **Repo-local flow (intentionally per repository):** the validator script
   itself (`scripts/omp/validate-component-versions.ps1`) decides which checks
   RUN. Repositories legitimately differ: this platform repository owns

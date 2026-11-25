@@ -226,6 +226,21 @@ Describe 'sync-shared-files.ps1' {
         $found[0].Resolved | Should -BeTrue
     }
 
+    It 'fails closed when every canonical inventory list is empty' {
+        $validator = [IO.File]::ReadAllText($validatorPath)
+        $validator = $validator -replace '(?ms)^\$sharedScripts = @\(.*?^\)', '$sharedScripts = @()'
+        $validator = $validator -replace '(?ms)^\$sharedWebBuildFiles = @\(.*?^\)', '$sharedWebBuildFiles = @()'
+        $validator = $validator -replace '(?ms)^\$sharedPesterStepFiles = @\(.*?^\)', '$sharedPesterStepFiles = @()'
+        [IO.File]::WriteAllText($validatorPath, $validator, [Text.Encoding]::ASCII)
+        $original = [Convert]::ToBase64String([IO.File]::ReadAllBytes($driftedPath))
+
+        $result = Invoke-FixtureSync
+
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match 'inventory.*empty'
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes($driftedPath)) | Should -Be $original
+    }
+
     It 'fails closed when the validator inventory <description>' -ForEach @(
         @{ description = 'has a non-literal element'; replacement = '$sharedScripts = @(''literal'', $dynamicPath)'; message = 'literal string elements' }
         @{ description = 'is only assigned in a function'; replacement = 'function Set-Inventory { $sharedScripts = @(''literal'') }'; message = 'top-level assignment' }

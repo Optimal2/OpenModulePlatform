@@ -132,6 +132,9 @@ function Invoke-OmpSharedFilePropagationValidation {
     $platform = Resolve-OmpSharedFilePlatformRoot -Path $requestedPlatformRoot
     $validatorPath = Join-Path $platform 'scripts/omp/validate-shared-scripts.ps1'
     $inventory = @(Get-OmpSharedFileInventory -ValidatorPath $validatorPath | Sort-Object -Unique)
+    if ($inventory.Count -eq 0) {
+        throw "Shared file inventory in '$validatorPath' is empty; expected at least one canonical file."
+    }
     $canonicalHashes = @{}
 
     $roots = @($requestedConsumerRoots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
