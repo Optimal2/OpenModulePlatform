@@ -100,11 +100,13 @@ if (-not (Test-Path -LiteralPath $env:OMP_TEST_TEMP_ROOT)) {
 }
 
 $failures = New-Object System.Collections.Generic.List[string]
+$notMeasuredSteps = New-Object System.Collections.Generic.List[string]
 
 function Invoke-Step {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
-        [Parameter(Mandatory = $true)][scriptblock]$Body
+        [Parameter(Mandatory = $true)][scriptblock]$Body,
+        [Nullable[int]]$NotMeasuredExitCode = $null
     )
     Write-Host ""
     Write-Host "--- $Name"
@@ -123,6 +125,11 @@ function Invoke-Step {
         # runs as a top-level gate and nothing else depends on $LASTEXITCODE.
         $global:LASTEXITCODE = 0
         & $Body
+        if ($null -ne $NotMeasuredExitCode -and (Test-Path 'variable:global:LASTEXITCODE') -and $global:LASTEXITCODE -eq $NotMeasuredExitCode) {
+            Write-Host "NOT MEASURED: $Name"
+            $script:notMeasuredSteps.Add($Name)
+            return
+        }
         if ((Test-Path 'variable:global:LASTEXITCODE') -and $global:LASTEXITCODE -ne 0) {
             throw "exit code $global:LASTEXITCODE"
         }
@@ -194,6 +201,13 @@ try {
 
     Invoke-Step 'Validate Web.Shared contracts' {
         & (Join-Path $repoRoot 'scripts\omp\validate-webshared-contracts.ps1')
+    }
+
+    # Exit 3 means no drift, but at least one consumer could not be measured.
+    # It remains visible in the summary without making a single-checkout CI or
+    # a deliberately stale sibling checkout a platform-gate failure.
+    Invoke-Step 'Validate shared file propagation' -NotMeasuredExitCode 3 {
+        & (Join-Path $repoRoot 'scripts\omp\validate-shared-file-propagation.ps1')
     }
 
     Invoke-Step 'Analyze PowerShell scripts' {
@@ -367,6 +381,10 @@ try {
 
     Write-Host ""
     Write-Host "========================================"
+    if ($notMeasuredSteps.Count -gt 0) {
+        Write-Host "NOT MEASURED steps (not failures):"
+        foreach ($step in $notMeasuredSteps) { Write-Host "  - NOT MEASURED: $step" }
+    }
     if ($failures.Count -eq 0) {
         Write-Host "LOCAL CI PASSED"
 

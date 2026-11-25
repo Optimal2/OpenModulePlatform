@@ -35,6 +35,10 @@ param(
     [switch]$DryRun
 )
 
+# The shared core is side-effect free when dot-sourced. Reuse its final-path
+# reader so junctions, symlinks and 8.3 aliases compare as the same checkout.
+. (Join-Path $PSScriptRoot 'validate-component-versions.helpers.ps1')
+
 function Resolve-OmpSharedFilePlatformRoot {
     param([string]$Path)
 
@@ -90,16 +94,18 @@ function Get-OmpSharedFileConsumers {
 
     $mainCheckout = $null
     try {
-        $platform = Resolve-OmpSharedFilePlatformRoot -Path $PlatformRepositoryRoot
+        $platform = Get-OmpCanonicalDirectoryPath -Path (Resolve-OmpSharedFilePlatformRoot -Path $PlatformRepositoryRoot)
         $platformKey = Get-OmpSharedFileRepositoryKey (Join-Path $platform 'omp-components.json')
         if ([string]::IsNullOrWhiteSpace($ConsumerRoot)) {
             $commonDir = Invoke-OmpSharedFileGit -Root $platform -RevParseOption '--git-common-dir'
-            if (-not [IO.Path]::IsPathRooted($commonDir)) {
-                $commonDir = Join-Path $platform $commonDir
-            }
-            $mainCheckout = Split-Path -Parent ([IO.Path]::GetFullPath($commonDir))
+            # IsPathRooted accepts drive-relative (C:x) and root-relative (\x)
+            # paths. The shared resolver joins only genuinely relative paths and
+            # rejects those two process-dependent forms on both PowerShell engines.
+            $commonDir = Get-OmpPlatformFullPath -Path $commonDir -BasePath $platform
+            $mainCheckout = Split-Path -Parent $commonDir
             $ConsumerRoot = Split-Path -Parent $mainCheckout
         }
+        $mainCheckoutRealPath = if ($mainCheckout) { Get-OmpCanonicalDirectoryPath -Path $mainCheckout } else { $null }
         if (-not (Test-Path -LiteralPath $ConsumerRoot -PathType Container -ErrorAction Stop)) {
             throw "Consumer root '$ConsumerRoot' is missing or is not a directory."
         }
@@ -107,17 +113,23 @@ function Get-OmpSharedFileConsumers {
     }
     catch {
         return [pscustomobject]@{
-            Name = 'Consumer discovery'; Root = $ConsumerRoot; Resolved = $false; Reason = $_.Exception.Message
+            Name = 'Consumer discovery'; Root = $ConsumerRoot; DiscoveredRoot = $ConsumerRoot
+            Resolved = $false; Reason = $_.Exception.Message
         }
     }
 
     foreach ($child in $children) {
-        if ($child.FullName -eq $platform -or $child.FullName -eq $mainCheckout) {
-            continue
-        }
-
         $reason = $null
+        $childRealPath = $child.FullName
         try {
+            $childRealPath = Get-OmpCanonicalDirectoryPath -Path $child.FullName
+            $isPlatform = [string]::Equals($childRealPath, $platform, [StringComparison]::OrdinalIgnoreCase)
+            $isMainCheckout = $mainCheckoutRealPath -and
+                [string]::Equals($childRealPath, $mainCheckoutRealPath, [StringComparison]::OrdinalIgnoreCase)
+            if ($isPlatform -or $isMainCheckout) {
+                continue
+            }
+
             $manifestPath = Join-Path $child.FullName 'omp-components.json'
             try {
                 $null = Get-Item -LiteralPath $manifestPath -Force -ErrorAction Stop
@@ -130,8 +142,9 @@ function Get-OmpSharedFileConsumers {
                 continue
             }
             $gitRoot = Invoke-OmpSharedFileGit -Root $child.FullName -RevParseOption '--show-toplevel'
-            if ([IO.Path]::GetFullPath($gitRoot) -ne $child.FullName) {
-                throw "Git checkout is rooted at '$gitRoot' rather than '$($child.FullName)'."
+            $gitRootRealPath = Get-OmpCanonicalDirectoryPath -Path $gitRoot
+            if (-not [string]::Equals($gitRootRealPath, $childRealPath, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Git checkout is rooted at '$gitRootRealPath' rather than '$childRealPath'."
             }
         }
         catch {
@@ -139,7 +152,8 @@ function Get-OmpSharedFileConsumers {
         }
 
         [pscustomobject]@{
-            Name = $child.Name; Root = $child.FullName; Resolved = ($null -eq $reason); Reason = $reason
+            Name = $child.Name; Root = $childRealPath; DiscoveredRoot = $child.FullName
+            Resolved = ($null -eq $reason); Reason = $reason
         }
     }
 }

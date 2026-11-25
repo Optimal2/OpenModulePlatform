@@ -45,6 +45,7 @@ Describe 'sync-shared-files.ps1' {
         $validatorPath = Join-Path $toolsDirectory 'validate-shared-scripts.ps1'
         Copy-Item -LiteralPath (Join-Path $repository 'scripts/omp/sync-shared-files.ps1') -Destination $syncPath
         Copy-Item -LiteralPath (Join-Path $repository 'scripts/omp/validate-shared-scripts.ps1') -Destination $validatorPath
+        Copy-Item -LiteralPath (Join-Path $repository 'scripts/omp/validate-component-versions.helpers.ps1') -Destination (Join-Path $toolsDirectory 'validate-component-versions.helpers.ps1')
         $driftedRelative = 'scripts/omp/bump-version.ps1'
         $identicalRelative = 'build/OpenModulePlatform.DeterministicStaticWebAssets.targets'
         $missingRelative = 'scripts/omp/run-script-tests.ps1'
@@ -157,6 +158,27 @@ Describe 'sync-shared-files.ps1' {
         $found[0].Root | Should -Be $consumer
         $found[0].Resolved | Should -BeTrue
         [Convert]::ToBase64String([IO.File]::ReadAllBytes($driftedPath)) | Should -Be $original
+    }
+
+    It 'resolves a consumer reached through a directory junction' {
+        $alias = Join-Path $root 'ConsumerAlias'
+        try {
+            $null = New-Item -ItemType Junction -Path $alias -Value $consumer -ErrorAction Stop
+        }
+        catch {
+            Set-ItResult -Skipped -Because 'this process cannot create a directory junction'
+            return
+        }
+
+        . $syncPath
+        $found = @(Get-OmpSharedFileConsumers -PlatformRepositoryRoot $platform -ConsumerRoot $root)
+        $throughAlias = @($found | Where-Object { $_.DiscoveredRoot -eq $alias })
+
+        $throughAlias.Count | Should -Be 1
+        $throughAlias[0].Resolved | Should -BeTrue
+        $throughAlias[0].Reason | Should -BeNullOrEmpty
+        $throughAlias[0].Root | Should -Be (Get-OmpCanonicalDirectoryPath -Path $consumer)
+        $throughAlias[0].DiscoveredRoot | Should -Be $alias
     }
 
     It 'finds consumers beside the main platform checkout from an external worktree' {
