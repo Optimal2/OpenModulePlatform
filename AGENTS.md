@@ -51,6 +51,15 @@ What still holds:
 Rationale and the fuller version: `docs/CODEX_DEVELOPMENT.md`, "Parallel builds across
 repositories".
 
+## Canonical shared files
+
+After changing a file listed in `$sharedScripts`, `$sharedWebBuildFiles`, or
+`$sharedPesterStepFiles` in `scripts/omp/validate-shared-scripts.ps1`, run
+`scripts/omp/sync-shared-files.ps1` and ensure the affected consumers carry the
+updated copies before marking the change complete. The local CI gate fails on
+drift in measured consumer copies. Never push consumers from a platform job
+unless the task explicitly requires it.
+
 ## Module-definition SQL changes
 
 When a module-definition-owned SQL file changes, the same commit/change must

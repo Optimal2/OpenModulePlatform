@@ -155,29 +155,28 @@ rejects the consumer artifact at import.
 ```
 
 `validate-shared-scripts.ps1` is the canonical implementation of the consumer-side
-"Check 15" shared-script drift guard, and is the sibling of the Check 14 guard above.
-Where Check 14 locks shared source TREES, Check 15 locks the shared SCRIPTS that are
-copied verbatim across the fleet -- `scripts/omp/bump-version.ps1`,
-`scripts/omp/validate-component-versions.helpers.ps1` and
-`scripts/omp/resolve-platform-root.ps1` (the `$sharedScripts` list), which are
-byte-identical in all nine repositories. Repositories that run Pester suites (a `*.Tests.ps1`
-in the runner's own inventory of `tests/`, so build output and git-ignored files do not count)
-or carry a copy of either file must also carry the canonical Pester
-step verbatim, `scripts/omp/run-script-tests.ps1` and `scripts/omp/pester-bootstrap.ps1`
-(the `$sharedPesterStepFiles` list); repositories without suites need neither. Repositories with a `Microsoft.NET.Sdk.Web`
-project must also carry `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
-verbatim and import it from their root `Directory.Build.targets` (the
-`$sharedWebBuildFiles` list); repositories without web projects need neither. The
-consumer's `scripts/validate-component-versions.ps1` calls this script out of the sibling
-OpenModulePlatform checkout; it is deliberately **not** copied into the consumers, because
-a copied guard would be subject to the very drift it exists to detect. Comparison is a
-SHA-256 over line-ending-normalised content, so a CRLF/LF difference alone does not fail
-the check. The platform checkout is `-PlatformRepositoryRoot`, then `$env:OMP_PLATFORM_ROOT`,
-then `$env:OpenModulePlatformRoot`, then the sibling `..\OpenModulePlatform`; set
-`OMP_PLATFORM_ROOT` in worktrees that do not sit beside the platform checkout. A missing
-neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error; an explicitly named
-root that is not a checkout is exit 1 regardless of `-Strict`. Pre-push and
-local CI gates pass `-Strict` (see docs/VALIDATOR_CHECKS.md).
+"Check 15" shared-file drift guard. It requires the following canonical copies.
+
+- Every consumer running Check 15 carries `scripts/omp/bump-version.ps1`,
+  `scripts/omp/validate-component-versions.helpers.ps1` and
+  `scripts/omp/resolve-platform-root.ps1` (`$sharedScripts`).
+- A consumer with a `*.Tests.ps1` in the runner's `tests/` inventory or a copy of
+  either Pester step file carries both `scripts/omp/run-script-tests.ps1` and
+  `scripts/omp/pester-bootstrap.ps1` (`$sharedPesterStepFiles`).
+- A consumer with a `Microsoft.NET.Sdk.Web` or `Microsoft.NET.Sdk.Razor`
+  project carries the three files in `$sharedWebBuildFiles` and imports
+  `build/OpenModulePlatform.DeterministicStaticWebAssets.targets` from its root
+  `Directory.Build.targets`.
+
+The consumer's `scripts/validate-component-versions.ps1` calls Check 15 from the
+OpenModulePlatform checkout. The comparison uses SHA-256 over text with normalized
+line endings. A BOM or a missing or extra trailing newline still changes the hash.
+The resolver tries `-PlatformRepositoryRoot`, `$env:OMP_PLATFORM_ROOT`,
+`$env:OpenModulePlatformRoot`, then the sibling `..\OpenModulePlatform`. Set
+`OMP_PLATFORM_ROOT` for a worktree located away from the platform checkout. A
+missing sibling produces a `NOT VERIFIED` warning, or exit `1` with `-Strict`.
+An invalid explicitly named checkout produces exit `1` regardless of `-Strict`.
+Consumer pre-push and local CI gates pass `-Strict` (see `docs/VALIDATOR_CHECKS.md`).
 
 A consumer's `scripts/local-ci.ps1` calls its own canonical
 `scripts/omp/resolve-platform-root.ps1 -RepositoryRoot $repoRoot` and uses the returned
@@ -185,16 +184,60 @@ absolute path for both MSBuild's `OpenModulePlatformRoot` property and every pla
 validator. If `OMP_PLATFORM_ROOT` and `OpenModulePlatformRoot` are both set, they must be
 aliases of the same directory; different checkouts fail with both paths in the error.
 Case, trailing separators, junctions and 8.3 short names are normalized for that
-comparison. An explicitly named root that does not exist is also an error.
-
-There is no separate reference to maintain -- the canonical file in this repository IS the
-reference. When it changes here, copy it to the eight consumers in the same change; this
-guard is what tells you which repositories still need it.
+comparison. Use a fully qualified drive or UNC path, or a path relative to the
+consumer repository root. The resolver rejects drive-relative paths such as
+`C:folder` and root-relative paths such as `\folder`. Check 15 reports the
+resolution error and exits `1`.
 
 ```powershell
-# Same shape as Check 14; CI and pre-push pass -Strict
 .\scripts\omp\validate-shared-scripts.ps1 -ConsumerRepositoryRoot '..\SomeConsumerRepo' -Strict
 ```
+
+After changing a canonical file, run the sync from the platform repository root.
+Use `-DryRun` to preview the copies, then run without it to apply them.
+
+```powershell
+.\scripts\omp\sync-shared-files.ps1 -DryRun
+.\scripts\omp\sync-shared-files.ps1
+```
+
+The sync copies the exact canonical bytes over differing files already carried
+by the consumer, using the same line-ending normalization to detect drift. It
+reports missing files as `not carried` and leaves Git commits and pushes to the
+operator. Exit `0` means a successful sync or a dry run without drift. Exit `1`
+means an error or an unresolved candidate. Exit `2` means a dry run found drift
+without errors or unresolved candidates. A root with no candidates can return
+`0` with zero consumers scanned.
+
+Both the sync and the platform gate discover consumers among the immediate
+children of the selected roots. A candidate has an `omp-components.json` with a
+`repositoryKey` different from the platform's, and its Git top level must
+resolve to the candidate directory. Root selection starts with `-ConsumerRoot`,
+then `$env:OMP_CONSUMER_ROOT`, then the parent of the main platform checkout
+derived from `git rev-parse --git-common-dir`, including from linked worktrees.
+The sync accepts one root per invocation. The gate's
+`scripts/omp/validate-shared-file-propagation.ps1` accepts a PowerShell array via
+`-ConsumerRoot` or semicolon-separated roots via `$env:OMP_CONSUMER_ROOT`. The
+gate measures each resolved checkout once, including when reached through
+multiple roots or junction aliases.
+
+Run `scripts/local-ci.ps1` to check the copies before committing them in each
+affected consumer as part of the same change. The platform pre-push hook uses
+the same local gate, with reuse of a cached pass when available. The
+`Validate shared file propagation` step compares only files the consumer
+already carries. The consumer's Check 15 decides which missing files are
+required. The propagation validator exits `0` when all discovered consumers
+were measured and their carried copies match, and `1` on drift or a measurement
+error. It reports unresolved consumers, roots with no candidates and checkouts
+behind their locally recorded upstream as `NOT MEASURED`, using local Git refs
+without a fetch. When there is nothing to measure or coverage is incomplete and
+no drift or measurement error is found, it exits `3`. Local CI prints
+`NOT MEASURED: Validate shared file propagation` and lists the step in the
+summary without failing it.
+
+GitHub Actions checks out only the platform repository and runs the script tests
+with fixtures. Consumer propagation is not measured in CI because the workflow
+does not run `scripts/local-ci.ps1`.
 
 What `validate-component-versions.ps1` protects against (the list below describes
 that script, not the Check 14 guard above):
