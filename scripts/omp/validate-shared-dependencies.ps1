@@ -33,8 +33,8 @@
     -UpdateSharedDependencies, which forwards to this script).
 
     Consumer validators call this script instead of embedding their own copy:
-    five inline copies of this rule drifted apart before, which is how the gap
-    went silent in every consumer except the first one.
+    one consumer kept an inline copy for a while and it drifted from this
+    canonical implementation; the other consumers called this script directly.
 
 .PARAMETER ConsumerRepositoryRoot
     Root of the consumer repository that owns the omp-components.json being
