@@ -27,6 +27,14 @@ public sealed class ArtifactDirectoryHashTests : IDisposable
     {
         if (Directory.Exists(_root))
         {
+            // Remove links first and without recursion, so cleanup never walks into a link target.
+            foreach (var link in Directory.EnumerateDirectories(_root, "*", SearchOption.AllDirectories)
+                         .Where(path => new DirectoryInfo(path).Attributes.HasFlag(FileAttributes.ReparsePoint))
+                         .ToList())
+            {
+                Directory.Delete(link);
+            }
+
             Directory.Delete(_root, recursive: true);
         }
     }
@@ -39,6 +47,39 @@ public sealed class ArtifactDirectoryHashTests : IDisposable
             return Directory.Exists(linkPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            // A symbolic link needs the create-symbolic-link privilege (admin or developer mode).
+            // A directory junction does not, and it is the link kind the hash must skip on Windows.
+            return OperatingSystem.IsWindows() && TryCreateWindowsJunction(linkPath, targetPath);
+        }
+    }
+
+    private static bool TryCreateWindowsJunction(string linkPath, string targetPath)
+    {
+        try
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add("mklink");
+            startInfo.ArgumentList.Add("/J");
+            startInfo.ArgumentList.Add(linkPath);
+            startInfo.ArgumentList.Add(targetPath);
+            using var process = System.Diagnostics.Process.Start(startInfo);
+            if (process is null)
+            {
+                return false;
+            }
+
+            process.WaitForExit(10_000);
+            return process.HasExited && process.ExitCode == 0 && Directory.Exists(linkPath);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             return false;
         }
