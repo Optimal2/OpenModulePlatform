@@ -310,6 +310,15 @@ try {
     Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
     Update-PackageToolRunner -PackageRoot $packageRootPath -SourceExe $sourceExe
 
+    # Record which installer sources this runner was built from. A refresh run by the
+    # package-root runner refuses when the sources have moved on or the stamp is missing,
+    # so a stale runner can no longer gate artifacts with outdated rules unnoticed.
+    Invoke-NativeChecked -FilePath $targetExe -Arguments @(
+        '--write-runner-source-stamp',
+        '--repository-root',
+        $repositoryRootPath
+    )
+
     Write-Host "Updated installer runner: $targetExe"
     Write-Host 'Package object libraries were not rebuilt.'
 }

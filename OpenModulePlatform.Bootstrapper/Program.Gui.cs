@@ -1656,6 +1656,19 @@ internal static partial class Program
                 }
             }
 
+            // A runner that is older than the installer sources measures and gates with old
+            // rules; see RunnerSourceStamp. Checked before anything is refreshed or built.
+            var runnerFreshness = RunnerSourceStamp.Evaluate(
+                Environment.ProcessPath,
+                _payloadRoot,
+                RunnerSourceStamp.FindRepositoryRoot(ResolveDeveloperSourceRoots(throwIfMissing: false)));
+            Report("> " + runnerFreshness.Message);
+            if (runnerFreshness.Refuse)
+            {
+                Report("> Refusing to refresh and stage with this runner. The universal package was not created.");
+                return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+            }
+
             var importRoot = ResolveHostAgentArtifactImportPath();
             var persistConfigTargets = false;
 
@@ -4630,7 +4643,10 @@ internal static partial class Program
             return stamp;
         }
 
-        private static string? ComputeScopedSourceStateStamp(string sourceRoot, string projectFile)
+        internal static string? ComputeScopedSourceStateStamp(
+            string sourceRoot,
+            string projectFile,
+            bool includeSourceRoot = true)
         {
             try
             {
@@ -4677,7 +4693,9 @@ internal static partial class Program
                     }
                 }
 
-                var lines = new List<string> { "scoped-source-state-v1", sourceRoot };
+                // The runner stamp leaves the root out so that a checkout reached through a
+                // junction or another drive letter still compares equal to the same sources.
+                var lines = new List<string> { "scoped-source-state-v1", includeSourceRoot ? sourceRoot : "<repository-root>" };
                 foreach (var file in scopedFiles)
                 {
                     var relativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/');

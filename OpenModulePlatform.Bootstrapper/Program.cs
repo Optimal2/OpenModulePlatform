@@ -24,6 +24,12 @@ internal static partial class Program
     [STAThread]
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0 && string.Equals(args[0], "--write-runner-source-stamp", StringComparison.Ordinal))
+        {
+            EnsureConsole();
+            return RunWriteRunnerSourceStamp(args);
+        }
+
         try
         {
             var cli = CliOptions.Parse(args);
